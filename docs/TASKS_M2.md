@@ -86,5 +86,36 @@ telephone, health centre, heat plant, sewage works, railway station, bus + bus s
 hall, TV tower, ski jump, presidential sauna, friendship statue), patron gift buildings (row houses, company church).
 Fictional signage only. Preview sheets + town mockup with M2 content.
 
-## M5-M10
-Written in detail by the orchestrator when Wave M1 finishes (scope in the graph above and DESIGN 14.6).
+## Git
+The orchestrator commits and pushes (public repo HenriVSL/project-lahio). Agents don't run git commands.
+
+## M5 Services & housing (H+)
+Element factory (precast output caps Apartments T2+ growth per month), Apartments T2-T3 and Commercial T3 (ART.md 3.1
+keys), police + crime field, library, post & telephone (phone queue satire; houses T3 needs it again: `s_nreq_house[2]`),
+health centre (1972), **district heating** (heat plant; heat reaches lots over the existing water pipe network,
+capacity-limited nearest-first like water; Apartments T3 requirement), **sewage works** (residents above sewage
+capacity pollute lakes: land value/happiness penalty near polluted water), **fires** (fire risk → fire events in
+wooden districts, spread to wooden neighbours, fire coverage puts them out; fire0-3 art; rubble), checklist reasons,
+overlays (crime, heat, sewage), save chunks, tests, balance kept.
+
+## M6 Complexes (H+)
+Paper mill complex (INDUSTRY.md: 5x5 from pm_* modules, fixed orientation, on rapids/lake, 5,000 mk, staged 300 → 900
+jobs, wood need via `industry_set_ext_wood`), the *patruuna* (mood from town relations; gifts the player places: row
+houses, company church, sauna, school; demand event cards via `politics_queue_event`; company-town rule ≥ 40% of jobs →
+company pays 20% of school/clinic/fire upkeep; telegraphed risk events: paper slump, strike, 1970s layoffs, 1980s
+merger), *Valtion Metalli* (vm_* modules) placed via a hidden decree (`politics_enable_hook_decree`) or a Market-town
+unlock with politics off, tied to the clearing quota (M7 hook), output halves in 1990. Fictional names. Save, tests.
+
+## M7 Trade & eras (H+)
+Clearing trade (5-year agreements with goods lists filled by `industry_kinds()` east exports; clearing balance near
+zero; surplus wasted / deficit lowers Eastern relations; oil for oil/heat plants bought with clearing credit; **1973 oil
+shock**), Western trade (hard currency; orders by `export_west`), loans (domestic bond, Western bank loan, Eastern
+credit with strings), **town status by decree** (`politics_status_ceremony`, DESIGN 7 ladder + unlocks), eras
+1955-1990 with era events (1963 new markka display, 1990 end of clearing trade + end-of-era newsreel), **newspaper**
+each January (3 generated headlines + satire; masthead art exists), **graphs panel** (history), landmarks/money sinks
+(concert hall, TV tower, ski jump, presidential sauna with sauna diplomacy, friendship statue). Oil plant may reuse
+coal-plant art (alias); peat/nuclear only if art exists, else later. Save, tests, balance.
+
+## M8-M10
+Written by the orchestrator after M5-M7 (balance with all systems, performance incl. 1024 64-zoom art layout, polish +
+end-to-end VM runs, then the user play-test).
