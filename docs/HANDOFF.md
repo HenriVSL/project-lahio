@@ -368,3 +368,8 @@ learned while building. Append your own section when you finish a task.
   letter-spaced +1 px, umlaut dots squared to 2x2 and image cropped to ink, scaled 4x (144x48); tagline in spaced caps;
   window 330x292. Menu plate shows "LÄHIÖ"; grille `badge` now "LÄHIÖ" (37x13, drawn on top of the slots).
 - Unchanged on purpose: save magic `KAUP`, `*.KAU`, the default town name "Kaupunki", internal comments.
+
+## Git (2026-11-03)
+- Public repo **https://github.com/HenriVSL/project-lahio** (branch main). Commit identity in this repo: "Henri Lavikainen"
+  <4943859+HenriVSL@users.noreply.github.com> (no-reply, the profile email is private). Commit messages end with the
+  Co-Authored-By line. Agents: commit only when the orchestrator says so; `.gitignore` keeps build/test outputs out.

@@ -27,6 +27,7 @@ Owner session: 86box-86. Started 2026-11-02.
 - **Cars: Lada 1200 (VAZ-2101) shaped**, clear boxy silhouette, many period colours (cars may be more colourful than the muted terrain).
 - **Art style: variant C (Nordic hybrid)**. **UI: teak & bakelite** (as in the mockups).
 - **Language: English** (UI, text, news). Keep only a few Finnish flavour words, e.g. house types (rintamamiestalo, lamellitalo, pistetalo), sauna. The font still needs ä/ö/å for those.
+- **Repo**: https://github.com/HenriVSL/project-lahio (public).
 - **Spec**: P2-233 VM = minimum spec; real targets ThinkPad X41/T40 (GHz). 60 fps target, auto 30 fps fallback fine. **Debug from text logs**, not images.
 - Wave 3/4 done: T08 integration (VERTICAL SLICE PLAYABLE), T10 menus+save, T11 cosmetic life.
 - User play-test pending (game was started 2026-11-03 but the user was away; lock went stale and was handed to 86box-e8; closed it).
