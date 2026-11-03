@@ -23,7 +23,7 @@ static int       s_nrb;
 static Rng       s_rng;
 static FireStats s_st;
 static int       s_outbreak;                /* an outbreak is running (event at its end) */
-static s32       s_ob_lost, s_ob_disp;
+static s32       s_ob_lost, s_ob_disp, s_ob_spread;   /* this outbreak: lots lost, residents out, spreads */
 static int       s_ob_x, s_ob_y;
 
 void fire_reset(void)
@@ -33,7 +33,7 @@ void fire_reset(void)
     memset(s_rb, 0, sizeof(s_rb)); s_nrb = 0;
     memset(&s_st, 0, sizeof(s_st));
     rng_seed(&s_rng, (s ? s->seed : 1) ^ 0xF1AE5EEDu);
-    s_outbreak = 0; s_ob_lost = s_ob_disp = 0; s_ob_x = s_ob_y = -1;
+    s_outbreak = 0; s_ob_lost = s_ob_disp = s_ob_spread = 0; s_ob_x = s_ob_y = -1;
 }
 
 const FireStats *civic_fire_stats(void) { s_st.burning = s_nf; return &s_st; }
@@ -68,11 +68,11 @@ static int ignite(int lot, int spread)
     world_lot_set_status(lot, LOT_BURNING);
     rect_flags(x0, y0, x1 - x0 + 1, y1 - y0 + 1, TF_BURNING, 0);
     world_batch_end();
-    if (spread) s_st.spread++;
+    if (spread) { s_st.spread++; s_ob_spread++; }
     else {
         s_st.started++;
         if (!s_outbreak) {
-            s_outbreak = 1; s_ob_lost = 0; s_ob_disp = 0; s_ob_x = x0; s_ob_y = y0;
+            s_outbreak = 1; s_ob_lost = 0; s_ob_disp = 0; s_ob_spread = 0; s_ob_x = x0; s_ob_y = y0;
             s_st.outbreaks_year++;
             sim_queue_event(SE_FIRE, SEV_URGENT, x0, y0, lot, 0);
         }
@@ -140,7 +140,7 @@ void fire_tick(void)
                     for (j = 0; j < nid && ids[j] != nl; j++) {}
                     if (j == nid && nid < 24) ids[nid++] = nl;       /* each neighbour lot once, in ring order */
                 }
-            for (j = 0; j < nid; j++)
+            for (j = 0; j < nid && s_ob_spread < CIVIC_FIRE_SPREAD_MAX; j++)   /* never more than a few houses */
                 if (lot_burnable(&g_world.lots[ids[j]]) && rng_below(&s_rng, 100) < chance) ignite(ids[j], 1);
         }
         if (f->age >= CIVIC_FIRE_BURN_TICKS) {                          /* burnt down: rubble */
@@ -161,17 +161,20 @@ void fire_tick(void)
     }
 }
 
-/* once per cycle: maybe a new fire (New Game "disasters" on) */
+/* a wooden lot outside the fire brigade's cover: its fire risk, else 0 */
+static int ignite_weight(const Lot *l)
+{
+    if (!lot_burnable(l) || net_cov_quality(SVC_FIRE, l->x, l->y) >= CIVIC_FIRE_COVER_SAFE) return 0;
+    return field_at(FLD_FIRE_RISK, l->x, l->y);
+}
+
+/* once per cycle: maybe a new fire (New Game "disasters" on), only outside fire cover */
 void fire_cycle(void)
 {
     s64 total = 0, p;
     int i;
     if (!sim_settings()->disasters) return;
-    for (i = 1; i < g_world.lot_hi; i++) {
-        const Lot *l = &g_world.lots[i];
-        if (!lot_burnable(l)) continue;
-        total += field_at(FLD_FIRE_RISK, l->x, l->y);
-    }
+    for (i = 1; i < g_world.lot_hi; i++) total += ignite_weight(&g_world.lots[i]);
     if (total <= 0) return;
     p = total * CIVIC_FIRE_IGNITE_PPB;
     if (p > 500000000) p = 500000000;
@@ -179,9 +182,9 @@ void fire_cycle(void)
     {
         s64 v = (s64)(rng_next(&s_rng) % (u32)total);
         for (i = 1; i < g_world.lot_hi; i++) {
-            const Lot *l = &g_world.lots[i];
-            if (!lot_burnable(l)) continue;
-            v -= field_at(FLD_FIRE_RISK, l->x, l->y);
+            int wgt = ignite_weight(&g_world.lots[i]);
+            if (!wgt) continue;
+            v -= wgt;
             if (v < 0) { ignite(i, 0); break; }
         }
     }
@@ -229,17 +232,20 @@ void fire_save(struct SaveFile *sf)
     save_bytes(sf, s_rb, (int)sizeof(Rubble) * s_nrb);
     save_bytes(sf, &s_st, sizeof(s_st));
     save_s32(sf, s_outbreak); save_s32(sf, s_ob_lost); save_s32(sf, s_ob_disp); save_s32(sf, s_ob_x); save_s32(sf, s_ob_y);
+    save_s32(sf, s_ob_spread);
 }
 
 void fire_load(struct SaveFile *sf, int ver)
 {
+    s32 v;
     UNUSED(ver);
     s_rng.s = load_u32(sf);
-    s_nf = ICLAMP(load_s32(sf), 0, CIVIC_FIRE_MAX);
+    v = load_s32(sf); s_nf = ICLAMP(v, 0, CIVIC_FIRE_MAX);     /* never a call inside ICLAMP (common.h) */
     load_bytes(sf, s_f, (int)sizeof(CivicFire) * s_nf);
     load_bytes(sf, s_fx, (int)sizeof(FireExt) * s_nf);
-    s_nrb = ICLAMP(load_s32(sf), 0, RUBBLE_MAX);
+    v = load_s32(sf); s_nrb = ICLAMP(v, 0, RUBBLE_MAX);
     load_bytes(sf, s_rb, (int)sizeof(Rubble) * s_nrb);
     load_bytes(sf, &s_st, sizeof(s_st));
     s_outbreak = load_s32(sf); s_ob_lost = load_s32(sf); s_ob_disp = load_s32(sf); s_ob_x = load_s32(sf); s_ob_y = load_s32(sf);
+    s_ob_spread = load_s32(sf);
 }

@@ -13,8 +13,8 @@ static const ArtSheet art_world_sheets[] = {
     { "art\\world0_64.bmp", ZOOM_64, 1, sheet_world0_64, 132 },
     { "art\\world1_64.bmp", ZOOM_64, 1, sheet_world1_64, 139 },
     { "art\\world2_64.bmp", ZOOM_64, 1, sheet_world2_64, 354 },
-    { "art\\world3_64.bmp", ZOOM_64, 1, sheet_world3_64, 533 },
-    { "art\\world0_32.bmp", ZOOM_32, 1, sheet_world0_32, 1158 },
+    { "art\\world3_64.bmp", ZOOM_64, 1, sheet_world3_64, 535 },
+    { "art\\world0_32.bmp", ZOOM_32, 1, sheet_world0_32, 1160 },
 };
 #define ART_WORLD_SHEET_COUNT 5
 

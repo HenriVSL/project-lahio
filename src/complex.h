@@ -16,35 +16,32 @@
      demolishes the complex at the next month end.
    - STAGES. Paper: 1 groundwood mill + PM1 (300 jobs, wood 40) -> 2 pulp mill + PM2 (600, wood 80: town >= 3,000)
      -> 3 PM3 "the big machine" (900, wood 120: year >= 1963, town >= 6,000, a railway station). A stage also needs
-     the wood for it (supply left after the sawmills), the current jobs staffed (>= 90% for 6 months), the owner's
-     mood > 30 and no slump/strike; it takes 6 months. Metal: product lines (tractors 1955, paper machines 1960,
-     rolling stock 1965, ship sections 1970), +300 jobs each, same staffing and mood rules.
+     the wood for it (supply left after the sawmills), the current jobs staffed (>= 90% for 6 months), the patron's
+     mood > 30 and no slump; it takes 6 months. Valtion Metalli (simplified, docs/SCOPE_REVIEW.md: no mood, gifts or
+     cards): one product line per decade (tractors 1955, paper machines 1960, rolling stock 1970, ship sections 1980),
+     +300 jobs each once the works is staffed.
    - JOBS enter the city's job pool (sim aggregate: complex_jobs()); the complex is staffed like any employer.
-     OUTPUT % = staffing x wood (paper) x events x contract; EXPORTS (volume units like industry.h: 1 = one
-     engineering job) = nominal stage volume x output: paper 150 per 100 jobs, West 80/75/70% by stage; metal 100
-     per 100 jobs, East 85% (the clearing quota). Valtion Metalli: each 5-year agreement (1956, 1961, ...) sets
-     +-25% by Eastern relations; from 1990 (end of clearing trade) output and jobs halve.
-   - OWNER MOOD 0..100 (patron / ministry; start 60) moves 1/3 of the way to its target each month. Target = 50 +
-     business tax (<= 9%: +10, else -10 per point), railway station +10, wood supply +5 / -10, staffing +5 / -10,
-     town services (school, health, fire capacity) +3 each, smokestack decree -20, gifts placed (+10 each, fading),
-     card answers (timed). Metal: Eastern relations instead of the tax term.
-   - GIFTS (mood >= 70, one per 24 months (metal 36), queue of 3): the owner OFFERS, the player PLACES it free
-     within 12 tiles of the complex with the gift tool (TOOL_GIFT): paper: workers' row houses, company sauna,
-     company church, factory school, the patron's villa, then row houses; metal: vocational school, ARAVA row
-     houses. Each placed gift adds +10 mood that fades by 1 every 2 months. The company pays the upkeep of its
-     sauna and school.
-   - COMPANY TOWN: complex jobs >= 40% of all jobs -> the company pays 20% (metal: 10%) of last month's school,
-     clinic/health and fire upkeep + its gift upkeep, booked on BL_COMPANY each month.
-   - DEMAND CARDS (politics on only; with politics off the patron simply has no demands): at most one a year
-     (12-24 months apart) via politics_queue_event: lower the business tax, a water permit, the union's workers'
-     hall; mood <= 30: "the board may put PM3 in another town" (stage 3 waits until mood >= 40); metal: the
-     anniversary quota. The answer comes back through politics_set_event_hook.
-   - RISK EVENTS, always telegraphed 3 months ahead (ticker; politics on: a response card at the announcement,
-     default answer = choice 0 when nobody answers): paper slump in London (around 1958, 1967, 1971, 1976 +-1 year:
-     jobs and output -30% for 12-18 months), the general strike of March 1956 and later strikes (Workers bloc /
-     unemployment: output 0 for a month, mood down), the 1970s modernisation (1972-78, stage 3: accept = 600 jobs,
-     same output, -30% pollution; refuse = output -20%, and from 1985 the mill is uncompetitive: 600 jobs, 70%),
-     the 1980s merger (the family sells to a Helsinki group: no more gifts, demands or contribution).
+     OUTPUT % = staffing x wood (paper) x events; EXPORTS (volume units like industry.h: 1 = one engineering job) =
+     nominal stage volume x output: paper 150 per 100 jobs, West 80/75/70% by stage; metal 100 per 100 jobs, East
+     85% (M7's clearing agreement reads complex_export_east). From 1990 (end of clearing trade) Valtion Metalli's
+     output and jobs halve. The staff pay business tax at half the zone rate and the volume adds to the export share
+     (both existing ledger lines).
+   - PATRON MOOD 0..100 (start 60) moves 1/3 of the way to its target each month. Target = 50 + business tax
+     (<= 9%: +10, else -10 per point), railway station +10, wood supply +5 / -10, staffing +5 / -10, town services
+     (school, health, fire capacity) +3 each, smokestack decree -20, gifts placed (+10 each, fading), card answers.
+   - GIFTS (mood >= 70, one per 24 months, queue of 3): the patron OFFERS, the player PLACES it free within 12 tiles
+     of the mill with the gift tool (TOOL_GIFT): workers' row houses, company sauna, company church, factory school,
+     the patron's villa, row houses again. Each placed gift adds +10 mood that fades by 1 every 2 months. The company
+     pays the upkeep of its sauna and school.
+   - COMPANY TOWN: complex jobs >= 40% of all jobs -> the company pays 20% (Valtion Metalli alone: 10%) of last
+     month's school, clinic/health and fire upkeep, + its gift upkeep, booked on BL_COMPANY ("Company contribution").
+   - CARDS (politics on only; with politics off the patron has no demands and the risk events take their default):
+     all go through politics_queue_event in the random card's slot (politics_months_to_event() == 0), so every card
+     source together keeps politics' 12-24 month rhythm. 3 demands (lower the business tax, a water permit, the
+     union's workers' hall) and 2 risk events, always telegraphed 3 months ahead in the ticker: the paper slump in
+     London (around 1958, 1967, 1971, 1976 +-1 year: jobs and output -30% for 12-18 months; relief works: jobs -15%;
+     an export credit: 8 months) and the 1970s modernisation (1972-78, stage 3: accept = 600 jobs, same output, -30%
+     pollution; refuse = output -20%, and from 1985 the mill is uncompetitive: 600 jobs, 70%). Unanswered = choice 0.
    Debug from text: complex_dump(); script "complex ...". */
 #ifndef COMPLEX_H
 #define COMPLEX_H
@@ -63,15 +60,11 @@ enum { CPX_NONE, CPX_PAPER, CPX_METAL, CPX_KIND_COUNT };
 enum { CF_RAPIDS = 0x01,           /* paper: own hydro on the rapids (no grid power) */
        CF_MODERNISED = 0x02,       /* paper: accepted the new machine (fewer jobs, same output) */
        CF_REFUSED = 0x04,          /* paper: refused the modernisation (output -20%; 1985+: uncompetitive) */
-       CF_MERGED = 0x08,           /* paper: sold to a Helsinki group; the patron has left */
-       CF_HONOURED = 0x10,         /* paper: the new owners honour the patron's promises (10% contribution) */
        CF_PERMIT = 0x20,           /* paper: water permit granted (output +10%, more effluent) */
-       CF_THREAT = 0x40,           /* paper: the board threatens to put PM3 elsewhere (stage 3 waits for mood 40) */
-       CF_ACTIVE = 0x80,           /* production has started (the modules are finished) */
-       CF_STRUCK1956 = 0x100 };    /* paper: the 1956 strike has been scheduled */
+       CF_ACTIVE = 0x80 };         /* production has started (the modules are finished) */
 
 /* risk event kinds (Complex.ev) */
-enum { EVK_NONE, EVK_SLUMP, EVK_STRIKE, EVK_MODERN, EVK_MERGER, EVK_VM_STRIKE, EVK_COUNT };
+enum { EVK_NONE, EVK_SLUMP, EVK_MODERN, EVK_COUNT };
 enum { EVS_NONE, EVS_ANNOUNCED, EVS_RUNNING };
 
 typedef struct {
@@ -80,7 +73,7 @@ typedef struct {
     u8  stage;               /* 0 = being built; paper 1..3; metal product lines 1..4 */
     u8  next;                /* stage under construction (0 = none) */
     u8  build_left;          /* months until `next` is ready */
-    u8  mood, mood_target;   /* owner: patron / the Ministry, 0..100 */
+    u8  mood, mood_target;   /* the patron, 0..100 (paper only) */
     u16 flags;               /* CF_* */
     s16 jobs;                /* jobs offered this month */
     s16 employed;            /* of them filled */
@@ -94,18 +87,14 @@ typedef struct {
     u8  ev, ev_state, ev_resp, ev_card;   /* risk event: EVK_*, EVS_*, response (255 = none yet), card queued */
     s16 ev_start, ev_len;    /* month index (year * 12 + month) and months */
     s16 sched[4];            /* paper: slump starts around 1958, 1967, 1971, 1976 (month index, 0 = done) */
-    s16 modern_at, merger_at, strike_at;  /* scheduled starts (month index, 0 = none) */
-    s16 strike_gate;         /* no new random strike before this month index */
+    s16 modern_at;           /* scheduled modernisation decision (month index, 0 = none) */
     s16 adj[4], adj_m[4];    /* timed mood adjustments (card answers): value, months left */
-    s16 out_adj, out_adj_m;  /* timed output adjustment (metal quota) */
-    s16 agree;               /* metal: output % of the current 5-year agreement (100 = neutral) */
     s16 placed;              /* month index of placement */
     s32 vol, west, east;     /* export volume this month and its split */
     int nterms;
     Term terms[10];          /* mood target reasons (ids MT_*) */
 } Complex;
-enum { MT_BASE, MT_TAX, MT_STATION, MT_WOOD, MT_STAFF, MT_SERVICES, MT_SMOKESTACK, MT_GIFTS, MT_ANSWERS, MT_EAST,
-       MT_COUNT };
+enum { MT_BASE, MT_TAX, MT_STATION, MT_WOOD, MT_STAFF, MT_SERVICES, MT_SMOKESTACK, MT_GIFTS, MT_ANSWERS, MT_COUNT };
 
 typedef struct { u8 def, cpx; } CpxGift;                  /* offered, waiting for the player */
 typedef struct { u8 def, cpx, x, y; } CpxPlaced;           /* placed gift lots (upkeep paid by the company) */
@@ -161,21 +150,21 @@ int  complex_vm_permit(void);              /* metal works may be placed now (dec
 
 /* ------------------------------------------------------------------ messages for the ticker (game.cpp drains) */
 enum { CM_PLACED, CM_PRODUCTION, CM_STAGE_START, CM_STAGE_DONE, CM_GIFT_OFFER, CM_GIFT_PLACED, CM_COMPANY_TOWN,
-       CM_EV_ANNOUNCE, CM_EV_START, CM_EV_END, CM_THREAT, CM_VM_DECREE, CM_VM_PERMIT, CM_VM_UNLOCK, CM_AGREEMENT,
-       CM_CLEARING_END, CM_UNCOMPETITIVE, CM_DEMOLISHED, CM_MERGED, CM_MODERNISED, CM_COUNT };
+       CM_EV_ANNOUNCE, CM_EV_START, CM_EV_END, CM_VM_DECREE, CM_VM_PERMIT, CM_VM_UNLOCK, CM_CLEARING_END,
+       CM_UNCOMPETITIVE, CM_DEMOLISHED, CM_MODERNISED, CM_COUNT };
 typedef struct { u8 type, cpx; s16 a, b; } CpxMsg;
 int  complex_poll_msg(CpxMsg *m);
 int  complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x, int *y);
 
 /* ------------------------------------------------------------------ text (query panel), names */
 const char *complex_name(int kind);        /* "Kuusikosken Paperi Oy", "Valtion Metalli" */
-const char *complex_owner_name(int kind);  /* "Patruuna Albin Hellstedt", "the Ministry's director" */
+const char *complex_owner_name(int kind);  /* "Patruuna Albin Hellstedt" */
 int  complex_lot_line(int lot, int k, char *buf, int size, int *font);  /* line k of a module's query; 0 = none.
                                                             font: 0 normal, 1 grey, 2 red, 3 green, 4 head */
 /* ------------------------------------------------------------------ tests, scripts, debug, save */
 void complex_set_mood(int kind, int mood); /* tests / scripts */
-int  complex_paper_stage_ok(int next, s32 pop, s32 wood_avail, int year, int station, int staffed, int mood,
-                            int threat);   /* 1 = the conditions for paper stage `next` are met (pure) */
+int  complex_paper_stage_ok(int next, s32 pop, s32 wood_avail, int year, int station, int staffed, int mood);
+                                           /* 1 = the conditions for paper stage `next` are met (pure) */
 int  complex_script_line(int ntok, char **tok, int org_x, int org_y, FILE *out);   /* SCR_*; -1 not ours */
 void complex_dump(FILE *f);
 u32  complex_hash(void);                   /* 0 when there is no complex and nothing happened */

@@ -1,0 +1,7 @@
+# m6_shots.txt - M6 screenshots (visual run, no -fast) on the saved mill town (see m6_headless.txt); the save puts the
+#   camera on the complex.  lahio.exe -load M6_MILL.KAU -script scripts\m6_shots.txt
+wait 1
+shot m6_mill.bmp
+query 95 96
+shot m6_mill_query.bmp
+quit

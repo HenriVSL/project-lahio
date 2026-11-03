@@ -212,15 +212,15 @@ TEST(complex_construction_and_stages)
     CHECK(c->output <= c->wood_pct);
     CHECK(c->stage == 1);                       /* a small town: no PM2 */
     /* the stage rules (pure) */
-    CHECK(complex_paper_stage_ok(2, 3000, 80, 1956, 0, 1, 50, 0));
-    CHECK(!complex_paper_stage_ok(2, 2999, 80, 1956, 0, 1, 50, 0));
-    CHECK(!complex_paper_stage_ok(2, 3000, 79, 1956, 0, 1, 50, 0));
-    CHECK(!complex_paper_stage_ok(2, 3000, 80, 1956, 0, 0, 50, 0));
-    CHECK(!complex_paper_stage_ok(2, 3000, 80, 1956, 0, 1, 30, 0));
-    CHECK(complex_paper_stage_ok(3, 6000, 120, 1963, 1, 1, 50, 0));
-    CHECK(!complex_paper_stage_ok(3, 6000, 120, 1962, 1, 1, 50, 0));
-    CHECK(!complex_paper_stage_ok(3, 6000, 120, 1963, 0, 1, 50, 0));
-    CHECK(!complex_paper_stage_ok(3, 6000, 120, 1963, 1, 1, 50, 1));
+    CHECK(complex_paper_stage_ok(2, 3000, 80, 1956, 0, 1, 50));
+    CHECK(!complex_paper_stage_ok(2, 2999, 80, 1956, 0, 1, 50));
+    CHECK(!complex_paper_stage_ok(2, 3000, 79, 1956, 0, 1, 50));
+    CHECK(!complex_paper_stage_ok(2, 3000, 80, 1956, 0, 0, 50));
+    CHECK(!complex_paper_stage_ok(2, 3000, 80, 1956, 0, 1, 30));
+    CHECK(complex_paper_stage_ok(3, 6000, 120, 1963, 1, 1, 50));
+    CHECK(!complex_paper_stage_ok(3, 6000, 120, 1962, 1, 1, 50));
+    CHECK(!complex_paper_stage_ok(3, 6000, 120, 1963, 0, 1, 50));
+    CHECK(!complex_paper_stage_ok(3, 5999, 120, 1963, 1, 1, 50));
 }
 
 /* more wood (log trucks from 1965 add 15 regional wu) -> more output and jobs */
@@ -349,74 +349,82 @@ TEST(complex_company_town_ledger)
     CHECK(!strcmp(text_term_label(TERMK_BUDGET, BL_COMPANY), "Company contribution"));
 }
 
-/* ------------------------------------------------------------------ 6: telegraphed risk events */
+/* ------------------------------------------------------------------ 6: telegraphed risk events (slump, modernisation) */
 TEST(complex_risk_schedule)
 {
     const Complex *c;
-    int k, a = -1, out_before;
-    cx_new(71, 1955, 1, 0);
-    cx_town();
-    CHECK(complex_place(CPX_PAPER, MILL_X, MILL_Y));      /* January 1955: running by July, the 1956 strike ahead */
+    int k, a = -1;
+    cx_run_mill(71, 1955);
     c = complex_of_kind(CPX_PAPER);
-    CHECK_EQ(c->strike_at, 1956 * 12 + 2);
     for (k = 0; k < 4; k++) {
         static const int base[4] = { 1958, 1967, 1971, 1976 };
         int y = c->sched[k] / 12;
-        CHECK(y >= base[k] - 1 && y <= base[k] + 1);
+        CHECK(c->sched[k] == 0 || (y >= base[k] - 1 && y <= base[k] + 1));
     }
+    CHECK(c->sched[1] && c->sched[2] && c->sched[3]);
     CHECK(c->modern_at / 12 >= 1972 && c->modern_at / 12 <= 1978);
-    CHECK(c->merger_at / 12 >= 1980 && c->merger_at / 12 <= 1988);
-    sim_run_months(11);                                    /* to the end of November 1955 */
-    CHECK_EQ(c->ev_state, EVS_ANNOUNCED);
-    CHECK_EQ(c->ev, EVK_STRIKE);
-    CHECK(n_msgs(CM_EV_ANNOUNCE, &a) >= 1);
-    out_before = c->output;
-    sim_run_months(3);                                     /* March 1956 */
-    CHECK_EQ(c->ev_state, EVS_RUNNING);
-    CHECK_EQ(c->output, 0);
-    CHECK(c->mood_target < 60);
-    sim_run_months(1);
-    CHECK_EQ(c->ev_state, EVS_NONE);
-    test_log("1956 strike: announced 11/1955 (3 months ahead), output %d%% -> 0 -> %d%%, mood %d; slumps %d-%02d %d-%02d %d-%02d"
-             " %d-%02d, modernisation %d, merger %d", out_before, c->output, c->mood, c->sched[0] / 12, c->sched[0] % 12 + 1,
-             c->sched[1] / 12, c->sched[1] % 12 + 1, c->sched[2] / 12, c->sched[2] % 12 + 1, c->sched[3] / 12, c->sched[3] % 12 + 1,
-             c->modern_at / 12, c->merger_at / 12);
-    /* the slump: announced 3 months ahead, jobs -30% while it runs */
-    while (c->ev_state != EVS_ANNOUNCED && sim_date()->year < 1960) sim_run_months(1);
+    /* the first slump: announced 3 months ahead, jobs -30% while it runs */
+    while (c->ev_state != EVS_ANNOUNCED && sim_date()->year < 1970) sim_run_months(1);
     CHECK_EQ(c->ev, EVK_SLUMP);
-    CHECK(c->ev_start - (sim_date()->year * 12 + sim_date()->month) >= 2);
+    CHECK(n_msgs(CM_EV_ANNOUNCE, &a) >= 1);
+    CHECK_EQ(a, EVK_SLUMP);
+    k = c->ev_start - (sim_date()->year * 12 + sim_date()->month);
+    CHECK(k >= 2 && k <= 3);
     {
         int jobs0 = c->jobs, nom;
         while (c->ev_state != EVS_RUNNING) sim_run_months(1);
         nom = 300 * ICLAMP(c->wood_pct + 25, 50, 100) / 100;
-        test_log("slump from %d-%02d for %d months: jobs %d -> %d (nominal %d)", c->ev_start / 12, c->ev_start % 12 + 1, c->ev_len, jobs0, c->jobs, nom);
+        test_log("slump announced %d months ahead, from %d-%02d for %d months: jobs %d -> %d (nominal %d), output %d%%",
+                 k, c->ev_start / 12, c->ev_start % 12 + 1, c->ev_len, jobs0, c->jobs, nom, c->output);
         CHECK(c->ev_len >= 12 && c->ev_len <= 18);
         CHECK_EQ(c->jobs, nom * 70 / 100);
+        while (c->ev_state == EVS_RUNNING) sim_run_months(1);
+        CHECK(n_msgs(CM_EV_END, NULL) >= 1);
     }
+    test_log("schedule: slumps %d-%02d %d-%02d %d-%02d %d-%02d, modernisation %d-%02d", c->sched[0] / 12, c->sched[0] % 12 + 1,
+             c->sched[1] / 12, c->sched[1] % 12 + 1, c->sched[2] / 12, c->sched[2] % 12 + 1, c->sched[3] / 12, c->sched[3] % 12 + 1,
+             c->modern_at / 12, c->modern_at % 12 + 1);
     cx_dump("complex_risk.txt");
 }
 
-/* politics on: the strike card; mediation keeps half the output */
+/* politics on: the slump card in the shared card slot; relief works keep 85% of the jobs */
 TEST(complex_risk_card_response)
 {
     const Complex *c;
-    int k;
+    int k, got = 0;
     cx_new(72, 1955, 1, 1);
     cx_town();
+    sim_run_months(18);
     CHECK(complex_place(CPX_PAPER, MILL_X, MILL_Y));
     c = complex_of_kind(CPX_PAPER);
-    for (k = 0; k < 11 && c->ev_state != EVS_ANNOUNCED; k++) {
+    for (k = 0; k < 120 && c->ev_state != EVS_RUNNING; k++) {
+        int ev = politics_pending_event();
+        if (ev == EV_CPX_SLUMP) { CHECK(politics_choose(1)); got = 1; }
+        else if (ev >= 0) politics_choose(0);
         sim_run_months(1);
-        if (politics_pending_event() >= 0 && politics_pending_event() != EV_CPX_STRIKE) politics_choose(0);
     }
-    CHECK_EQ(c->ev, EVK_STRIKE);
-    if (politics_pending_event() != EV_CPX_STRIKE) { sim_run_months(1); }
-    CHECK_EQ(politics_pending_event(), EV_CPX_STRIKE);
-    CHECK(politics_choose(1));
-    CHECK_EQ(c->ev_resp, 1);
-    while (c->ev_state != EVS_RUNNING) sim_run_months(1);
-    test_log("mediated strike: output %d%% (staffing x 50%%)", c->output);
-    CHECK(c->output > 0 && c->output <= 50);
+    test_log("slump card %s; response %d; jobs %d", got ? "answered" : "never got a slot (default)", c->ev_resp, c->jobs);
+    CHECK_EQ(c->ev, EVK_SLUMP);
+    if (got) { CHECK_EQ(c->ev_resp, 1); CHECK_EQ(c->jobs, 300 * ICLAMP(c->wood_pct + 25, 50, 100) / 100 * 85 / 100); }
+    else CHECK_EQ(c->ev_resp, 0);
+}
+
+/* the modernisation decision on PM3 (driven directly: stage 3 needs a 6,000 town) */
+TEST(complex_modernisation)
+{
+    Complex *c;
+    cx_run_mill(73, 1966);
+    c = (Complex *)complex_of_kind(CPX_PAPER);
+    sim_run_months(7);
+    c->stage = 3; c->modern_at = (s16)(sim_date()->year * 12 + sim_date()->month + 4);
+    sim_run_months(2);
+    CHECK_EQ(c->ev, EVK_MODERN);
+    CHECK_EQ(c->ev_state, EVS_ANNOUNCED);
+    sim_run_months(3);
+    CHECK(c->flags & CF_MODERNISED);                      /* unanswered: accepted */
+    sim_run_months(1);
+    test_log("modernised PM3: jobs %d (nominal 600 x wood), pollution hall %d", c->jobs, complex_module_use(B_PM_HALL, CPXU_POLLUTION));
+    CHECK(c->jobs <= 600);
 }
 
 /* ------------------------------------------------------------------ 7: Valtion Metalli */
@@ -550,4 +558,38 @@ TEST(complex_absent_is_neutral)
     CHECK_EQ(complex_hash(), 0u);
     CHECK_EQ(complex_jobs(), 0);
     CHECK_EQ(industry_wood()->need_ext, 0);
+}
+
+/* ------------------------------------------------------------------ 9: the VM script on the bots' saved towns
+   (scripts/m6_headless.txt; the same file runs in the VM: compare tests/out/m6_headless_*.txt with the VM's) */
+TEST(complex_saved_towns_headless)
+{
+    static const char *const saves[2] = { "out/M6_MILL.KAU", "out/M6_METAL.KAU" };
+    static const char *const outs[2] = { "out/m6_headless_mill.txt", "out/m6_headless_metal.txt" };
+    int k, errors;
+    for (k = 0; k < 2; k++) {
+        FILE *out;
+        const Complex *c;
+        if (!load_game(saves[k], NULL)) { test_log("%s missing (run T=balance_complex first)", saves[k]); continue; }
+        tools_reset(); tools_script_reset();
+        remove("out/m6_headless.txt");
+        out = fopen(outs[k], "w");
+        tools_script_set_dir("out/");
+        errors = tools_script_run_file("../scripts/m6_headless.txt", out);
+        tools_script_set_dir("");
+        if (out) fclose(out);
+        rename("out/m6_headless.txt", k ? "out/m6_headless_metal_dump.txt" : "out/m6_headless_mill_dump.txt");
+        c = complex_of_kind(k ? CPX_METAL : CPX_PAPER);
+        test_log("%s + 12 months: errors %d, %s stage %d jobs %d output %d%%, pop %d, world %08x sim %08x", saves[k], errors,
+                 c ? complex_name(c->kind) : "-", c ? c->stage : 0, c ? c->jobs : 0, c ? c->output : 0, sim_stats()->population,
+                 world_hash(), sim_hash());
+        CHECK_EQ(errors, 0);
+        CHECK(c != NULL);
+        {   /* the complex query panel as text */
+            char b[160];
+            int f, i, lot = world_lot_at(c->x + (k ? 0 : 2), c->y);
+            for (i = 0; complex_lot_line(lot, i, b, sizeof(b), &f); i++) test_log("  query %d [%d] %s", i, f, b);
+            CHECK(i >= 5);
+        }
+    }
 }

@@ -47,15 +47,15 @@ TEST(text_numbers)
 TEST(text_money)
 {
     char b[64];
-    text_fmt_money(b, sizeof(b), 125, 1961);       CHECK(!strcmp(b, "12,500 mk"));    /* old markka x100 */
+    text_fmt_money(b, sizeof(b), 125, 1961);       CHECK(!strcmp(b, "125 mk"));       /* M7: no old-markka x100 display */
     text_fmt_money(b, sizeof(b), 125, 1963);       CHECK(!strcmp(b, "125 mk"));
     text_fmt_money(b, sizeof(b), -790, 1970);      CHECK(!strcmp(b, "\x96" "790 mk"));
     text_fmt_money_delta(b, sizeof(b), 450, 1970); CHECK(!strcmp(b, "+450 mk"));
-    text_fmt_money_delta(b, sizeof(b), -45, 1955); CHECK(!strcmp(b, "\x96" "4,500 mk"));
-    text_fmt_money_signed(b, sizeof(b), 12, 1955); CHECK(!strcmp(b, "+1,200"));
-    text_fmt_money(b, sizeof(b), 2000000000, 1955); CHECK(!strcmp(b, "200,000,000,000 mk")); /* no overflow */
-    text_fmt_money_short(b, sizeof(b), 125000, 1955); CHECK(!strcmp(b, "12.5M mk"));
-    text_fmt_money_short(b, sizeof(b), 99999, 1955);  CHECK(!strcmp(b, "9,999,900 mk"));
+    text_fmt_money_delta(b, sizeof(b), -45, 1955); CHECK(!strcmp(b, "\x96" "45 mk"));
+    text_fmt_money_signed(b, sizeof(b), 12, 1955); CHECK(!strcmp(b, "+12"));
+    text_fmt_money(b, sizeof(b), 2000000000, 1955); CHECK(!strcmp(b, "2,000,000,000 mk"));
+    text_fmt_money_short(b, sizeof(b), 12500000, 1955); CHECK(!strcmp(b, "12.5M mk"));
+    text_fmt_money_short(b, sizeof(b), 9999999, 1955); CHECK(!strcmp(b, "9,999,999 mk"));
     text_fmt_money_short(b, sizeof(b), -250000, 1970); CHECK(!strcmp(b, "\x96" "250,000 mk"));
     text_fmt_money_short(b, sizeof(b), -25000000, 1970); CHECK(!strcmp(b, "\x96" "25.0M mk"));
 }

@@ -184,6 +184,7 @@ Other new names (not lots):
 | `fire0..fire3` | flame overlay frames (28x44 at 64), anchor = bottom middle of the flame; cycle at ~120-150 ms, 2-3 offset copies per burning lot plus `smoke<F>` above |
 | `forest_cut<0\|1>`, `forest_seed<0\|1>`, `forest_young<0\|1>` | forest stages (1x1 lot sprites like `forest_<kind>`): density 0-3 cut, 4-7 seedlings, 8-11 young, 12-15 the existing mature `forest_<kind><V>`; V from a tile hash |
 | `field_hay` | field tile with hay-drying poles (1x1 lot sprite on `field_crop` ground), a farm-field variant |
+| `rubble0`, `rubble1` | M5: burnt ruins (TF_RUBBLE tiles, 1x1 lot sprite with its own ash ground): stone foundation, the brick chimney still standing, charred beams (art_m2_misc.py `rubble`) |
 
 UI icons (gen_ui.py, UI.md): `icon_b_heat_plant`, `icon_b_sewage_works`, `icon_b_bus_stop`, `icon_b_bus_depot`,
 `icon_bus_line` (bus line tool), `icon_b_paper_mill`, `icon_b_valtion_metalli` (complex tools), `icon_b_row_houses`,

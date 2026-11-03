@@ -131,10 +131,12 @@ extern const LetterDef g_letters[LET_COUNT];
 enum { EV_NIGHT_FROST, EV_NOTE, EV_STRIKE, EV_DELEGATION, EV_STATUE, EV_SAUNA, EV_OLYMPICS, EV_TV, EV_SCANDAL,
        EV_SWEDEN_BOAT, EV_FESTIVAL, EV_TEMPERANCE, EV_WINTER, EV_TRADE_FAIR, EV_FISHING,
        EV_CAMPAIGN,       /* the election campaign card (not random) */
-       /* M6 complex cards (complex.cpp queues them; never drawn at random: weight 0): the patron's demands, the
-          paper mill's risk events, Valtion Metalli's quota and strike. Answers come back via politics_set_event_hook */
-       EV_CPX_TAX, EV_CPX_PERMIT, EV_CPX_UNION, EV_CPX_THREAT, EV_CPX_SLUMP, EV_CPX_STRIKE, EV_CPX_MODERN,
-       EV_CPX_MERGER, EV_VM_QUOTA, EV_VM_STRIKE,
+       /* M6 paper mill cards (complex.cpp queues them in the random card's slot; never drawn at random: weight 0):
+          the patron's 3 demands and the 2 risk events. Answers come back via politics_set_event_hook */
+       EV_CPX_TAX, EV_CPX_PERMIT, EV_CPX_UNION, EV_CPX_SLUMP, EV_CPX_MODERN,
+       /* M7: the 5-year clearing agreement card (era.cpp queues it at a period start; weight 0; choice order = TL map in
+          era_card_answered: 0 Standard, 1 Modest, 2 Ambitious) */
+       EV_AGREEMENT,
        EV_COUNT };
 #define POL_CHOICES 3
 typedef struct { const char *label, *result; PolFx fx[POL_FX_MAX]; } PolChoice;

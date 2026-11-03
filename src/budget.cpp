@@ -1,6 +1,7 @@
 /* budget.cpp - money, monthly ledger, taxes, service funding, emergency loan. PORTABLE. Owner: T04.
    See budget.h for the formulas. Integer-only; sub-markka remainders carried in file statics. */
 #include "common.h"
+#include "civic.h"
 #include "budget.h"
 #include "industry.h"
 #include "complex.h"
@@ -110,7 +111,8 @@ static void compute_lines(Money *out, int book)
             continue;
         }
         if (d->cat == BCAT_SERVICE) svc[d->service] += d->upkeep;
-        else if (d->cat == BCAT_POWER || d->cat == BCAT_WATER || l->def == B_HEAT_PLANT || l->def == B_SEWAGE_WORKS) util += d->upkeep;   /* M5 */
+        else if (l->def == B_HEAT_PLANT) util += d->upkeep * civic_fuel_pct() / 100;   /* M5: coal included; M7 fuel price */
+        else if (d->cat == BCAT_POWER || d->cat == BCAT_WATER || l->def == B_SEWAGE_WORKS) util += d->upkeep;   /* M5 */
         else special += d->upkeep;
         if (d->jobs && l->status == LOT_ACTIVE) bus += (s64)l->occupants * (50 + lv) / 2;
     }

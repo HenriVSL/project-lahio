@@ -1,60 +1,51 @@
-/* civic.h - M5 services & housing systems: the element factory (precast output caps Apartments T2+ upgrades
-   per month), district heating over the water pipe graph, sewage works + lake pollution, fires (fire.cpp).
-   PORTABLE, deterministic, integer-only. Owner: M5 (Milestone 2). DESIGN 4.3-4.5, 5.4, 5.7, 14;
-   THEME 2.4-2.6, 2.12-2.14; docs/HANDOFF.md "M5".
+/* civic.h - M5 services & housing systems (thinned per docs/SCOPE_REVIEW.md): the element factory (precast output
+   caps Apartments T2+ upgrades per month), district heating and sewage works as sources on the water pipe graph,
+   a lake pollution tint, fires (fire.cpp). PORTABLE, deterministic, integer-only. Owner: M5 (Milestone 2).
+   DESIGN 4.3-4.5, 5.4, 14; THEME 2.4-2.6, 2.12-2.14; docs/HANDOFF.md "M5". No crime field (police is a plain
+   capacity service; politics' PM_CRIME_PCT is the land value term "Crime" where police don't cover, fields.cpp).
 
-   ELEMENTS: each active element factory makes CIVIC_ELEM_OUTPUT precast elements a month, scaled by its
-   staffing (occupants / jobs), power (none without) and politics_mod(PM_ELEMENTS_PCT). One element = one
-   resident of apartment capacity: an Apartments upgrade to tier 2 or 3 takes (new capacity - old capacity)
-   elements from this month's pool. The pool is refilled at the month end (unused elements don't carry
-   over), so the factory caps how many apartment residents can be added per month. REQ_ELEMENTS: to reach
-   the tier the pool must hold the upgrade's need; standing buildings keep their tier (keep = met).
+   ELEMENTS: each active, powered element factory makes CIVIC_ELEM_OUTPUT precast elements a month, scaled by its
+   staffing (occupants / jobs) and politics_mod(PM_ELEMENTS_PCT). One element = one resident of apartment capacity:
+   an Apartments upgrade to tier 2 or 3 takes (new capacity - old capacity) elements from this month's pool. The pool
+   is refilled at the month end (unused elements don't carry over). REQ_ELEMENTS: to reach the tier the pool must hold
+   the upgrade's need; standing buildings keep their tier. Shown in the R demand tooltip ("Elements 120 / 300 left").
 
-   HEAT and SEWAGE are "pipe utilities" solved on the same graph as water (net.cpp / WATER.md 3.3): tiles with a
-   pipe, tiles of conducting lots (any status) and zoned empty land without a road; roads block unless piped.
-   Like water: a multi-source BFS from every active source (heat plants / sewage works) gives each consumer its
-   distance and nearest source; each source serves its own consumers nearest first until its capacity is used
-   (strict cut), then the network's spare serves the rest nearest first (global distance, lot id order).
-     heat:   consumers = apartments, commercial tier 2+, services and special buildings (houses heat with
-             their own stoves, industry with its own boilers); use = the def's water_use. Served lots get
-             LF_HEAT; tiles in reach get ZF_HEAT (overlay). Apartments T3 need REQ_HEAT (NLS_OK; to upgrade
-             also the network's spare must cover the extra use, so an edge lot doesn't flip-flop). Fuel: coal,
-             CIVIC_HEAT_FUEL mk per 100 heat units delivered a month (BL_UTILITIES; M7 can scale it with
-             civic_set_fuel_pct for oil prices).
-     sewage: consumers = watered resident lots (houses T2+, apartments, watered farms); load = residents.
-             Residents beyond a works' capacity, or not connected to one, are UNTREATED: their sewage goes to
-             the nearest lake/river cell within CIVIC_LAKE_REACH cells. Unwatered homes (cottages, outhouses)
-             don't count.
-   Solves run on a fixed schedule (phase 9: heat on even cycles, sewage + lakes on odd cycles), so results
-   depend only on the world at that step (save/load safe; the results are saved too).
+   HEAT and SEWAGE are sources on the water graph (net.cpp / WATER.md 3.3): pipe tiles, tiles of conducting lots (any
+   status) and zoned empty land without a road; roads block unless piped. Like water: a multi-source BFS from every
+   active source gives each consumer its distance and nearest source; each source serves its own consumers nearest
+   first until its capacity is used (strict cut), then the network's spare serves the rest nearest first.
+     heat:   consumers = apartments, commercial tier 2+, services and special buildings (houses heat with their own
+             stoves, industry with its own boilers); use = the def's water_use. Served lots get LF_HEAT; tiles in reach
+             get ZF_HEAT (heat overlay = a sub-view of the water overlay). Apartments T3 need REQ_HEAT (to upgrade also
+             the network's spare must cover the extra use, so an edge lot doesn't flip-flop). The coal is part of the
+             heat plant's flat upkeep ("Plants and pumps"); M7 scales it with civic_set_fuel_pct (oil prices).
+     sewage: consumers = watered resident lots; load = residents. Residents beyond a works' capacity, or not connected
+             to one, are UNTREATED: their sewage goes to the nearest lake/river cell within CIVIC_LAKE_REACH cells.
+   Solves run on a fixed schedule (phase 9: heat on even cycles, sewage + lakes on odd cycles); results are saved.
 
-   LAKE POLLUTION: per water cell (2x2 field grid) 0..255; emission from untreated residents (+ civic_lake_emit
-   from other modules: M6 paper mill), 3x3 spread among water cells, decay 1/32 per update (rivers 1/8). Land
-   cells within 2 cells of polluted water get a land value term LVT_LAKE (-shore/5, max -25: the lakeside
-   bonus is gone) and a happiness penalty (-shore/8, max -12). Politics: the Intelligentsia and Rural blocs
-   name it (civic_lake_reason).
+   LAKE POLLUTION: per water cell 0..255 from untreated residents (+ civic_lake_emit: M6 paper mill), 3x3 spread among
+   water cells, decay 1/32 per update (rivers 1/8). From CIVIC_LAKE_TINT the water overlay tints the lake and land
+   within 2 cells gets a small land value term LVT_LAKE "Polluted lake" (max -10) and happiness penalty (max -5).
 
-   FIRES (fire.cpp): once per cycle (phase 12), if the New Game disasters setting is on, a fire may start in a
-   wooden grown lot (BDF_WOODEN: houses, kiosks, workshops, sawmills, farms): chance = sum over wooden lots of
-   the fire-risk field x CIVIC_FIRE_IGNITE_PPB per billion (fire risk = wooden density x (1 - fire cover) x dry
-   summer, fields.cpp). Every 4 steps ("a day") a burning lot: is put out with chance CIVIC_FIRE_BUCKETS_PCT + fire
-   cover x 60%; spreads to each wooden grown lot sharing an edge with CIVIC_FIRE_SPREAD_PCT x (1 - cover) (x1.5 in
-   June-August); burns down after CIVIC_FIRE_BURN_TICKS -> lot removed, its tiles TF_RUBBLE (cleared by the
-   bulldozer or after CIVIC_RUBBLE_MONTHS; growth waits for it). A saved lot becomes active again, empty (its
-   residents were moved out). Events: SE_FIRE b = 0 when an outbreak starts; b = 1 + lots lost when it is over
-   (a = residents displaced). Own RNG stream (saved): fires never shift the growth RNG.
-
-   Crime (DESIGN 5.7) is a field (fields.cpp FLD_CRIME, police coverage, politics PM_CRIME_PCT); civic only
-   reports it. */
+   FIRES (fire.cpp): once per cycle, with the New Game disasters setting on, a fire may start in a wooden grown lot
+   (BDF_WOODEN: houses, kiosks, workshops, sawmills, farms) OUTSIDE fire cover (quality < CIVIC_FIRE_COVER_SAFE):
+   chance = sum of those lots' fire risk x CIVIC_FIRE_IGNITE_PPB per billion. Every 4 steps ("a day") a burning lot is
+   put out with CIVIC_FIRE_BUCKETS_PCT + fire cover x 60%; spreads to edge-adjacent wooden lots with
+   CIVIC_FIRE_SPREAD_PCT x (1 - cover) (x1.5 in June-August), at most CIVIC_FIRE_SPREAD_MAX times per outbreak; burns
+   down after CIVIC_FIRE_BURN_TICKS -> lot removed, tiles TF_RUBBLE (bulldozer, or cleared after CIVIC_RUBBLE_MONTHS;
+   growth waits). A saved lot becomes active again, empty. Events: SE_FIRE b = 0 when an outbreak starts; b = 1 +
+   lots lost when it is over (a = residents displaced). Own RNG stream (saved): fires never shift the growth RNG. */
 #ifndef CIVIC_H
 #define CIVIC_H
 #include "common.h"
 #include "defs.h"
 
 #define CIVIC_ELEM_OUTPUT       300   /* elements (= apartment residents) per factory per month at full staff */
-#define CIVIC_HEAT_FUEL         15    /* mk per 100 heat units delivered per month (coal) */
+#define CIVIC_LAKE_TINT         32    /* lake pollution from which the water overlay tints it and the shore loses value */
 #define CIVIC_LAKE_REACH        12    /* cells (24 tiles): sewage reaches a lake this close, else flows away */
-#define CIVIC_FIRE_IGNITE_PPB   140   /* ignition chance per cycle per unit of summed wooden-lot fire risk (per 1e9) */
+#define CIVIC_FIRE_IGNITE_PPB   100   /* ignition chance per cycle per unit of summed fire risk (per 1e9) */
+#define CIVIC_FIRE_COVER_SAFE   20    /* fire cover quality from which a lot never catches fire by itself */
+#define CIVIC_FIRE_SPREAD_MAX   3     /* spreads per outbreak: a fire takes at most 4 lots */
 #define CIVIC_FIRE_SPREAD_PCT   9     /* per day to each edge-adjacent wooden neighbour without fire cover */
 #define CIVIC_FIRE_BUCKETS_PCT  15    /* per day: put out by the neighbours' buckets (no brigade needed) */
 #define CIVIC_FIRE_BURN_TICKS   6     /* days a lot burns before it is lost */
@@ -94,10 +85,11 @@ typedef struct {
     int sources, networks, lots_served, lots_short, lots_unconnected;
     s32 supply, demand, used;
     s32 untreated;                           /* sewage: residents whose sewage reaches a lake untreated */
-    s32 fuel_month;                          /* heat: last month's fuel bill */
 } UtilSummary;
 void civic_util_summary(int ut, UtilSummary *out);
-void civic_set_fuel_pct(int pct);            /* M7 hook: fuel price in % of coal (100); not saved by civic */
+void civic_set_fuel_pct(int pct);            /* M7 hook: heat plant fuel price in % of coal (100), scales the heat plant
+                                                upkeep in the budget ("Plants and pumps"); not saved by civic */
+int  civic_fuel_pct(void);
 
 /* ---- lakes */
 int  civic_lake_pollution(int x, int y);     /* water tile: 0..255 (0 on land) */
@@ -129,7 +121,7 @@ void fire_save(struct SaveFile *sf);         /* inside the CIVC chunk */
 void fire_load(struct SaveFile *sf, int ver);
 
 /* ---- overlays, queries, scripts, debug */
-u8   civic_overlay_value(int ovl, int param, int x, int y);   /* OVL_CRIME, OVL_HEAT, OVL_SEWAGE */
+u8   civic_overlay_value(int ovl, int param, int x, int y);   /* OVL_HEAT */
 int  civic_lot_line(int lot, int k, char *buf, int size);     /* query lines k = 0.. (0 = no more) */
 int  civic_tile_line(int x, int y, int k, char *buf, int size);
 int  civic_req_why(int req, int lot, s32 *have, s32 *need);   /* checklist details for REQ_HEAT/ELEMENTS */

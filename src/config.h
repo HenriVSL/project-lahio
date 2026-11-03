@@ -90,6 +90,8 @@ typedef struct {
     /* F3 additions (INI) */
     int   zone_view;             /* INI zone_view: persistent zone borders on (V / zone-view key), default 0 */
     int   hints;                 /* INI hints: opening hint chain in the ticker at a new game (default 1) */
+    /* M7 addition (INI) */
+    int   newspaper;             /* INI newspaper: 1 = the January paper opens (pauses), 0 = headline to the ticker only */
 } Config;
 
 extern Config g_cfg;

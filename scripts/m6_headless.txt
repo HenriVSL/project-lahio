@@ -1,0 +1,9 @@
+# m6_headless.txt - M6: a year on the Mac-made end states of the complex bots (test_balance.cpp writes them):
+#   tests/out/M6_MILL.KAU  (BS_MILL, s7 with a railway, January 1975: Kuusikosken Paperi Oy at 93,96, PM2, 3 gifts)
+#   tests/out/M6_METAL.KAU (BS_METAL: Valtion Metalli at 109,110, 3 product lines)
+#   VM:  copy both next to lahio.exe, then  lahio.exe -load M6_MILL.KAU -script scripts\m6_headless.txt -fast
+#   Mac: tests/test_complex.cpp complex_saved_towns_headless runs the same file on the same saves (compare the dumps)
+dump complex m6_headless.txt
+wait 12
+dump complex m6_headless.txt
+dump report m6_headless.txt

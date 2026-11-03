@@ -273,8 +273,9 @@ const EventDef g_events[EV_COUNT] = {
              { F_MONEY_POP(-50), F_AUTH(-4), F_ELECT(8), F_END } },
            { "Persuade a rival to withdraw", "The rival withdraws, citing his health and his garden.",
              { F_AUTH(-8), F_ELECT(12), F_BLOC(B_S, -10, 24), F_END } } } },
-    /* M6 complex cards (complex.cpp queues them and applies the complex side shown in brackets: patron mood, output,
-       jobs; INDUSTRY.md 7.3-7.4). Choice 0 is also the default when nobody answers. */
+    /* M6 paper mill cards (complex.cpp queues them and applies the complex side shown in brackets: patron mood, jobs,
+       output; INDUSTRY.md 7.3, docs/SCOPE_REVIEW.md: 3 demands + 2 risk events). Choice 0 is the default when nobody
+       answers. */
     { "cpxtax", "The patron writes about taxes",
       "Patruuna Hellstedt sends his compliments and a reminder: Kuusikosken Paperi Oy pays the town's wages, and the "
       "business tax is a heavy coat in a warm room.",
@@ -299,14 +300,6 @@ const EventDef g_events[EV_COUNT] = {
            { "Back the patron (patron +5)", "The union meets in the sauna instead. The minutes are steamy.",
              { F_BLOC(B_W, -4, 24), F_BLOC(B_I, 3, 12), F_END } },
            { NULL, NULL, { F_END } } } },
-    { "cpxthreat", "The board looks elsewhere",
-      "Word from Helsinki: the board may put its next paper machine in another town. Relations with the patron have "
-      "been, in the board's word, chilly. (The third machine waits until his mood is 40 again.)",
-      2, { { "Offer a tax holiday (business tax -1, patron +10)", "The board finds the town warmer than reported.",
-             { F_BLOC(B_I, 3, 12), F_END } },
-           { "Let the board decide", "The board will decide. Boards always do.",
-             { F_END } },
-           { NULL, NULL, { F_END } } } },
     { "cpxslump", "Paper prices fall in London",
       "The newsprint buyers in London are cutting their orders. In three months the mill goes on short shifts: "
       "a third fewer jobs and a third less paper, for a year or more.",
@@ -316,15 +309,6 @@ const EventDef g_events[EV_COUNT] = {
              { F_MONEY(-200), F_BLOC(B_W, 4, 12), F_END } },
            { "Ask the Bank of Finland for an export credit (slump 8 months)", "The credit arrives with a lecture on prudence.",
              { F_AUTH(-3), F_BLOC(B_I, 3, 12), F_END } } } },
-    { "cpxstrike", "A strike at the mill",
-      "The unions and the employers have failed to agree on wages. A strike is called for three months from now: "
-      "the mill will stand still for a month, and the manor has a long memory.",
-      3, { { "Let them settle it (output 0 for a month, patron -10)", "The strike runs its course. So does the patron's patience.",
-             { F_BLOC(B_W, -2, 12), F_END } },
-           { "The President mediates in the sauna (output 50%, patron -5)", "After the third round of l\xf6yly both sides agree on everything but the minutes.",
-             { F_AUTH(-2), F_BLOC(B_W, 3, 12), F_END } },
-           { "Back the union's demands (output 0, patron -20)", "The red flags are folded neatly. The patron cancels the summer party.",
-             { F_BLOC(B_W, 8, 24), F_BLOC(B_I, -5, 24), F_END } } } },
     { "cpxmodern", "The new paper machine",
       "Kuusikosken Paperi Oy proposes to replace its old machines with one new one. It makes as much paper with "
       "three hundred fewer men.",
@@ -333,30 +317,16 @@ const EventDef g_events[EV_COUNT] = {
            { "Refuse (output -20%, uncompetitive from 1985)", "The old machines rattle on. So do the men, for now.",
              { F_BLOC(B_W, 5, 24), F_BLOC(B_I, -4, 24), F_END } },
            { NULL, NULL, { F_END } } } },
-    { "cpxmerger", "The family sells",
-      "The patron's family is selling Kuusikosken Paperi Oy to a Helsinki group. The mill stays. The gifts, the "
-      "summer parties and the company's contribution to the town will not.",
-      2, { { "Wish the family well", "The patron leaves for the Riviera. The manor gets a new sign.",
+    /* M7: the clearing agreement card (era.cpp signs the chosen level; trade.h) */
+    { "agreement", "A new five-year trade agreement",
+      "The Delegation brings the frame agreement and a goods list drawn from what the town's factories deliver. "
+      "How much shall the town promise the East for the next five years?",
+      3, { { "Standard (orders as now)", "Signed with a fountain pen and a toast. The goods list is pinned up at every works.",
              { F_END } },
-           { "Ask the group to honour his promises (contribution 10% until 1990)", "The group agrees to honour them, in moderation.",
-             { F_AUTH(-2), F_BLOC(B_I, -3, 12), F_END } },
-           { NULL, NULL, { F_END } } } },
-    { "vmquota", "The anniversary quota",
-      "The Ministry's director at Valtion Metalli reports that the works could deliver a tenth more machinery for the "
-      "anniversary of the friendship treaty, if the town finds the men and the overtime.",
-      2, { { "Promise the quota (output +10% for a year)", "Tractors roll east with ribbons on. The night shift grumbles.",
-             { F_EAST(3), F_BLOC(B_W, -3, 12), F_END } },
-           { "Plead realism (Ministry -5)", "The Ministry notes the town's realism. So does the Embassy.",
-             { F_EAST(-3), F_END } },
-           { NULL, NULL, { F_END } } } },
-    { "vmstrike", "A strike at the state works",
-      "The metal workers at Valtion Metalli will strike in three months. Deliveries to the East would stop for a "
-      "month, and the Embassy reads the newspapers.",
-      2, { { "Let them settle it (output 0 for a month, Ministry -10)", "The strike ends. The Embassy sends a note about reliability.",
-             { F_EAST(-3), F_BLOC(B_W, -2, 12), F_END } },
-           { "The President mediates (output 50%)", "The works stand still for only a fortnight. The minutes are short.",
-             { F_AUTH(-2), F_BLOC(B_W, 3, 12), F_END } },
-           { NULL, NULL, { F_END } } } },
+           { "Modest (orders -15%)", "The Delegation writes the smaller figures with a smaller pen.",
+             { F_EAST(-2), F_END } },
+           { "Ambitious (orders +20%, deliver 80% or disappoint)", "The Delegation is delighted. The factories will need workers.",
+             { F_EAST(3), F_END } } } },
 };
 
 /* ------------------------------------------------------------------ names and labels */

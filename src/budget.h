@@ -10,7 +10,7 @@
    BL_INTEREST. Negative balance for LOAN_AFTER_MONTHS months -> emergency loan (cover the deficit + 10,000
    mk) at LOAN_RATE, none above 40,000 mk of debt. Construction spending is booked immediately (budget_spend);
    taxes, upkeep and grants are booked by budget_month_end(), which the sim calls at the end of each
-   month. Display of old markka before 1963 (x100) is text.cpp's job; internal values never change. */
+   month. Money is always shown in (new) markka (M7 cut the old-markka display). */
 #ifndef BUDGET_H
 #define BUDGET_H
 #include "common.h"
@@ -27,6 +27,7 @@ enum { BL_TAX_RES, BL_TAX_BUS, BL_EXPORT, BL_GRANTS, BL_TIMBER, BL_INCOME_END,
        BL_CONSTRUCTION,                              /* player building/bulldozing (+ refunds) */
        BL_POLITICS,                                  /* M1: decrees, letters, event cards (booked by politics) */
        BL_COMPANY,                                   /* M6: company contribution (income, booked by complex.cpp) */
+       BL_FUEL,                                      /* M7: oil plants at the oil price, coal surcharge 1974-85 (trade.cpp) */
        BL_COUNT };
 #define BL_SVC(svc) (BL_SVC_FIRST + (svc))
 

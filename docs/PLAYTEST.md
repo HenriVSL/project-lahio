@@ -37,3 +37,8 @@ All orchestrator recommendations accepted:
   (paper mill first, 5,000 mk); patron gifts placed by the player, dry affectionate satire; Valtion Metalli by decree
   once politics exists (simple unlock before); company-town start option later.
 - Next user play-test: when Milestone 2 works as a whole.
+
+## Decisions 2026-11-03 (after the scope review)
+- "Lay pipes with new roads" **default ON** (manual pipes still possible; option can be switched off).
+- 1.0 = one presidency 1955-1990, ~30 min at speed 3 ("a sweet spot for retro play").
+- **Next user play-test: after M5-M7 land, before the M8-M10 polish/balance pass.** Sound: no further work.

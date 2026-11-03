@@ -43,7 +43,6 @@ static s32  s_pool[UT_COUNT][MAX_USRC + 1];    /* spare left per network root af
 static s32  s_nsup[UT_COUNT][MAX_USRC + 1];    /* supply per network root */
 static UtilSummary s_sum[UT_COUNT];
 static int  s_fuel_pct = 100;
-static s32  s_fuel_month;
 /* scratch (one solve at a time) */
 static u32  s_info[NTILES];                    /* (source << 16) | distance, UI_NONE = not reached */
 static u16  s_q[NTILES];
@@ -81,7 +80,6 @@ void civic_reset(void)
     memset(s_us, 0, sizeof(s_us)); memset(s_nus, 0, sizeof(s_nus));
     memset(s_lst, 0, sizeof(s_lst)); memset(s_lsi, 0, sizeof(s_lsi)); memset(s_ldist, 0xFF, sizeof(s_ldist));
     memset(s_pool, 0, sizeof(s_pool)); memset(s_nsup, 0, sizeof(s_nsup)); memset(s_sum, 0, sizeof(s_sum));
-    s_fuel_month = 0;
     memset(s_lake, 0, sizeof(s_lake)); memset(s_lext, 0, sizeof(s_lext)); memset(s_shore, 0, sizeof(s_shore));
     memset(s_water, 0, sizeof(s_water)); memset(s_near, 0xFF, sizeof(s_near));
     s_lake_reason = s_lake_avg = 0;
@@ -89,6 +87,7 @@ void civic_reset(void)
 }
 
 void civic_set_fuel_pct(int pct) { s_fuel_pct = ICLAMP(pct, 10, 1000); }
+int  civic_fuel_pct(void) { return s_fuel_pct; }
 
 /* ------------------------------------------------------------------ elements */
 s32 civic_factory_output(int lot)
@@ -192,9 +191,7 @@ static void util_solve(int ut)
     int i, k, x, y, w = g_world.w, h = g_world.h, qh = 0, qt = 0, nl = 0, ns = 0, srcdef = util_source_def(ut);
     USrc *S = s_us[ut];
     UtilSummary *sum = &s_sum[ut];
-    s32 fuel = sum->fuel_month;
     memset(sum, 0, sizeof(*sum));
-    sum->fuel_month = fuel;
     /* 0. passability */
     for (y = 0; y < h; y++) {
         const Tile *t = WT(0, y);
@@ -396,12 +393,12 @@ static void lake_update(void)
             s_lext[c] = 0;
         }
     s_sum[UT_SEWAGE].untreated = untreated;
-    /* add (a resident's worth = 1/2 x LAKE_FIX), spread among water cells (missing neighbours count as the
+    /* add (a resident's worth = 1/4 x LAKE_FIX), spread among water cells (missing neighbours count as the
        cell itself: no leak into the land), decay 1/32 (rivers 1/8) */
     for (cy = 0; cy < ch; cy++)
         for (cx = 0; cx < cw; cx++) {
             int c = CELL_IDX(cx, cy);
-            if (s_water[c]) s_lake[c] = (u16)IMIN(60000, (s32)s_lake[c] + (s32)IMIN(s_lemit[c], 100000u) / 2);
+            if (s_water[c]) s_lake[c] = (u16)IMIN(60000, (s32)s_lake[c] + (s32)IMIN(s_lemit[c], 200000u) / 4);
         }
     for (cy = 0; cy < ch; cy++)
         for (cx = 0; cx < cw; cx++) {
@@ -469,14 +466,14 @@ int civic_lv_lake_term(int cx, int cy)
     int s;
     if (cx < 0 || cy < 0 || cx >= FIELD_MAX_W || cy >= FIELD_MAX_H) return 0;
     s = s_shore[CELL_IDX(cx, cy)];
-    return s >= 10 ? -IMIN(25, s / 5) : 0;
+    return s >= CIVIC_LAKE_TINT ? -IMIN(10, s / 8) : 0;
 }
 int civic_happy_lake_term(int cx, int cy)
 {
     int s;
     if (cx < 0 || cy < 0 || cx >= FIELD_MAX_W || cy >= FIELD_MAX_H) return 0;
     s = s_shore[CELL_IDX(cx, cy)];
-    return s >= 16 ? -IMIN(12, s / 8) : 0;
+    return s >= CIVIC_LAKE_TINT ? -IMIN(5, s / 12) : 0;
 }
 void civic_lake_emit(int x, int y, s32 amount)
 {
@@ -501,13 +498,7 @@ void civic_step(int phase, int cycle)
 
 void civic_month(void)
 {
-    int i;
-    s32 used = 0;
     elements_month();
-    for (i = 1; i <= s_nus[UT_HEAT]; i++) used += s_us[UT_HEAT][i].output - s_us[UT_HEAT][i].left;
-    s_fuel_month = (s32)((s64)used * CIVIC_HEAT_FUEL * s_fuel_pct / 100 * budget_upkeep_index() / 100 / 100);
-    if (s_fuel_month > 0) budget_spend(s_fuel_month, BL_UTILITIES);
-    s_sum[UT_HEAT].fuel_month = s_fuel_month;
     fire_month();
 }
 
@@ -592,9 +583,6 @@ u8 civic_overlay_value(int ovl, int param, int x, int y)
     t = WT(x, y);
     lot = t->lot;
     switch (ovl) {
-    case OVL_CRIME:
-        if (TER_IS_WATER(TER_TYPE(t))) return OVV_NONE;
-        return OVV(OVR_BAD, IMIN(7, field_at(FLD_CRIME, x, y) / 8));
     case OVL_HEAT:
         if (lot) {
             const Lot *l = &g_world.lots[lot];
@@ -604,15 +592,6 @@ u8 civic_overlay_value(int ovl, int param, int x, int y)
             return OVV(OVR_NET, st == NLS_OK ? NETC_OK : st == NLS_SHORT ? NETC_SHORTAGE : NETC_NOT_CONNECTED);
         }
         if (t->zone & ZF_HEAT) return OVV(OVR_NET, NETC_CARRIER);
-        return OVV_NONE;
-    case OVL_SEWAGE:
-        if (TER_IS_WATER(TER_TYPE(t))) return OVV(OVR_BAD, IMIN(7, civic_lake_pollution(x, y) / 16));
-        if (lot) {
-            const Lot *l = &g_world.lots[lot];
-            if (l->def == B_SEWAGE_WORKS) return OVV(OVR_NET, NETC_OK);
-            if (!is_res(&g_bdefs[l->def]) || !(l->flags & LF_WATERED)) return OVV_NONE;
-            return OVV(OVR_NET, s_lst[UT_SEWAGE][lot] == NLS_OK ? NETC_OK : NETC_SHORTAGE);
-        }
         return OVV_NONE;
     }
     return OVV_NONE;
@@ -633,10 +612,10 @@ static int util_src_lines(int ut, int lot, char (*L)[96], int n)
         str_printf(L[n++], 96, "%d beyond reach (%s %s): build another %s", si.lots_short, a, unit,
                    ut == UT_HEAT ? "heat plant" : "sewage works");
     } else { text_fmt_int(a, sizeof(a), si.spare); str_printf(L[n++], 96, "Spare %s %s", a, unit); }
-    if (ut == UT_HEAT) {
-        text_fmt_money(a, sizeof(a), (Money)((s64)si.used * CIVIC_HEAT_FUEL * s_fuel_pct / 100 * budget_upkeep_index() / 100 / 100),
+    if (ut == UT_HEAT) {                         /* the plant's upkeep is its coal (budget: "Plants and pumps") */
+        text_fmt_money(a, sizeof(a), (Money)((s64)g_bdefs[B_HEAT_PLANT].upkeep * s_fuel_pct / 100 * budget_upkeep_index() / 100),
                        sim_date()->year);
-        str_printf(L[n++], 96, "Fuel: coal, about %s a month", a);
+        str_printf(L[n++], 96, "Coal and upkeep: %s a month%s", a, s_fuel_pct > 100 ? " (fuel prices up)" : "");
     }
     return n;
 }
@@ -690,13 +669,11 @@ int civic_tile_line(int x, int y, int k, char *buf, int size)
     if (TER_IS_WATER(TER_TYPE(t))) {
         v = civic_lake_pollution(x, y);
         str_printf(L[n++], 96, "Water quality: %s (sewage %d)", v >= 96 ? "foul" : v >= 40 ? "murky" : v >= 10 ? "fair" : "clean", v);
-    } else if ((v = civic_shore_pollution(x, y)) >= 10) {
+    } else if ((v = civic_shore_pollution(x, y)) >= CIVIC_LAKE_TINT) {
         str_printf(L[n++], 96, "Polluted shore nearby (%d): land value %d, happiness %d", v,
                    civic_lv_lake_term(x >> FIELD_SHIFT, y >> FIELD_SHIFT), civic_happy_lake_term(x >> FIELD_SHIFT, y >> FIELD_SHIFT));
     }
     if (t->flags & TF_RUBBLE) str_copy(L[n++], "Burnt ruins. Bulldoze them, or the town clears them in a few months.", 96);
-    if (!TER_IS_WATER(TER_TYPE(t)) && (v = field_at(FLD_CRIME, x, y)) >= 8)
-        str_printf(L[n++], 96, "Crime %d (police cover %d%%)", v, net_cov_quality(SVC_POLICE, x, y));
     if (k < 0 || k >= n) return 0;
     str_copy(buf, L[k], size);
     return 1;
@@ -735,7 +712,6 @@ s32 civic_stat_value(const char *s, int *ok)
     if (str_ieq(s, "burning")) return fs->burning;
     if (str_ieq(s, "lost")) return fs->lots_lost;
     if (str_ieq(s, "rubble")) return fs->rubble_tiles;
-    if (str_ieq(s, "crime")) return field_avg(FLD_CRIME);
     if (str_ieq(s, "apt2")) return count_lots(ZONE_APARTMENTS, 2);
     if (str_ieq(s, "apt3")) return count_lots(ZONE_APARTMENTS, 3);
     if (str_ieq(s, "com3")) return count_lots(ZONE_COMMERCIAL, 3);
@@ -754,7 +730,7 @@ void civic_dump(FILE *f)
         fprintf(f, "civic: %s: %d sources, %d networks, supply %d, demand %d, used %d, lots served %d short %d unconnected %d",
                 ut == UT_HEAT ? "heat" : "sewage", s->sources, s->networks, s->supply, s->demand, s->used, s->lots_served,
                 s->lots_short, s->lots_unconnected);
-        if (ut == UT_HEAT) fprintf(f, ", fuel %d mk/month\n", s->fuel_month);
+        if (ut == UT_HEAT) fprintf(f, ", fuel price %d%%\n", s_fuel_pct);
         else fprintf(f, ", untreated residents %d\n", s->untreated);
         for (i = 1; i <= s_nus[ut]; i++) {
             const USrc *u = &s_us[ut][i];
@@ -763,8 +739,7 @@ void civic_dump(FILE *f)
                     u->lots, u->lots_short, u->reach, u->net);
         }
     }
-    fprintf(f, "civic: lakes: avg polluted %d, homes by polluted water %d%%, crime avg %d\n", s_lake_avg, s_lake_reason,
-            field_avg(FLD_CRIME));
+    fprintf(f, "civic: lakes: avg polluted %d, homes by polluted water %d%%\n", s_lake_avg, s_lake_reason);
     fprintf(f, "civic: fires: started %d (spread %d), put out %d, lots lost %d, displaced %d, burning %d, rubble tiles %d,"
                " outbreaks this year %d\n", fs->started, fs->spread, fs->put_out, fs->lots_lost, fs->displaced, fs->burning,
             fs->rubble_tiles, fs->outbreaks_year);
@@ -786,7 +761,7 @@ int civic_save(struct SaveFile *sf)
 {
     int ut, hi = g_world.lot_hi;
     save_begin_chunk(sf, "CIVC", 1);
-    save_s32(sf, s_elem_out); save_s32(sf, s_elem_left); save_s32(sf, s_elem_used); save_s32(sf, s_fuel_month);
+    save_s32(sf, s_elem_out); save_s32(sf, s_elem_left); save_s32(sf, s_elem_used);
     save_s32(sf, hi);
     for (ut = 0; ut < UT_COUNT; ut++) {
         save_s32(sf, s_nus[ut]);
@@ -806,12 +781,13 @@ int civic_save(struct SaveFile *sf)
 int civic_load(struct SaveFile *sf)
 {
     int ver, ut, hi;
+    s32 v;
     civic_reset();
     if (!load_find_chunk(sf, "CIVC", &ver)) return 0;
-    s_elem_out = load_s32(sf); s_elem_left = load_s32(sf); s_elem_used = load_s32(sf); s_fuel_month = load_s32(sf);
-    hi = ICLAMP(load_s32(sf), 0, MAX_LOTS);
+    s_elem_out = load_s32(sf); s_elem_left = load_s32(sf); s_elem_used = load_s32(sf);
+    v = load_s32(sf); hi = ICLAMP(v, 0, MAX_LOTS);            /* never a call inside ICLAMP (common.h) */
     for (ut = 0; ut < UT_COUNT; ut++) {
-        s_nus[ut] = ICLAMP(load_s32(sf), 0, MAX_USRC);
+        v = load_s32(sf); s_nus[ut] = ICLAMP(v, 0, MAX_USRC);
         load_bytes(sf, s_us[ut], (int)sizeof(USrc) * (s_nus[ut] + 1));
         load_bytes(sf, s_pool[ut], (int)sizeof(s32) * (s_nus[ut] + 1));
         load_bytes(sf, s_nsup[ut], (int)sizeof(s32) * (s_nus[ut] + 1));

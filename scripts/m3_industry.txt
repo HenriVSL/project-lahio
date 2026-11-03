@@ -122,8 +122,6 @@ bulldoze 76 80 76 80
 build clinic 76 80
 bulldoze 98 56 98 56
 build well 98 56
-bulldoze 86 74 86 74
-build sauna 86 74
 wait 12
 expect pop > 2000
 dump report m3_report.txt
@@ -134,6 +132,9 @@ bulldoze 89 62 90 63
 build school 89 62
 bulldoze 89 80 89 80
 build sauna 89 80
+# M5: the 1958 sauna at 86,74 moved here (fires and the lakes' sewage shift the 1958 cash by a few hundred mk)
+bulldoze 86 74 86 74
+build sauna 86 74
 wait 12
 expect pop > 3000
 expect money > 0

@@ -26,10 +26,9 @@ void text_init(void);
 /* ---- numbers. Thousands are grouped with TEXT_THOUSANDS (","; the approved UI previews use
    "12,500 mk"). Negative numbers are written with TEXT_MINUS (en dash), not '-'. */
 #define TEXT_THOUSANDS ','
-#define NEW_MARKKA_YEAR 1963     /* before this year money is shown in old markka (x100), DESIGN 5.9 */
+#define NEW_MARKKA_YEAR 1963     /* the new markka (newspaper/ticker joke only: M7 cut the x100 display, SCOPE_REVIEW) */
 int  text_fmt_int(char *buf, int size, s32 v);              /* "12,345", "\x96" "80" */
-int  text_fmt_money(char *buf, int size, Money v, int year); /* "1,250 mk"; year < 1963 shows old markka
-                                                               (x100) as DESIGN 5.9 */
+int  text_fmt_money(char *buf, int size, Money v, int year); /* "1,250 mk" (year unused since M7) */
 int  text_fmt_money_delta(char *buf, int size, Money v, int year); /* "+450 mk" / "-450 mk" */
 int  text_fmt_pct(char *buf, int size, int pct);            /* "85%" */
 int  text_fmt_date(char *buf, int size, int year, int month); /* "October 1961" */

@@ -273,7 +273,8 @@ TEST(sim_defs_selfcheck)
     CHECK_EQ(def_selfcheck(), 0);
     CHECK(def_tier_reqs(ZONE_HOUSES, 2, &r) == 6);      /* M2: + REQ_ROUTE (route to jobs) at the end */
     CHECK_EQ(r[3].req, REQ_SCHOOL);
-    CHECK(def_tier_reqs(ZONE_HOUSES, 3, &r) == 9);     /* T12: 9 -> 8, no REQ_PHONE in M1 (no post art); M2: + REQ_ROUTE */
+    CHECK(def_tier_reqs(ZONE_HOUSES, 3, &r) == 10);    /* T12: 9 -> 8, no REQ_PHONE in M1 (no post art); M2: + REQ_ROUTE;
+                                                          M5: + REQ_PHONE again (post art), from 1960 */
     CHECK(def_building(B_COAL_PLANT)->capacity == 500); /* T12: 400 -> 500 */
     CHECK(def_zone_building(ZONE_INDUSTRY, 2, 3, 3) == B_IND_T2_3X3);
 }

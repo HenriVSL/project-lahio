@@ -38,10 +38,11 @@ static const s16 s_pwest[4] = { 80, 80, 75, 70 };
 #define PAPER_VOL_PER100   150     /* export volume per 100 nominal jobs (engineering = 100) */
 #define PAPER_MODERN_POL   350
 #define PAPER_PERMIT_POL   50
-/* Valtion Metalli product lines (INDUSTRY.md 7.4) */
+/* Valtion Metalli: a unique state employer (docs/SCOPE_REVIEW.md: no mood, gifts or cards), one product line per
+   decade (+300 jobs each), 85% of the output to the East (M7's clearing agreement reads complex_export_east) */
 #define VM_LINES           4
 #define VM_LINE_JOBS       300
-static const s16 s_vmyear[VM_LINES] = { 1955, 1960, 1965, 1970 };
+static const s16 s_vmyear[VM_LINES] = { 1955, 1960, 1970, 1980 };
 static const char *const s_vmline[VM_LINES] = { "tractors", "paper machines", "rolling stock", "ship sections" };
 #define VM_POW_LINE        15
 #define VM_WAT_LINE        5
@@ -50,10 +51,8 @@ static const char *const s_vmline[VM_LINES] = { "tractors", "paper machines", "r
 
 /* gift sequences */
 static const u8 s_gift_pm[] = { B_ROW_HOUSES, B_SAUNA, B_CHURCH, B_SCHOOL, B_PATRON_VILLA };
-static const u8 s_gift_vm[] = { B_SCHOOL, B_ROW_HOUSES };
 #define GIFT_MOOD      70
 #define GIFT_CD_PM     24
-#define GIFT_CD_VM     36
 #define GIFT_BOOST     10
 
 enum { CF_CLEAR_WARNED = 0x200, CF_CLEAR_SAID = 0x400, CF_UNCOMP_SAID = 0x800 };
@@ -198,19 +197,8 @@ const char *complex_gift_name(int def, int kind)
 
 static int gift_paid(int def) { return def == B_SAUNA || def == B_SCHOOL; }
 
-/* the owner is still around to give, demand and pay */
-static int owner_present(const Complex *c)
-{
-    if (c->kind == CPX_PAPER) return !(c->flags & CF_MERGED);
-    return c->kind == CPX_METAL;
-}
-
-/* pays for its gifts' upkeep */
-static int owner_pays(const Complex *c)
-{
-    if (c->kind == CPX_PAPER) return !(c->flags & CF_MERGED) || ((c->flags & CF_HONOURED) && sim_date()->year < 1990);
-    return c->kind == CPX_METAL;
-}
+/* the patron gives, demands and pays (the state works has no owner moods: SCOPE_REVIEW) */
+static int owner_present(const Complex *c) { return c->kind == CPX_PAPER; }
 
 /* ------------------------------------------------------------------ use tables (net, fields) */
 s16 complex_module_use(int def, int what)
@@ -451,9 +439,6 @@ static void schedule_paper(Complex *c)
     }
     s = (1972 + rng_below(&r, 7)) * 12 + rng_below(&r, 12);
     c->modern_at = (s16)(s >= c->placed + CPX_BUILD_MONTHS + 3 ? s : 0);
-    s = (1980 + rng_below(&r, 9)) * 12 + rng_below(&r, 12);
-    c->merger_at = (s16)(s >= c->placed + CPX_BUILD_MONTHS + 3 ? s : 0);
-    if (c->placed + CPX_BUILD_MONTHS + 3 <= 1956 * 12 + 2) { c->strike_at = 1956 * 12 + 2; c->flags |= CF_STRUCK1956; }
 }
 
 int complex_place(int kind, int x, int y)
@@ -485,7 +470,6 @@ int complex_place(int kind, int x, int y)
     memset(c, 0, sizeof(*c));
     c->kind = (u8)kind; c->x = (u8)x; c->y = (u8)y;
     c->mood = c->mood_target = 60;
-    c->agree = 100;
     c->ev_resp = 255;
     c->gift_cd = 12; c->demand_cd = 12;
     c->placed = (s16)(sim_date()->year * 12 + sim_date()->month);
@@ -689,9 +673,6 @@ static void mood_step(Complex *c, int fill)
         term(c, MT_TAX, v); t += v;
         v = c->wood_pct >= 100 ? 5 : c->wood_pct < 75 ? -10 : 0;
         term(c, MT_WOOD, v); t += v;
-    } else if (politics_enabled()) {
-        v = (politics_meter(METER_EAST) - 50) / 3;
-        term(c, MT_EAST, v); t += v;
     }
     v = transit_stations() > 0 ? 10 : 0;
     term(c, MT_STATION, v); t += v;
@@ -711,80 +692,47 @@ static void mood_step(Complex *c, int fill)
     if (c->gift_boost > 0 && (now_mi() & 1)) c->gift_boost--;
 }
 
-/* ------------------------------------------------------------------ risk events */
-static int ev_card(int ev, int kind)
+/* ------------------------------------------------------------------ risk events (paper: slump, modernisation)
+   Cards share the politics card rhythm: a complex card is queued only in the random card's slot
+   (politics_months_to_event() == 0, nothing pending), so all sources together stay 12-24 months apart. */
+static int card_slot_free(void)
 {
-    switch (ev) {
-    case EVK_SLUMP:     return EV_CPX_SLUMP;
-    case EVK_STRIKE:    return kind == CPX_METAL ? EV_VM_STRIKE : EV_CPX_STRIKE;
-    case EVK_VM_STRIKE: return EV_VM_STRIKE;
-    case EVK_MODERN:    return EV_CPX_MODERN;
-    case EVK_MERGER:    return EV_CPX_MERGER;
-    }
-    return -1;
+    return politics_enabled() && politics_pending_event() < 0 && politics_months_to_event() <= 0;
+}
+
+static int ev_card(int ev)
+{
+    return ev == EVK_SLUMP ? EV_CPX_SLUMP : ev == EVK_MODERN ? EV_CPX_MODERN : -1;
 }
 
 static int resp(const Complex *c) { return c->ev_resp == 255 ? 0 : c->ev_resp; }
 
-/* complex-side effect of an answer (the card's own PolFx are applied by politics) */
-static void apply_answer_mood(Complex *c)
-{
-    int r = resp(c);
-    if (c->ev == EVK_STRIKE) add_adj(c, r == 0 ? -10 : r == 1 ? -5 : -20, 24);
-    else if (c->ev == EVK_VM_STRIKE) add_adj(c, r == 0 ? -10 : 0, 24);
-}
-
 static void ev_announce(Complex *c, int idx, int ev, int start)
 {
-    int card;
     c->ev = (u8)ev; c->ev_state = EVS_ANNOUNCED; c->ev_start = (s16)start; c->ev_resp = 255; c->ev_card = 0; c->ev_len = 0;
-    card = ev_card(ev, c->kind);
-    if (politics_enabled() && card >= 0 && politics_queue_event(card)) c->ev_card = 1;
+    if (card_slot_free() && politics_queue_event(ev_card(ev))) c->ev_card = 1;
     push_msg(CM_EV_ANNOUNCE, idx, ev, IMAX(1, start - now_mi()));
     log_printf("complex: %s: risk event %d announced for %d-%02d", complex_name(c->kind), ev, mi_year(start), start % 12 + 1);
 }
 
 static void ev_begin(Complex *c, int idx)
 {
-    int fresh = c->ev_resp == 255;
-    if (fresh) c->ev_resp = 0;              /* nobody answered: the default */
-    if (fresh) apply_answer_mood(c);
-    switch (c->ev) {
-    case EVK_SLUMP:
-        c->ev_len = (s16)(resp(c) == 2 ? 8 : 12 + rng_below(sim_rng(), 7));
-        break;
-    case EVK_STRIKE: case EVK_VM_STRIKE:
-        c->ev_len = 1;
-        break;
-    case EVK_MODERN:
+    if (c->ev_resp == 255) c->ev_resp = 0;              /* nobody answered: the default */
+    if (c->ev == EVK_MODERN) {                           /* a decision, not a period */
         if (resp(c) == 0) c->flags |= CF_MODERNISED; else c->flags |= CF_REFUSED;
         push_msg(CM_MODERNISED, idx, resp(c), 0);
         c->ev = EVK_NONE; c->ev_state = EVS_NONE;
         return;
-    case EVK_MERGER:
-        c->flags |= CF_MERGED;
-        if (resp(c) == 1) c->flags |= CF_HONOURED;
-        push_msg(CM_MERGED, idx, resp(c), 0);
-        c->ev = EVK_NONE; c->ev_state = EVS_NONE;
-        return;
     }
+    c->ev_len = (s16)(resp(c) == 2 ? 8 : 12 + rng_below(sim_rng(), 7));
     c->ev_state = EVS_RUNNING;
-    push_msg(CM_EV_START, idx, c->ev, c->ev == EVK_SLUMP ? s_pjobs[c->stage] * (resp(c) == 1 ? 15 : 30) / 100 : 0);
-}
-
-static int strike_chance(void)
-{
-    const CityStats *st = sim_stats();
-    if (politics_enabled()) {
-        int a = politics_approval(BLOC_WORKERS);
-        return a < 40 ? 30 : a < 50 ? 10 : 0;
-    }
-    return (st->workers > 0 && st->unemployed * 100 / st->workers > 8) ? 20 : 5;
+    push_msg(CM_EV_START, idx, c->ev, s_pjobs[c->stage] * (resp(c) == 1 ? 15 : 30) / 100);
 }
 
 static void ev_step(Complex *c, int idx)
 {
     int mi = now_mi(), k, best = 0, bk = -1, ev = EVK_NONE;
+    if (c->kind != CPX_PAPER) return;
     if (c->ev_state == EVS_RUNNING) {
         if (mi >= c->ev_start + c->ev_len) {
             push_msg(CM_EV_END, idx, c->ev, 0);
@@ -793,62 +741,39 @@ static void ev_step(Complex *c, int idx)
         return;
     }
     if (c->ev_state == EVS_ANNOUNCED) {
-        int card = ev_card(c->ev, c->kind);
-        if (!c->ev_card && politics_enabled() && card >= 0 && mi < c->ev_start && c->ev_resp == 255 && politics_queue_event(card)) c->ev_card = 1;
+        if (!c->ev_card && mi < c->ev_start && c->ev_resp == 255 && card_slot_free() && politics_queue_event(ev_card(c->ev)))
+            c->ev_card = 1;
         if (mi >= c->ev_start) ev_begin(c, idx);
         return;
     }
-    /* random strikes: decided each January from 1960, at most one in 5 years, announced 3 months ahead */
-    if (mi % 12 == 0 && mi_year(mi) >= 1960 && !c->strike_at && mi >= c->strike_gate &&
-        rng_below(sim_rng(), 100) < strike_chance())
-        c->strike_at = (s16)(mi + 3);
-    /* the next scheduled start */
-    if (c->kind == CPX_PAPER) {
-        for (k = 0; k < 4; k++) if (c->sched[k] && (bk < 0 || c->sched[k] < best)) { best = c->sched[k]; bk = k; ev = EVK_SLUMP; }
-        if (c->modern_at && (bk < 0 || c->modern_at < best)) { best = c->modern_at; bk = 10; ev = EVK_MODERN; }
-        if (c->merger_at && (bk < 0 || c->merger_at < best)) { best = c->merger_at; bk = 11; ev = EVK_MERGER; }
-    }
-    if (c->strike_at && (bk < 0 || c->strike_at < best)) { best = c->strike_at; bk = 12; ev = c->kind == CPX_METAL ? EVK_VM_STRIKE : EVK_STRIKE; }
+    /* the next scheduled start, announced 3 months ahead */
+    for (k = 0; k < 4; k++) if (c->sched[k] && (bk < 0 || c->sched[k] < best)) { best = c->sched[k]; bk = k; ev = EVK_SLUMP; }
+    if (c->modern_at && (bk < 0 || c->modern_at < best)) { best = c->modern_at; bk = 10; ev = EVK_MODERN; }
     if (bk < 0 || mi < best - 3) return;
-    if (bk >= 0 && bk < 4) c->sched[bk] = 0;
-    else if (bk == 10) {
-        if (c->stage < 3 || (c->flags & (CF_MODERNISED | CF_REFUSED))) {      /* only the big machine is modernised */
+    if (bk < 4) c->sched[bk] = 0;
+    else {
+        if (c->stage < 3) {                    /* only the big machine is modernised: wait a year (to 1978) */
             c->modern_at = (s16)(mi_year(c->modern_at) < 1978 ? c->modern_at + 12 : 0);
             return;
         }
         c->modern_at = 0;
-    } else if (bk == 11) {
-        c->merger_at = 0;
-        if (c->flags & CF_MERGED) return;
-    } else if (bk == 12) {
-        c->strike_at = 0;
-        c->strike_gate = (s16)(best + 60);           /* no new random strike within 5 years */
     }
     if (!(c->flags & CF_ACTIVE)) return;    /* not producing yet: the event passes the town by */
     ev_announce(c, idx, ev, IMAX(best, mi + 1));
 }
 
-/* event factors on jobs / output (percent) */
+/* event factors on jobs / output / wood (percent) */
 static void ev_factors(const Complex *c, int *jobs_pct, int *out_pct, int *wood_pct)
 {
     *jobs_pct = *out_pct = *wood_pct = 100;
-    if (c->ev_state != EVS_RUNNING) return;
-    switch (c->ev) {
-    case EVK_SLUMP:
-        *jobs_pct = resp(c) == 1 ? 85 : 70; *out_pct = 70; *wood_pct = 70;
-        break;
-    case EVK_STRIKE: case EVK_VM_STRIKE:
-        *out_pct = resp(c) == 1 ? 50 : 0; *wood_pct = *out_pct;
-        break;
-    }
+    if (c->ev_state == EVS_RUNNING && c->ev == EVK_SLUMP) { *jobs_pct = resp(c) == 1 ? 85 : 70; *out_pct = 70; *wood_pct = 70; }
 }
 
 /* ------------------------------------------------------------------ cards (politics hook) */
 void complex_on_event(int ev, int choice)
 {
-    Complex *c = of_kind(ev == EV_VM_QUOTA || ev == EV_VM_STRIKE ? CPX_METAL : CPX_PAPER);
-    int want = EVK_NONE;
-    if (ev < EV_CPX_TAX || ev > EV_VM_STRIKE || !c) return;
+    Complex *c = of_kind(CPX_PAPER);
+    if (ev < EV_CPX_TAX || ev > EV_CPX_MODERN || !c) return;
     switch (ev) {
     case EV_CPX_TAX:
         if (choice == 0) { budget_set_tax(g_budget.tax_res, IMAX(0, g_budget.tax_bus - 1)); add_adj(c, 15, 24); }
@@ -860,48 +785,36 @@ void complex_on_event(int ev, int choice)
     case EV_CPX_UNION:
         add_adj(c, choice == 0 ? -10 : 5, 24);
         break;
-    case EV_CPX_THREAT:
-        if (choice == 0) { budget_set_tax(g_budget.tax_res, IMAX(0, g_budget.tax_bus - 1)); add_adj(c, 10, 24); }
+    case EV_CPX_SLUMP: case EV_CPX_MODERN:
+        if (c->ev == (ev == EV_CPX_SLUMP ? EVK_SLUMP : EVK_MODERN) && c->ev_state != EVS_NONE && c->ev_resp == 255) {
+            c->ev_resp = (u8)choice;
+            if (ev == EV_CPX_SLUMP && choice == 2 && c->ev_state == EVS_RUNNING) c->ev_len = (s16)IMIN(c->ev_len, 8);
+        }
         break;
-    case EV_VM_QUOTA:
-        if (choice == 0) { c->out_adj = 10; c->out_adj_m = 12; add_adj(c, 10, 12); } else add_adj(c, -5, 12);
-        break;
-    case EV_CPX_SLUMP:  want = EVK_SLUMP; break;
-    case EV_CPX_STRIKE: want = EVK_STRIKE; break;
-    case EV_CPX_MODERN: want = EVK_MODERN; break;
-    case EV_CPX_MERGER: want = EVK_MERGER; break;
-    case EV_VM_STRIKE:  want = EVK_VM_STRIKE; break;
-    }
-    if (want != EVK_NONE && c->ev == want && c->ev_state != EVS_NONE && c->ev_resp == 255) {
-        c->ev_resp = (u8)choice;
-        apply_answer_mood(c);
-        if (c->ev == EVK_SLUMP && choice == 2 && c->ev_state == EVS_RUNNING) c->ev_len = (s16)IMIN(c->ev_len, 8);
     }
     log_printf("complex: card %d answered %d (mood %d)", ev, choice, c->mood);
 }
 
-static void demand_step(Complex *c, int idx)
+/* the patron's demands: at most 3 kinds, one card at a time in the shared card slot */
+static void demand_step(Complex *c)
 {
-    int cand[4], n = 0, ev;
+    int cand[3], n = 0, ev;
     const CityStats *st = sim_stats();
-    UNUSED(idx);
     if (c->demand_cd > 0) { c->demand_cd--; return; }
-    if (!politics_enabled() || !owner_present(c) || politics_pending_event() >= 0) return;
-    if (c->kind == CPX_PAPER) {
-        if (g_budget.tax_bus >= TAX_NEUTRAL && g_budget.tax_bus > 3) cand[n++] = EV_CPX_TAX;
-        if (!(c->flags & CF_PERMIT) && c->stage >= 2) cand[n++] = EV_CPX_PERMIT;
-        if (st->population >= 2000 && politics_event_count(EV_CPX_UNION) < 2) cand[n++] = EV_CPX_UNION;
-    } else cand[n++] = EV_VM_QUOTA;
+    if (!owner_present(c) || !card_slot_free() || c->ev_state == EVS_ANNOUNCED) return;
+    if (g_budget.tax_bus >= TAX_NEUTRAL && g_budget.tax_bus > 3) cand[n++] = EV_CPX_TAX;
+    if (!(c->flags & CF_PERMIT) && c->stage >= 2) cand[n++] = EV_CPX_PERMIT;
+    if (st->population >= 2000 && politics_event_count(EV_CPX_UNION) < 2) cand[n++] = EV_CPX_UNION;
     if (!n) { c->demand_cd = 6; return; }
     ev = cand[rng_below(sim_rng(), n)];
-    if (politics_queue_event(ev)) c->demand_cd = (s16)((c->kind == CPX_METAL ? 24 : 12) + rng_below(sim_rng(), 13));
+    if (politics_queue_event(ev)) c->demand_cd = (s16)(12 + rng_below(sim_rng(), 13));
 }
 
 /* ------------------------------------------------------------------ the monthly update */
-int complex_paper_stage_ok(int next, s32 pop, s32 wood_avail, int year, int station, int staffed, int mood, int threat)
+int complex_paper_stage_ok(int next, s32 pop, s32 wood_avail, int year, int station, int staffed, int mood)
 {
     if (next == 2) return pop >= 3000 && wood_avail >= s_pwood[2] && staffed && mood > 30;
-    if (next == 3) return year >= 1963 && pop >= 6000 && wood_avail >= s_pwood[3] && station && staffed && mood > 30 && !threat;
+    if (next == 3) return year >= 1963 && pop >= 6000 && wood_avail >= s_pwood[3] && station && staffed && mood > 30;
     return 0;
 }
 
@@ -978,18 +891,11 @@ static void update(Complex *c, int idx)
         c->wood_need = (s16)(s_pwood[c->stage] * wp / 100);
         c->west = 0;
     } else {
-        if (mi % 12 == 0 && mi_year(mi) >= 1956 && (mi_year(mi) - 1956) % 5 == 0) {     /* 5-year agreement */
-            int e = politics_enabled() ? politics_meter(METER_EAST) : 50;
-            c->agree = (s16)(e >= 60 ? 125 : e <= 40 ? 75 : 100);
-            push_msg(CM_AGREEMENT, idx, c->agree, mi_year(mi));
-        }
         if (mi == 1989 * 12 + 10 && !(c->flags & CF_CLEAR_WARNED)) { c->flags |= CF_CLEAR_WARNED; push_msg(CM_CLEARING_END, idx, 0, 0); }
         if (year >= 1990 && !(c->flags & CF_CLEAR_SAID)) { c->flags |= CF_CLEAR_SAID; push_msg(CM_CLEARING_END, idx, 1, 0); }
         nominal = VM_LINE_JOBS * c->stage;
         vol_nom = nominal;
         wood_f = 100;
-        out = out * c->agree / 100;
-        if (c->out_adj_m > 0) { out = out * (100 + c->out_adj) / 100; if (--c->out_adj_m == 0) c->out_adj = 0; }
         if (year >= 1990) { out /= 2; nominal /= 2; }
         c->wood_need = 0;
     }
@@ -1012,37 +918,29 @@ static void update(Complex *c, int idx)
     /* stages */
     if (fill >= 90 && c->jobs > 0) c->staffed++; else c->staffed = 0;
     if (c->staffed > 120) c->staffed = 120;
-    avail = W->supply - (W->need - c->wood_need);
+    /* the mill's contracts come first: only other complexes' wood counts against it (the sawmills then run short) */
+    avail = W->supply - (W->need_ext - c->wood_need);
     if (c->kind == CPX_PAPER) {
-        if (c->stage == 2 && c->mood <= 30 && !(c->flags & CF_THREAT) && owner_present(c)) {
-            c->flags |= CF_THREAT;
-            push_msg(CM_THREAT, idx, c->mood, 0);
-            if (politics_enabled() && politics_pending_event() < 0) politics_queue_event(EV_CPX_THREAT);
-        }
-        if ((c->flags & CF_THREAT) && c->mood >= 40) c->flags &= ~CF_THREAT;
         if (!c->next && c->stage < 3 && (c->ev_state != EVS_RUNNING) &&
-            complex_paper_stage_ok(c->stage + 1, st->population, avail, year, transit_stations() > 0, c->staffed >= 6, c->mood,
-                                   (c->flags & CF_THREAT) != 0)) {
+            complex_paper_stage_ok(c->stage + 1, st->population, avail, year, transit_stations() > 0, c->staffed >= 6, c->mood)) {
             c->next = (u8)(c->stage + 1); c->build_left = CPX_BUILD_MONTHS;
             push_msg(CM_STAGE_START, idx, c->next, 0);
         }
-    } else if (!c->next && c->stage < VM_LINES && year >= s_vmyear[c->stage] && year < 1990 && c->staffed >= 6 &&
-               c->mood > 30 && c->ev_state != EVS_RUNNING) {
+    } else if (!c->next && c->stage < VM_LINES && year >= s_vmyear[c->stage] && year < 1990 && c->staffed >= 6) {
         c->next = (u8)(c->stage + 1); c->build_left = CPX_BUILD_MONTHS;
         push_msg(CM_STAGE_START, idx, c->next, 0);
     }
     /* gifts */
     if (c->gift_cd > 0) c->gift_cd--;
     if (owner_present(c) && c->mood >= GIFT_MOOD && !c->gift_cd && X.nq < CPX_GIFT_QUEUE) {
-        int def = c->kind == CPX_PAPER ? (c->gifts < (int)COUNTOF(s_gift_pm) ? s_gift_pm[c->gifts] : B_ROW_HOUSES)
-                                       : (c->gifts < (int)COUNTOF(s_gift_vm) ? s_gift_vm[c->gifts] : B_ROW_HOUSES);
+        int def = c->gifts < (int)COUNTOF(s_gift_pm) ? s_gift_pm[c->gifts] : B_ROW_HOUSES;
         X.q[X.nq].def = (u8)def; X.q[X.nq].cpx = (u8)idx; X.nq++;
         if (c->gifts < 255) c->gifts++;
-        c->gift_cd = c->kind == CPX_PAPER ? GIFT_CD_PM : GIFT_CD_VM;
+        c->gift_cd = GIFT_CD_PM;
         push_msg(CM_GIFT_OFFER, idx, def, 0);
         log_printf("complex: %s offers %s (mood %d)", complex_name(c->kind), def_building(def)->key, c->mood);
     }
-    demand_step(c, idx);
+    if (owner_present(c)) demand_step(c);
 }
 
 static Money gift_upkeep(void)
@@ -1060,7 +958,7 @@ static Money gift_upkeep(void)
             X.ng--;
             continue;
         }
-        if (gift_paid(g->def) && l->status == LOT_ACTIVE && X.c[g->cpx].kind && owner_pays(&X.c[g->cpx])) {
+        if (gift_paid(g->def) && l->status == LOT_ACTIVE && X.c[g->cpx].kind && owner_present(&X.c[g->cpx])) {
             const BuildingDef *d = def_building(g->def);
             m += (s64)d->upkeep * (d->service != SVC_NONE ? g_budget.funding[d->service] : 100) / 100;
         }
@@ -1094,8 +992,7 @@ void complex_month(void)
         const Complex *c = &X.c[i];
         if (!c->kind || !(c->flags & CF_ACTIVE)) continue;
         cj += c->jobs;
-        if (c->kind == CPX_PAPER) rate = IMAX(rate, !(c->flags & CF_MERGED) ? 20 : ((c->flags & CF_HONOURED) && sim_date()->year < 1990) ? 10 : 0);
-        else rate = IMAX(rate, 10);
+        rate = IMAX(rate, c->kind == CPX_PAPER ? 20 : 10);       /* the patron pays a fifth, the state a tenth */
     }
     X.dep_pct = st->jobs > 0 ? (int)((s64)cj * 100 / st->jobs) : 0;
     ct = X.dep_pct >= CPX_DEP_PCT && rate > 0;
@@ -1115,7 +1012,7 @@ int complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x
     const Complex *c = complex_get(m->cpx);
     int kind = c ? c->kind : (m->type == CM_DEMOLISHED ? m->a : CPX_PAPER), sev = SEV_INFO, w, h;
     const char *nm = complex_name(kind);
-    const char *desk = politics_enabled() ? " A card waits on the President's desk." : "";
+    const char *desk = politics_enabled() && complex_get(m->cpx) && complex_get(m->cpx)->ev_card ? " A card waits on the President's desk." : "";
     *x = *y = -1;
     if (c) { complex_size(c->kind, &w, &h); *x = c->x + w / 2; *y = c->y + h / 2; }
     buf[0] = 0;
@@ -1139,13 +1036,11 @@ int complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x
         else str_printf(buf, size, "PM3, the big machine, is running. The town hears it at night and sleeps better for it.");
         sev = SEV_POLITICAL; break;
     case CM_GIFT_OFFER:
-        if (kind == CPX_METAL) str_printf(buf, size, "The Ministry grants the town %s. Place it near the works: Industry > Gift.", complex_gift_name(m->a, kind));
-        else str_printf(buf, size, "Patruuna Hellstedt offers the town %s. Place it near the mill: Industry > Gift.", complex_gift_name(m->a, kind));
+        str_printf(buf, size, "Patruuna Hellstedt offers the town %s. Place it near the mill: Industry > Gift.", complex_gift_name(m->a, kind));
         sev = SEV_POLITICAL; break;
     case CM_GIFT_PLACED:
-        str_printf(buf, size, "%s%s opens with a speech by %s. The speech is longer than the ribbon.",
-                   m->a == B_PATRON_VILLA ? "The patron's villa" : "The gift: ", m->a == B_PATRON_VILLA ? "" : complex_gift_name(m->a, kind),
-                   kind == CPX_METAL ? "the director" : "the patron");
+        str_printf(buf, size, "%s%s opens with a speech by the patron. The speech is longer than the ribbon.",
+                   m->a == B_PATRON_VILLA ? "The patron's villa" : "The gift of ", m->a == B_PATRON_VILLA ? "" : complex_gift_name(m->a, kind));
         break;
     case CM_COMPANY_TOWN:
         if (m->b) str_printf(buf, size, "Company town: %d%% of the jobs are at the works. The company now pays part of the school, clinic and fire upkeep.", m->a);
@@ -1155,28 +1050,16 @@ int complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x
         sev = SEV_WARN;
         switch (m->a) {
         case EVK_SLUMP:  str_printf(buf, size, "Paper prices are falling in London. The mill goes on short shifts in %d months.%s", m->b, desk); break;
-        case EVK_STRIKE:
-            if (sim_date()->year <= 1956) str_printf(buf, size, "The unions call a general strike for March. The mill will stand still.%s", desk);
-            else str_printf(buf, size, "Wage talks have failed. A strike is called at the mill in %d months.%s", m->b, desk);
-            break;
         case EVK_MODERN: str_printf(buf, size, "%s plans a new paper machine with 300 fewer men. The decision falls in %d months.%s", nm, m->b, desk); break;
-        case EVK_MERGER: str_printf(buf, size, "The patron's family is said to be selling the mill to a Helsinki group. Papers in %d months.%s", m->b, desk); break;
-        case EVK_VM_STRIKE: str_printf(buf, size, "The metal workers at Valtion Metalli will strike in %d months.%s", m->b, desk); break;
         }
         break;
     case CM_EV_START:
         sev = SEV_WARN;
-        if (m->a == EVK_SLUMP) str_printf(buf, size, "Short shifts begin at the mill: %d jobs fewer until London buys again.", m->b);
-        else if (m->a == EVK_VM_STRIKE) str_copy(buf, "Valtion Metalli is on strike. Deliveries to the East stop.", size);
-        else str_copy(buf, "The strike begins. The mill is silent; the patron is not.", size);
+        str_printf(buf, size, "Short shifts begin at the mill: %d jobs fewer until London buys again.", m->b);
         break;
     case CM_EV_END:
-        if (m->a == EVK_SLUMP) str_copy(buf, "London buys paper again. Full shifts return to the mill.", size);
-        else str_copy(buf, "The strike is over. The machines start again.", size);
+        str_copy(buf, "London buys paper again. Full shifts return to the mill.", size);
         break;
-    case CM_THREAT:
-        str_printf(buf, size, "The board may put PM3 in another town: relations with the patron are chilly (mood %d).%s", m->a, desk);
-        sev = SEV_WARN; break;
     case CM_VM_DECREE:
         str_copy(buf, "The Ministry seeks a site for a state metal works. A decree would bring Valtion Metalli here: President's desk > Decrees.", size);
         sev = SEV_POLITICAL; break;
@@ -1186,10 +1069,6 @@ int complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x
     case CM_VM_UNLOCK:
         str_copy(buf, "As a market town we may now host a state metal works: Industry > Valtion Metalli (by the railway).", size);
         break;
-    case CM_AGREEMENT:
-        str_printf(buf, size, "The %d trade agreement with the East: Valtion Metalli's deliveries %s.", m->b,
-                   m->a > 100 ? "rise by a quarter" : m->a < 100 ? "fall by a quarter" : "stay as they were");
-        sev = SEV_POLITICAL; break;
     case CM_CLEARING_END:
         if (!m->a) str_copy(buf, "The clearing trade with the East ends in January. Valtion Metalli expects to halve its output.", size);
         else str_copy(buf, "The clearing trade has ended. Valtion Metalli halves its output and its jobs. The newsreel calls it the end of an era.", size);
@@ -1200,10 +1079,6 @@ int complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x
     case CM_DEMOLISHED:
         str_printf(buf, size, "%s is demolished. The smell lingers for a while.", nm);
         sev = SEV_WARN; break;
-    case CM_MERGED:
-        if (m->a) str_copy(buf, "The family has sold the mill. The new Helsinki owners will honour the patron's promises until 1990, in moderation.", size);
-        else str_copy(buf, "The family has sold the mill to a Helsinki group. The patron leaves; the gifts and the company contribution end.", size);
-        sev = SEV_POLITICAL; break;
     case CM_MODERNISED:
         if (!m->a) str_copy(buf, "The new paper machine is installed: 300 fewer jobs, the same paper, less smoke.", size);
         else str_copy(buf, "The mill keeps its old machines and its men. Output falls by a fifth.", size);
@@ -1224,7 +1099,7 @@ static const char *mood_word(int m)
 static const char *mt_label(int id)
 {
     static const char *const n[MT_COUNT] = { "base", "tax", "station", "wood", "staff", "services", "smokestacks",
-                                             "gifts", "answers", "East" };
+                                             "gifts", "answers" };
     return (id >= 0 && id < MT_COUNT) ? n[id] : "?";
 }
 
@@ -1280,7 +1155,7 @@ int complex_lot_line(int lot, int k, char *buf, int size, int *font)
             if (!len) str_copy(buf, "No particular opinions this month", size);
         END
     } else {
-        LINE(1) str_copy(buf, "Owned by a Helsinki group: no patron, no gifts, no demands", size); END
+        LINE(1) str_copy(buf, "A state works: the Ministry sends orders, not opinions", size); END
     }
     LINE(X.company_town ? 3 : 1)
         text_fmt_money(b, sizeof(b), X.contrib, year);
@@ -1300,18 +1175,18 @@ int complex_lot_line(int lot, int k, char *buf, int size, int *font)
     }
     if (c->ev_state != EVS_NONE) {
         LINE(2)
-            static const char *const en[EVK_COUNT] = { "", "Paper slump", "Strike", "Modernisation decision", "Sale of the mill", "Strike" };
+            static const char *const en[EVK_COUNT] = { "", "Paper slump", "Modernisation decision" };
             if (c->ev_state == EVS_ANNOUNCED) str_printf(buf, size, "%s from %d/%d", en[c->ev], c->ev_start % 12 + 1, mi_year(c->ev_start));
             else str_printf(buf, size, "%s until %d/%d", en[c->ev], (c->ev_start + c->ev_len) % 12 + 1, mi_year(c->ev_start + c->ev_len));
         END
     }
     if (c->kind == CPX_PAPER && c->stage < 3 && !c->next) {
         LINE(1)
-            s32 avail = W->supply - (W->need - c->wood_need);
+            s32 avail = W->supply - (W->need_ext - c->wood_need);
             if (c->stage == 1) str_printf(buf, size, "PM2 needs: town 3,000 (%d), wood %d for the mill (%d), staff, mood 31+",
                                           sim_stats()->population, s_pwood[2], avail);
-            else str_printf(buf, size, "PM3 needs: 1963, town 6,000 (%d), wood %d (%d), a railway station%s",
-                            sim_stats()->population, s_pwood[3], avail, (c->flags & CF_THREAT) ? ", the board's goodwill" : "");
+            else str_printf(buf, size, "PM3 needs: 1963, town 6,000 (%d), wood %d (%d), a railway station, mood 31+",
+                            sim_stats()->population, s_pwood[3], avail);
         END
     }
     {
@@ -1385,16 +1260,14 @@ void complex_dump(FILE *f)
         if (!c->kind) continue;
         fprintf(f, "  [%d] %s at %d,%d: stage %d next %d (%d months) flags %03x | jobs %d employed %d output %d%% | wood need %d"
                    " delivered %d%% | vol %d W %d E %d | mood %d -> %d, gifts %d (cd %d, boost %d), demand cd %d, staffed %d"
-                   " | event %d state %d resp %d start %d-%02d len %d | agree %d\n",
+                   " | event %d state %d resp %d start %d-%02d len %d\n",
                 i, complex_name(c->kind), c->x, c->y, c->stage, c->next, c->build_left, c->flags, c->jobs, c->employed,
                 c->output, c->wood_need, c->wood_pct, c->vol, c->west, c->east, c->mood, c->mood_target, c->gifts, c->gift_cd,
                 c->gift_boost, c->demand_cd, c->staffed, c->ev, c->ev_state, c->ev_resp == 255 ? -1 : c->ev_resp,
-                mi_year(c->ev_start), c->ev_start % 12 + 1, c->ev_len, c->agree);
+                mi_year(c->ev_start), c->ev_start % 12 + 1, c->ev_len);
         fprintf(f, "      schedule: slumps");
         for (k = 0; k < 4; k++) if (c->sched[k]) fprintf(f, " %d-%02d", mi_year(c->sched[k]), c->sched[k] % 12 + 1);
         if (c->modern_at) fprintf(f, ", modernisation %d-%02d", mi_year(c->modern_at), c->modern_at % 12 + 1);
-        if (c->merger_at) fprintf(f, ", merger %d-%02d", mi_year(c->merger_at), c->merger_at % 12 + 1);
-        if (c->strike_at) fprintf(f, ", strike %d-%02d", mi_year(c->strike_at), c->strike_at % 12 + 1);
         fprintf(f, "; mood terms");
         for (k = 0; k < c->nterms; k++) fprintf(f, " %s %+d", mt_label(c->terms[k].id), c->terms[k].amount);
         fprintf(f, "\n");
@@ -1408,9 +1281,8 @@ void complex_dump(FILE *f)
 #define CPX_FIELDS(F) \
     F(kind) F(x) F(y) F(stage) F(next) F(build_left) F(mood) F(mood_target) F(flags) F(jobs) F(employed) F(output) \
     F(wood_need) F(wood_pct) F(staffed) F(gift_cd) F(demand_cd) F(gift_boost) F(gifts) F(ev) F(ev_state) F(ev_resp) \
-    F(ev_card) F(ev_start) F(ev_len) F(sched[0]) F(sched[1]) F(sched[2]) F(sched[3]) F(modern_at) F(merger_at) \
-    F(strike_at) F(strike_gate) F(adj[0]) F(adj[1]) F(adj[2]) F(adj[3]) F(adj_m[0]) F(adj_m[1]) F(adj_m[2]) F(adj_m[3]) F(out_adj) \
-    F(out_adj_m) F(agree) F(placed) F(vol) F(west) F(east)
+    F(ev_card) F(ev_start) F(ev_len) F(sched[0]) F(sched[1]) F(sched[2]) F(sched[3]) F(modern_at) \
+    F(adj[0]) F(adj[1]) F(adj[2]) F(adj[3]) F(adj_m[0]) F(adj_m[1]) F(adj_m[2]) F(adj_m[3]) F(placed) F(vol) F(west) F(east)
 
 u32 complex_hash(void)
 {
@@ -1469,9 +1341,9 @@ int complex_load(SaveFile *sf)
         c->nterms = ICLAMP(c->nterms, 0, (int)COUNTOF(c->terms));
     }
 #undef LF
-    X.nq = ICLAMP(load_s32(sf), 0, CPX_GIFT_QUEUE);
+    n = load_s32(sf); X.nq = ICLAMP(n, 0, CPX_GIFT_QUEUE);           /* (no calls inside ICLAMP: it evaluates twice) */
     for (k = 0; k < X.nq; k++) { X.q[k].def = (u8)load_u8(sf); X.q[k].cpx = (u8)load_u8(sf); }
-    X.ng = ICLAMP(load_s32(sf), 0, CPX_MAX_GIFTS);
+    n = load_s32(sf); X.ng = ICLAMP(n, 0, CPX_MAX_GIFTS);
     for (k = 0; k < X.ng; k++) { X.g[k].def = (u8)load_u8(sf); X.g[k].cpx = (u8)load_u8(sf); X.g[k].x = (u8)load_u8(sf); X.g[k].y = (u8)load_u8(sf); }
     X.vm_hook = load_s32(sf); X.vm_permit = load_s32(sf); X.vm_said = load_s32(sf);
     X.company_town = load_s32(sf); X.dep_pct = load_s32(sf); X.contrib = load_s32(sf); X.contrib_rate = load_s32(sf);

@@ -70,7 +70,7 @@ const BuildingDef g_bdefs[B_COUNT] = {
     PB("sauna", "Public sauna",               BCAT_SERVICE, 1, 1, SVC_SAUNA, BDF_WOODEN | BDF_SMOKE, TS_VILLAGE, 1955, 400, 25, 1500,  3, 1, 4,   4,  3, 3, 1),
     PB("police", "Police station",            BCAT_SERVICE, 1, 1, SVC_POLICE, 0, TS_MARKET_TOWN, 1960,               600,  40, 3000, 12, 2, 2,   0,  0, 0, 1),   /* M5: art */
     PB("library", "Library",                  BCAT_SERVICE, 1, 1, SVC_LIBRARY, 0, TS_MARKET_TOWN, 1960,              800,  30, 4000,  6, 2, 2,   0,  6, 4, 1),
-    PB("post", "Post and telephone",          BCAT_SERVICE, 1, 1, SVC_POST, 0, TS_CHURCH_VILLAGE, 1955,              700,  30, 3000, 15, 3, 2,   0,  0, 0, 1),   /* M5: houses T3 need it (DESIGN 7: Market town 1960 kept T3 out of reach until 1960) */
+    PB("post", "Post and telephone",          BCAT_SERVICE, 1, 1, SVC_POST, 0, TS_CHURCH_VILLAGE, 1960,              600,  20, 6000, 15, 3, 2,   0,  0, 0, 1),   /* M5: art; houses T3 need it from 1960 (PHONE_YEAR, sim.cpp) */
     PB("health_centre", "Health centre",      BCAT_SERVICE, 2, 2, SVC_HEALTH, 0, TS_TOWN, 1972,                     4000, 150, 8000, 40, 8, 8,   0,  5, 4, 1),   /* M5: Town (DESIGN 7: Regional centre, 40k, out of reach in most towns) */
     PB("park", "Park",                        BCAT_PARK,    1, 1, SVC_NONE, BDF_NO_CONDUCT | BDF_NO_ROTATE, TS_VILLAGE, 1955, 100, 2, 0, 0, 0, 0, 0, 12, 4, 3),
     PB("sports_field", "Sports field",        BCAT_PARK,    2, 2, SVC_NONE, BDF_NO_CONDUCT, TS_CHURCH_VILLAGE, 1960, 400,   5,    0,  1, 0, 0,   0, 15, 5, 0),
@@ -131,8 +131,9 @@ const BuildingDef g_bdefs[B_COUNT] = {
     ZB("row_houses",         "Workers' row houses",     ZONE_HOUSES,   2, 3, 1, BDF_WOODEN,                   30,  5,  5,   0, 1, 2, B_NONE),
     PB("patron_villa", "The patron's villa",  BCAT_SPECIAL, 2, 2, SVC_NONE, 0, TS_VILLAGE, 1955,                0,   0,    0,  2, 1, 1,   0, 20, 5, 1),
     /* M5 utilities (civic.h): capacity = heat units (heat plant; consumers take their water_use) / residents treated
-       (sewage works). Both sit on the water pipe network. Coal-fired heat plant: smoke, fuel booked monthly. */
-    PB("heat_plant", "District heat plant",   BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_SMOKE, TS_MARKET_TOWN, 1960,      3500,  60,  600, 15, 4, 4, 150, -8, 4, 1),
+       (sewage works). Both sit on the water pipe network. Coal-fired heat plant: smoke; its upkeep includes the coal
+       (flat, scaled by civic_fuel_pct for M7's oil prices). */
+    PB("heat_plant", "District heat plant",   BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_SMOKE, TS_MARKET_TOWN, 1960,      3500, 110,  600, 15, 4, 4, 150, -8, 4, 1),
     PB("sewage_works", "Sewage works",        BCAT_SPECIAL, 2, 2, SVC_NONE, 0, TS_MARKET_TOWN, 1960,              2500,  40, 4000,  8, 4, 0,   0, -6, 4, 1),
     /* M7 landmarks (era.cpp): expensive money sinks for built-out towns with land value, authority (politics) and
        tourism income (less than the upkeep). Unlocks by status + year (DESIGN 7; TV tower at Town 1970 instead of
@@ -195,7 +196,8 @@ static const TierReq s_req_house[3][8] = {
       { REQ_HEALTH, 0 }, { REQ_SHOP, 0 }, { REQ_PHONE, 0 } },
 };
 /* T12: the post office (REQ_PHONE) had no art in Milestone 1, so count 7 dropped it. M5: B_POST has art, the
-   phone queue is back (8). */
+   phone queue is back (8); it counts from 1960, when the post office unlocks (sim.cpp PHONE_YEAR), so the
+   1955-59 wooden towns keep their pace. */
 static const int s_nreq_house[3] = { 1, 5, 8 };
 static const TierReq s_req_house3_lv = { REQ_LAND_VALUE, 40 };
 static const TierReq s_req_apt[3][8] = {

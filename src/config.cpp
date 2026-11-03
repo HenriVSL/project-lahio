@@ -34,6 +34,7 @@ static IniKey s_keys[] = {
     { "pipes_with_roads", &g_cfg.pipes_with_roads }, /* F1: lay water pipes with new roads (default 0) */
     { "zone_view",        &g_cfg.zone_view },        /* F3: persistent zone borders (V) */
     { "hints",            &g_cfg.hints },            /* F3: opening hints at a new game (0 = off) */
+    { "newspaper",        &g_cfg.newspaper },        /* M7: January paper opens (1) or ticker only (0) */
 };
 #define NUM_KEYS COUNTOF(s_keys)
 /* res and fps are stored as text ("800", "auto"); handled next to the table */
@@ -71,6 +72,7 @@ static void set_defaults(void)
     g_cfg.vsync = 1;
     g_cfg.sfx_volume = 100; g_cfg.ambient_volume = 70;
     g_cfg.hints = 1;                                 /* F3 */
+    g_cfg.newspaper = 1;                             /* M7 */
 }
 
 static void snapshot(int *dst)

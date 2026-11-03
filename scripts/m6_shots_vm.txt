@@ -1,0 +1,7 @@
+# m6_shots_vm.txt - M6 screenshots of Valtion Metalli on the saved metal town (see m6_headless.txt).
+#   lahio.exe -load M6_METAL.KAU -script scripts\m6_shots_vm.txt
+wait 1
+shot m6_metal.bmp
+query 109 110
+shot m6_metal_query.bmp
+quit

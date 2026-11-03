@@ -35,6 +35,9 @@
 #include "traffic.h"
 #include "politics.h"
 #include "ui_pol.h"       /* M1 */
+#include "ui_m7.h"        /* M7 */
+#include "era.h"
+#include "trade.h"
 #include "tools.h"
 #include "complex.h"      /* M6 */
 #include "text.h"
@@ -96,6 +99,8 @@ static FILE  *s_scr_out;
 static int    game_script_load(const char *path);
 static void   autosave_finish(int wait);   /* T13 */
 static void   enter_menu(int which);       /* F3: script "menu" */
+static void   news_show(int newsreel);     /* M7 */
+static void   news_closed(void);
 
 /* ================================================================== command line extras */
 static void parse_cmdline(void)
@@ -411,8 +416,17 @@ static int script_game_cmd(const char *line)
     if (str_ieq(cmd, "overlay") && n >= 2) { s_show_buildings = a >= 100; set_overlay(a % 100, 0); return 1; }
     if (str_ieq(cmd, "shot")) { if (sscanf(line, "%31s %259s", cmd, arg) == 2 && s_ready) request_shot(arg); return 1; }
     if (str_ieq(cmd, "tool") && n >= 2) { tools_select(a, b); return 1; }
+    if (str_ieq(cmd, "query") && n >= 3) { if (s_ready) ui_open_query(world_lot_at(a, b), a, b); return 1; }   /* M6: query panel shots */
     if (str_ieq(cmd, "quit")) { s_scr_quit = 1; return 1; }
     if (str_ieq(cmd, "polpanel") && n >= 2) { if (s_ready) uipol_show(a); return 1; }   /* M1: screenshots */
+    /* M7 (screenshots): newspaper [0 latest | 1 newsreel | 2 close], m7panel 0 graphs | 1 trade [tab] */
+    if (str_ieq(cmd, "newspaper")) {
+        if (!s_ready) return 1;
+        if (n >= 2 && a == 2) { uinews_close(); news_closed(); }
+        else news_show(n >= 2 && a == 1);
+        return 1;
+    }
+    if (str_ieq(cmd, "m7panel") && n >= 2) { if (s_ready) { ui_open_panel(a ? PANEL_TRADE : PANEL_GRAPHS); if (n >= 3) ui_set_panel_tab(b); } return 1; }
     /* F3 (screenshots / VM checks): zoneview 0|1, mouse SX SY (client px; the hover label), menu (pause menu) */
     if (str_ieq(cmd, "zoneview") && n >= 2) { set_zone_view(a); return 1; }
     if (str_ieq(cmd, "mouse") && n >= 3) {
@@ -633,6 +647,29 @@ static void screen_of_tile(int x, int y, int *sx)
     cam_tile_to_screen(x, y, sx, &sy);
 }
 
+/* M7: the newspaper pauses the game while it is open (never during a drag, scripts or benches: then the headline
+   goes to the ticker unless a script asks for the paper with "newspaper") */
+static int s_news_speed = -1;
+static void news_show(int newsreel)
+{
+    if (uinews_active()) return;
+    if (newsreel) uinews_open_newsreel(); else uinews_open();
+    if (!uinews_active()) return;
+    if (s_news_speed < 0) { s_news_speed = sim_speed(); sim_set_speed(SPEED_PAUSE); }
+    snd_play(SND_PAPER, 80);
+}
+static void news_closed(void)
+{
+    if (s_news_speed >= 0) { sim_set_speed(s_news_speed); s_news_speed = -1; }
+}
+static void news_tick(void)
+{
+    if (!era_news_pending() || uinews_active()) return;
+    if (!g_cfg.newspaper || s_scr_n || g_cfg.bench) { uinews_to_ticker(); return; }
+    if (tools_dragging()) return;
+    news_show(0);
+}
+
 static void exec_cmd(const UiCmd *c)
 {
     switch (c->type) {
@@ -653,6 +690,14 @@ static void exec_cmd(const UiCmd *c)
     case UC_HINTS: s_hint_on = 0; log_printf("game: hints dismissed"); snd_play(SND_PAPER, 40); break;   /* F3 */
     case UC_LOAD: enter_menu(GS_LOADMENU); break;
     case UC_QUIT: enter_menu(MENU_QUIT_CONFIRM); break;
+    case UC_M7:           /* M7: trade panel, graphs, newspaper key (between sim steps) */
+        if (c->a == M7A_SIGN) { if (trade_sign(c->b)) snd_play(SND_STAMP, 80); }
+        else if (c->a == M7A_BOND) { if (trade_issue_bond()) snd_play(SND_CASH, 70); else snd_play(SND_DENY, 60); }
+        else if (c->a == M7A_SAUNA) { if (era_sauna_invite()) snd_play(SND_PAPER, 70); }
+        else if (c->a == M7A_NEWS_LAST) { if (era_news()) news_show(0); }
+        else if (c->a == M7A_NEWSREEL) news_show(1);
+        else if (c->a == M7A_CARD) ui_open_panel(PANEL_POLITICS);
+        break;
     case UC_POLITICS:     /* M1: player actions between sim steps (like tool commits) */
         if (c->a == POLA_SIGN) { if (politics_sign(c->b)) snd_play(SND_STAMP, 80); else snd_play(SND_DENY, 60); }
         else if (c->a == POLA_REPEAL) { if (politics_repeal(c->b)) snd_play(SND_PAPER, 70); else snd_play(SND_DENY, 60); }
@@ -716,7 +761,9 @@ static void hotkeys(const InputState *in)
     for (k = 0; k <= 9; k++)
         if (key_hit('0' + k)) {
             int o = ovl_keys[k];
-            set_overlay(o == s_ovl ? OVL_NONE : o, 0);
+            if (o == OVL_WATER && s_ovl == OVL_WATER) set_overlay(OVL_HEAT, 0);         /* M5: water -> heat -> off */
+            else if (o == OVL_WATER && s_ovl == OVL_HEAT) set_overlay(OVL_NONE, 0);
+            else set_overlay(o == s_ovl ? OVL_NONE : o, 0);
             hint_learnt(HINT_OVERLAY);
         }
     if (key_hit(VK_TAB) && s_ovl != OVL_NONE) { s_show_buildings = !s_show_buildings; set_overlay(s_ovl, s_ovl_param); }
@@ -746,6 +793,9 @@ static void hotkeys(const InputState *in)
         if (key_hit('Z')) { zoom_to(g_cam.zoom == ZOOM_64 ? ZOOM_32 : ZOOM_64, zx, zy); hint_learnt(HINT_ZOOM); }
     }
     if (key_hit('V')) { set_zone_view(!s_zone_view); snd_play(SND_CLICK, 50); }        /* F3: zone view */
+    if (key_hit('G')) { if (ui_panel() == PANEL_GRAPHS) ui_close_panel(); else ui_open_panel(PANEL_GRAPHS); }   /* M7 */
+    if (key_hit('T')) { if (ui_panel() == PANEL_TRADE) ui_close_panel(); else ui_open_panel(PANEL_TRADE); }
+    if (key_hit('N') && era_news()) news_show(0);
     if (key_hit(VK_HOME)) center_on_town_hall();
     if (key_hit('J')) ui_ticker_jump();
 }
@@ -899,6 +949,13 @@ static void drain_events(void)
     SimEvent e;
     PolMsg pm;
     int x, y, sx;
+    {   /* M7: trade/era messages -> ticker (trade lines open the trade panel) */
+        EraMsg em;
+        char buf[200];
+        int sev;
+        while (era_poll_msg(&em))
+            if (era_msg_text(buf, sizeof(buf), &em, &sev)) uix_ticker(sev, buf, era_msg_panel(&em) ? PANEL_TRADE : PANEL_NONE);
+    }
     while (politics_poll_msg(&pm)) {        /* M1: politics messages -> ticker (click opens the President's desk) */
         uipol_message(&pm);
         if (pm.type == PMSG_EVENT || pm.type == PMSG_CAMPAIGN) snd_play(SND_PAPER, 70);
@@ -1024,6 +1081,17 @@ void game_update(double dt)
     }
     if (s_state != GS_PLAY) return;
     script_tick();
+    if (uinews_active()) {                           /* M7: the newspaper owns the input while it is open */
+        if (key_hit(VK_ESCAPE)) uinews_key(VK_ESCAPE);
+        if (key_hit(VK_RETURN)) uinews_key(VK_RETURN);
+        if (key_hit(VK_SPACE)) uinews_key(VK_SPACE);
+        uinews_input(in);
+        if (!uinews_active()) news_closed();
+        drain_events();
+        ui_update(dt);
+        life_update(dt);
+        return;
+    }
     s_consumed = ui_input(in);
     hotkeys(in);
     if (s_state != GS_PLAY) return;                  /* Esc opened the pause menu */
@@ -1054,6 +1122,7 @@ void game_update(double dt)
     res = tools_update(&ti);
     tool_results(res, in);
     drain_events();
+    news_tick();                                     /* M7: the January paper / ceremony page / newsreel */
     autosave_tick();
     ambient(dt);
     ui_update(dt);
@@ -1184,6 +1253,7 @@ static void draw_play(int interactive)
     prof_end(PROF_SPRITES);
     prof_begin(PROF_UI);
     ui_draw();
+    uinews_draw();                                   /* M7: on top of everything while open */
     if (interactive) draw_label();
     prof_end(PROF_UI);
 }

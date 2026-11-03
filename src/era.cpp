@@ -31,8 +31,10 @@ static const LandmarkFx s_lm[] = {
 static struct {
     int  granted, eligible, petitioned;
     int  lm_count[NLM];
-    int  sauna_events;           /* politics_event_count(EV_SAUNA) seen */
-    int  statue_placed;
+    int  sauna_uses, sauna_year; /* sauna diplomacy button */
+    int  card;                   /* agreement card: 0 none, 1 waiting for the queue, 2 queued */
+    int  prev_pending;           /* politics_pending_event() at the last month end */
+    s32  last_card_m;            /* total_months when the last card (any source) left the desk */
     s16  dec_months[DEC_COUNT];
     u8   dec_active[DEC_COUNT];
     s32  decrees_signed;
@@ -85,9 +87,8 @@ int era_poll_msg(EraMsg *m)
 int era_msg_panel(const EraMsg *m)
 {
     switch (m->type) {
-    case EM_OFFER: case EM_SIGNED: case EM_AUTO_SIGNED: case EM_WASTED: case EM_DEFICIT: case EM_SHORTFALL: case EM_PRAISE:
-    case EM_OIL_SHOCK: case EM_OIL_SHOCK2: case EM_OIL_COLLAPSE: case EM_LOAN: case EM_LOAN_CALLED: case EM_LOAN_REPAID:
-    case EM_TECH: case EM_ELEC_LICENCE: case EM_WEST_SWING: case EM_LOAN_DONE: case EM_SETTLEMENT:
+    case EM_OFFER: case EM_SIGNED: case EM_AUTO_SIGNED: case EM_DEFICIT: case EM_SHORTFALL: case EM_OIL_SHOCK:
+    case EM_OIL_SHOCK2: case EM_OIL_COLLAPSE: case EM_LOAN: case EM_LOAN_REPAID: case EM_CLEARING_END:
         return 1;
     }
     return 0;
@@ -95,7 +96,7 @@ int era_msg_panel(const EraMsg *m)
 
 int era_msg_text(char *buf, int size, const EraMsg *m, int *severity)
 {
-    char a[32], b[32];
+    char a[32];
     int year = sim_date()->year, sev = SEV_INFO;
     buf[0] = 0;
     switch (m->type) {
@@ -110,10 +111,6 @@ int era_msg_text(char *buf, int size, const EraMsg *m, int *severity)
     case EM_AUTO_SIGNED:
         str_printf(buf, size, "The Ministry signed the trade agreement on the town's behalf: %s quota.", trade_level_name((int)m->a));
         break;
-    case EM_WASTED:
-        text_fmt_int(a, sizeof(a), m->a);
-        str_printf(buf, size, "Unspent clearing credit (%s) is being stored in the presidential sauna. It does not keep.", a);
-        break;
     case EM_DEFICIT:
         sev = SEV_WARN;
         text_fmt_int(a, sizeof(a), -m->a);
@@ -122,9 +119,6 @@ int era_msg_text(char *buf, int size, const EraMsg *m, int *severity)
     case EM_SHORTFALL:
         sev = SEV_WARN;
         str_printf(buf, size, "Trade review: only %d%% of the quota delivered. The Delegation is disappointed.", (int)m->a);
-        break;
-    case EM_PRAISE:
-        str_printf(buf, size, "Trade review: %d%% of the quota delivered. A telegram of thanks arrives from the East.", (int)m->a);
         break;
     case EM_OIL_SHOCK:
         sev = SEV_URGENT;
@@ -141,36 +135,15 @@ int era_msg_text(char *buf, int size, const EraMsg *m, int *severity)
         sev = SEV_POLITICAL;
         str_printf(buf, size, "The clearing trade has ended. From now on the East pays in hard currency, when it pays.");
         break;
-    case EM_NEW_MARKKA:
-        str_printf(buf, size, "New markka: all prices divided by a hundred. The coffee costs the same.");
-        break;
     case EM_DEVALUATION:
         str_printf(buf, size, "The markka is devalued. Western orders pick up; coffee gets dearer.");
         break;
     case EM_LOAN:
         text_fmt_money(a, sizeof(a), m->b, year);
-        str_printf(buf, size, "%s of %s signed.", trade_loan_name((int)m->a), a);
-        break;
-    case EM_LOAN_CALLED:
-        sev = SEV_URGENT;
-        text_fmt_money(a, sizeof(a), m->b, year);
-        str_printf(buf, size, "No sign of %s: the Eastern credit is called in (%s repaid at once).", trade_project_name((int)m->a), a);
+        str_printf(buf, size, "A municipal bond of %s is sold out by noon. The repayments start next month.", a);
         break;
     case EM_LOAN_REPAID:
-        str_printf(buf, size, "%s repaid in full.", trade_loan_name((int)m->a));
-        break;
-    case EM_LOAN_DONE:
-        str_printf(buf, size, "The Eastern credit project (%s) stands. The Ambassador cuts the ribbon.", trade_project_name((int)m->a));
-        break;
-    case EM_TECH:
-        str_printf(buf, size, "%s bought with hard currency.", trade_tech_name((int)m->a));
-        break;
-    case EM_ELEC_LICENCE:
-        sev = SEV_POLITICAL;
-        str_printf(buf, size, "Western earnings buy an electronics licence: cable and electronics works may now grow.");
-        break;
-    case EM_WEST_SWING:
-        str_printf(buf, size, m->a > 0 ? "Western orders are booming." : "Western orders are slumping.");
+        str_printf(buf, size, "The municipal bond is repaid in full.");
         break;
     case EM_RIGHTS_PETITION:
         sev = SEV_POLITICAL;
@@ -186,10 +159,6 @@ int era_msg_text(char *buf, int size, const EraMsg *m, int *severity)
         break;
     case EM_LANDMARK:
         str_printf(buf, size, "%s opens. The town has something to show its visitors.", def_building((int)m->a)->name);
-        break;
-    case EM_SETTLEMENT:
-        text_fmt_int(a, sizeof(a), m->a); text_fmt_int(b, sizeof(b), m->b);
-        str_printf(buf, size, "The clearing account is settled: %s, carried over %s.", a, b);
         break;
     default:
         return 0;
@@ -250,7 +219,7 @@ int era_event_seen(int ee) { return ee > 0 && ee < 32 && (E.seen & (1u << ee)) !
 static void fire_events(int nm)
 {
     int ee, mo, y;
-    static const u8 msg[EE_COUNT] = { 0, EM_DEVALUATION, EM_NEW_MARKKA, EM_DEVALUATION, 0 /* trade sends it */, EM_OIL_SHOCK2,
+    static const u8 msg[EE_COUNT] = { 0, EM_DEVALUATION, 0 /* text.cpp's 1963 ticker line */, EM_DEVALUATION, 0 /* trade sends it */, EM_OIL_SHOCK2,
                                       EM_OIL_COLLAPSE, 0 /* trade */, 0 };
     for (ee = EE_DEVAL_1957; ee < EE_AGREEMENT; ee++) {
         y = era_event_year(ee, &mo);
@@ -313,15 +282,44 @@ static void landmarks_month(void)
         tour += s_lm[i].tour_base + (s_lm[i].tour_div ? pop / s_lm[i].tour_div : 0);
     }
     if (tour) budget_spend(-(Money)(tour * budget_upkeep_index() / 100), BL_SPECIAL);
-    /* sauna diplomacy: the presidential sauna doubles the warmth of sauna evenings; a yearly evening of its own */
-    if (pol_on()) {
-        int sc = politics_event_count(EV_SAUNA);
-        if (sc > E.sauna_events && E.lm_count[3]) { politics_meter_add(METER_EAST, 3); era_push_msg(EM_SAUNA_NIGHT, 1, 0); }
-        E.sauna_events = sc;
-        if (E.lm_count[3] && sim_date()->month == 5) { politics_meter_add(METER_EAST, 2); era_push_msg(EM_SAUNA_NIGHT, 0, 0); }
-        /* statue: a little warmth every 6 months */
-        if (E.lm_count[4] && (tm % 6) == 0) politics_meter_add(METER_EAST, 1);
-    } else E.sauna_events = politics_event_count(EV_SAUNA);
+    /* the friendship statue: a little warmth every 6 months */
+    if (pol_on() && E.lm_count[4] && (tm % 6) == 0) politics_meter_add(METER_EAST, 1);
+}
+
+/* sauna diplomacy (one button): +8, +4, +2, +2... Eastern relations, once a year */
+int era_sauna_state(void)
+{
+    if (!E.lm_count[3]) return 1;
+    if (!pol_on()) return 2;
+    if (E.sauna_year == sim_date()->year) return 3;
+    return 0;
+}
+int era_sauna_gain(void) { return IMAX(2, 8 / (1 + E.sauna_uses)); }
+int era_sauna_invite(void)
+{
+    if (era_sauna_state() != 0) return 0;
+    politics_meter_add(METER_EAST, era_sauna_gain());
+    E.sauna_uses++;
+    E.sauna_year = sim_date()->year;
+    era_push_msg(EM_SAUNA_NIGHT, E.sauna_uses, 0);
+    return 1;
+}
+
+/* ------------------------------------------------------------------ the agreement card */
+/* one card per game year in total (docs/SCOPE_REVIEW.md): the agreement card waits until no card is up and the last
+   one left the desk POL_EVENT_MIN months ago */
+int era_card_slot_free(void)
+{
+    return politics_pending_event() < 0 && (s32)sim_date()->total_months - E.last_card_m >= POL_EVENT_MIN;
+}
+void era_queue_card(void) { E.card = era_card_slot_free() && politics_queue_event(EV_AGREEMENT) ? 2 : 1; }
+int  era_card_pending(void) { return E.card != 0 && pol_on(); }
+void era_card_answered(int ev, int choice)
+{
+    static const int lv[3] = { TL_STANDARD, TL_MODEST, TL_AMBITIOUS };
+    if (ev != EV_AGREEMENT) return;
+    E.card = 0;
+    trade_sign(lv[ICLAMP(choice, 0, 2)]);
 }
 
 /* ------------------------------------------------------------------ history */
@@ -364,9 +362,7 @@ static void take_year(EraYear *r, int year)
     for (z = 0; z < ZONE_COUNT; z++) r->lots_t3 += st->lots_tier[z][3];
     for (k = 1; k <= TIER_MAX; k++) r->apartments += st->lots_tier[ZONE_APARTMENTS][k];
     r->landmarks = era_landmark_count();
-    r->loan_total = g_budget.loan;
-    for (k = 0; k < LOAN_KINDS; k++) r->loan_total += t->loan[k].principal;
-    r->hc = t->hc;
+    r->loan_total = g_budget.loan + t->bond;
     r->status = (s16)st->town_status; r->popularity = (s16)politics_popularity();
     r->east_meter = (s16)politics_meter(METER_EAST); r->west_meter = (s16)politics_meter(METER_WEST);
     r->power_warn = (s16)E.power_warn; r->water_warn = (s16)E.water_warn;
@@ -385,6 +381,8 @@ void era_reset(void)
 {
     memset(&E, 0, sizeof(E));
     s_msg_head = s_msg_n = 0;
+    E.prev_pending = -1;
+    E.last_card_m = -POL_EVENT_MIN;
     E.last_kind = NEWS_NONE;
     trade_reset();
     push_year(sim_date()->year);
@@ -394,7 +392,6 @@ void era_month(void)
 {
     const CityStats *st = sim_stats();
     int nm = next_month_index(), d;
-    if (getenv("M7OFF")) return;
     trade_month();
     landmarks_month();
     /* decrees in force (newsreel: the decrees that defined the era) */
@@ -414,12 +411,13 @@ void era_month(void)
     if (st->water_short_lots > 0) E.water_warn++;
     E.emig_year += st->emigrated_month;
     if (st->population > E.peak_pop) { E.peak_pop = st->population; E.peak_year = sim_date()->year; }
-    {   /* Western swings worth a ticker line (1 in 12 months at most) */
-        const TradeState *t = trade_state();
-        static const int lim = 125;
-        if (sim_date()->total_months % 12 == 6 && (t->west_index >= lim || t->west_index <= 200 - lim))
-            era_push_msg(EM_WEST_SWING, t->west_index >= lim ? 1 : -1, t->west_index);
+    {   /* card bookkeeping (one card a year across all sources) */
+        int pend = politics_pending_event();
+        if (E.prev_pending >= 0 && pend != E.prev_pending) E.last_card_m = (s32)sim_date()->total_months;
+        E.prev_pending = pend;
     }
+    if (E.card == 1 && pol_on() && trade_agreement()->offer) era_queue_card();   /* retry */
+    if (!trade_agreement()->offer) E.card = 0;
     fire_events(nm);
     hist_push();
     if (nm % 12 == 0) {                       /* New Year: the yearly row and the January paper */
@@ -458,6 +456,13 @@ void era_news_seen(void)
     E.last_kind = n->kind;
     E.pending &= ~(1u << n->kind);
 }
+const NewsIssue *era_news_kind(int kind) { return (kind > NEWS_NONE && kind < NEWS_KIND_COUNT && E.news[kind].kind) ? &E.news[kind] : NULL; }
+void era_news_seen_kind(int kind)
+{
+    if (kind <= NEWS_NONE || kind >= NEWS_KIND_COUNT) return;
+    E.last_kind = kind;
+    E.pending &= ~(1u << kind);
+}
 void era_news_request_newsreel(void)
 {
     era_news_build_newsreel(&E.news[NEWS_NEWSREEL]);
@@ -478,22 +483,28 @@ static void money_str(char *buf, int size, Money v, int year) { text_fmt_money(b
 
 static void put(NewsIssue *n, int slot, int topic, const char *head, const char *deck, const char *body)
 {
+    char *p;
     n->topic[slot] = topic;
     str_copy(n->head[slot], head, sizeof(n->head[slot]));
+    for (p = n->head[slot]; *p; p++) {         /* headlines in capitals (Latin-1 lower case too) */
+        u8 c = (u8)*p;
+        if ((c >= 'a' && c <= 'z') || (c >= 0xe0 && c <= 0xfe && c != 0xf7)) *p = (char)(c - 32);
+    }
     str_copy(n->deck[slot], deck, sizeof(n->deck[slot]));
     str_copy(n->body[slot], body, sizeof(n->body[slot]));
 }
 
 static void era_story(NewsIssue *n, int slot, int ee, const EraYear *now)
 {
-    char h[64], d[96], b[240], m1[32], m2[32];
+    char h[64], d[96], b[240], m1[32];
     switch (ee) {
     case EE_NEW_MARKKA:
-        money_str(m1, sizeof(m1), now->money, 1962); money_str(m2, sizeof(m2), now->money, 1963);
+        money_str(m1, sizeof(m1), now->money, 1963);
         str_printf(h, sizeof(h), "NEW MARKKA: PRICES DIVIDED BY A HUNDRED");
         str_printf(d, sizeof(d), "One new markka buys what a hundred old ones did");
-        str_printf(b, sizeof(b), "The new notes are in the tills. The town treasury, %s on New Year's Eve, now holds %s. "
-                                 "Shopkeepers report no change in the price of coffee, only in the number of zeros.", m1, m2);
+        str_printf(b, sizeof(b), "The new notes are in the tills. The town treasurer, who kept the books in new markka all along "
+                                 "(%s), says he saw it coming. Shopkeepers report no change in the price of coffee, only in the "
+                                 "number of zeros.", m1);
         break;
     case EE_DEVAL_1957: case EE_DEVAL_1967:
         str_printf(h, sizeof(h), "MARKKA DEVALUED");
@@ -616,11 +627,11 @@ static void topic_story(NewsIssue *n, int slot, int topic, const EraYear *prev, 
                                  "More factories, or fewer imports.");
         break;
     case NT_CLEARING_SURPLUS:
-        text_fmt_int(a1, sizeof(a1), t->wasted_total);
+        text_fmt_int(a1, sizeof(a1), t->lost_total);
         str_printf(h, sizeof(h), "UNSPENT CREDIT IN THE SAUNA");
-        str_printf(d, sizeof(d), "Clearing credit wasted so far: %s", a1);
-        str_printf(b, sizeof(b), "Credit that buys only Eastern goods piles up unspent. Ladas, buses or oil, the Ministry suggests; "
-                                 "the presidential sauna is full.");
+        str_printf(d, sizeof(d), "Clearing credit lost so far: %s", a1);
+        str_printf(b, sizeof(b), "The factories ship more East than the town's oil bill needs. Credit that buys only Eastern goods "
+                                 "piles up unspent; the presidential sauna, the joke goes, is full of it.");
         break;
     case NT_WEST_UP: case NT_WEST_DOWN:
         str_printf(h, sizeof(h), topic == NT_WEST_UP ? "WESTERN ORDERS BOOM" : "WESTERN ORDERS SLUMP");
@@ -733,8 +744,8 @@ void era_news_build_year(NewsIssue *n)
     if (now->money < 0) sc[NT_MONEY_DOWN] = 400;
     else if (now->money - prev->money > 10000 && now->money > 30000) sc[NT_MONEY_UP] = 150 + (now->money - prev->money) / 1000;
     if (now->loan_total > prev->loan_total + 5000) sc[NT_LOAN] = 350;
-    if (trade_state()->deficit_months >= 3 && !trade_state()->closed) sc[NT_CLEARING_DEFICIT] = 450;
-    if (trade_state()->wasted_total > 0 && now->balance >= 0 && trade_state()->wasted_month > 0) sc[NT_CLEARING_SURPLUS] = 250;
+    if (trade_state()->deficit_months >= 3 && !trade_state()->closed) sc[NT_CLEARING_DEFICIT] = prev->balance < 0 ? 140 : 450;   /* news once, then a footnote */
+    if (trade_state()->lost_month > 0) sc[NT_CLEARING_SURPLUS] = 120;
     if (now->west - prev->west > prev->west / 4 && prev->west > 100) sc[NT_WEST_UP] = 200;
     if (trade_state()->west_index <= 80) sc[NT_WEST_DOWN] = 220;
     if (now->power_warn >= 2) sc[NT_POWER] = 300 + now->power_warn * 10;
@@ -865,8 +876,8 @@ int era_newsreel_lines(char lines[][96], int max)
     } else if (n < max) str_printf(lines[n++], 96, "Politics was left to the ministries (politics off).");
     text_fmt_int(a1, sizeof(a1), st->emigrated_total);
     if (n < max) str_printf(lines[n++], 96, "Emigration to Sweden: %s residents in all.", a1);
-    text_fmt_int(a1, sizeof(a1), t->wasted_total); text_fmt_int(a2, sizeof(a2), t->hc_earned);
-    if (n < max) str_printf(lines[n++], 96, "Clearing credit wasted: %s. Hard currency earned: %s.", a1, a2);
+    text_fmt_int(a1, sizeof(a1), t->lost_total);
+    if (n < max) str_printf(lines[n++], 96, "Clearing credit lost to surpluses: %s.", a1);
     money_str(a1, sizeof(a1), g_budget.money, y);
     if (n < max) str_printf(lines[n++], 96, "Treasury: %s.", a1);
     return n;
@@ -920,20 +931,12 @@ static void print_issue(FILE *out, const NewsIssue *n)
 int era_script_line(int n, char **t, FILE *out)
 {
     static const char *const lv[TL_COUNT] = { "modest", "standard", "ambitious" };
-    static const char *const ln[LOAN_KINDS] = { "bond", "west", "east" };
-    static const char *const pj[TPROJ_COUNT] = { "power", "heat", "elements" };
-    static const char *const te[TECH_COUNT] = { "electronics", "machinetools", "computers" };
     int k, ok = 0;
     if (n < 1) return -1;
     if (str_ieq(t[0], "trade")) {
         if (n < 2) return SCR_ERROR;
         if (str_ieq(t[1], "sign") && n >= 3 && (k = word_of(t[2], lv, TL_COUNT)) >= 0) ok = trade_sign(k);
-        else if ((str_ieq(t[1], "consumer") || str_ieq(t[1], "materials")) && n >= 3)
-            ok = trade_set_programme(str_ieq(t[1], "materials"), str_ieq(t[2], "on") || str_ieq(t[2], "1"));
-        else if (str_ieq(t[1], "loan") && n >= 3 && (k = word_of(t[2], ln, LOAN_KINDS)) >= 0)
-            ok = trade_take_loan(k, n >= 4 ? IMAX(0, word_of(t[3], pj, TPROJ_COUNT)) : 0);
-        else if (str_ieq(t[1], "repay") && n >= 3 && (k = word_of(t[2], ln, LOAN_KINDS)) >= 0) ok = trade_repay_loan(k);
-        else if (str_ieq(t[1], "buy") && n >= 3 && (k = word_of(t[2], te, TECH_COUNT)) >= 0) ok = trade_buy_tech(k);
+        else if (str_ieq(t[1], "bond")) ok = trade_issue_bond();
         else if (str_ieq(t[1], "complex") && n >= 6) { trade_set_complex(atoi(t[2]), atoi(t[3]), atoi(t[4]), atoi(t[5])); ok = 1; }
         else if (str_ieq(t[1], "dump")) { trade_dump(out); ok = 1; }
         if (out) fprintf(out, "script: trade %s -> %s\n", t[1], ok ? "ok" : "refused");
@@ -941,12 +944,15 @@ int era_script_line(int n, char **t, FILE *out)
     }
     if (str_ieq(t[0], "era")) {
         if (n >= 2 && str_ieq(t[1], "dump")) { era_dump(out); return SCR_OK; }
+        if (n >= 2 && str_ieq(t[1], "sauna")) return era_sauna_invite() ? SCR_OK : SCR_ERROR;
         return SCR_ERROR;
     }
     if (str_ieq(t[0], "news")) {
+        /* scripts (screenshots): the asked-for issue is the only one waiting */
+        if (n >= 2 && str_ieq(t[1], "seen")) { era_news_seen(); return SCR_OK; }
+        E.pending = 0;
         if (n >= 2 && str_ieq(t[1], "newsreel")) era_news_request_newsreel();
         else if (n >= 2 && str_ieq(t[1], "ceremony")) { era_news_build_ceremony(&E.news[NEWS_CEREMONY], sim_stats()->town_status); E.pending |= 1u << NEWS_CEREMONY; }
-        else if (n >= 2 && str_ieq(t[1], "seen")) { era_news_seen(); return SCR_OK; }
         else { era_news_build_year(&E.news[NEWS_YEAR]); E.pending |= 1u << NEWS_YEAR; }
         print_issue(out, era_news());
         return SCR_OK;
@@ -972,7 +978,7 @@ u32 era_hash(void)
     u32 h = trade_hash();
     s32 v[8];
     v[0] = E.granted; v[1] = E.eligible; v[2] = (s32)E.seen; v[3] = E.decrees_signed; v[4] = E.nyears;
-    v[5] = E.sauna_events; v[6] = era_landmark_count(); v[7] = E.issue_no;
+    v[5] = E.sauna_uses * 4096 + E.card; v[6] = era_landmark_count(); v[7] = E.issue_no;
     return hash_bytes(h, v, sizeof(v));
 }
 
@@ -994,11 +1000,11 @@ static void load_issue(struct SaveFile *sf, NewsIssue *n)
     load_str(sf, n->filler_head, sizeof(n->filler_head)); load_str(sf, n->filler, sizeof(n->filler));
 }
 
-#define YEAR_FIELDS 26
+#define YEAR_FIELDS 25
 static void year_fields(EraYear *r, s32 *v, int store)
 {
     s32 *p[] = { &r->pop, &r->money, &r->jobs, &r->unemployed, &r->emig_year, &r->homeless, &r->industry_jobs, &r->east,
-                 &r->west, &r->balance, &r->lots_t3, &r->apartments, &r->landmarks, &r->loan_total, &r->hc };
+                 &r->west, &r->balance, &r->lots_t3, &r->apartments, &r->landmarks, &r->loan_total };
     s16 *q[] = { &r->year, &r->status, &r->popularity, &r->east_meter, &r->west_meter, &r->power_warn, &r->water_warn,
                  &r->elections, &r->decrees_signed, &r->oil_index, &r->fulfil };
     int i, np = (int)COUNTOF(p), nq = (int)COUNTOF(q);
@@ -1013,7 +1019,7 @@ int era_save(struct SaveFile *sf)
     save_begin_chunk(sf, "ERA ", 1);
     save_s32(sf, E.granted); save_s32(sf, E.eligible); save_s32(sf, E.petitioned);
     save_s32(sf, NLM); for (i = 0; i < NLM; i++) save_s32(sf, E.lm_count[i]);
-    save_s32(sf, E.sauna_events); save_s32(sf, E.statue_placed);
+    save_s32(sf, E.sauna_uses); save_s32(sf, E.sauna_year); save_s32(sf, E.card); save_s32(sf, E.prev_pending); save_s32(sf, E.last_card_m);
     save_s32(sf, DEC_COUNT); for (i = 0; i < DEC_COUNT; i++) { save_s32(sf, E.dec_months[i]); save_u8(sf, E.dec_active[i]); }
     save_s32(sf, E.decrees_signed);
     save_s32(sf, E.power_warn); save_s32(sf, E.water_warn); save_s32(sf, E.status_year); save_s32(sf, E.landmark_year);
@@ -1039,7 +1045,7 @@ int era_load(struct SaveFile *sf)
     if (load_find_chunk(sf, "ERA ", &ver)) {
         E.granted = load_s32(sf); E.eligible = load_s32(sf); E.petitioned = load_s32(sf);
         n = load_s32(sf); for (i = 0; i < n; i++) { s32 c = load_s32(sf); if (i < NLM) E.lm_count[i] = c; }
-        E.sauna_events = load_s32(sf); E.statue_placed = load_s32(sf);
+        E.sauna_uses = load_s32(sf); E.sauna_year = load_s32(sf); E.card = load_s32(sf); E.prev_pending = load_s32(sf); E.last_card_m = load_s32(sf);
         n = load_s32(sf);
         for (i = 0; i < n; i++) { s32 a = load_s32(sf); u32 b = load_u8(sf); if (i < DEC_COUNT) { E.dec_months[i] = (s16)a; E.dec_active[i] = (u8)b; } }
         E.decrees_signed = load_s32(sf);

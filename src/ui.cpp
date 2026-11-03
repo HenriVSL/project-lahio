@@ -36,7 +36,9 @@
 #include "config.h"
 #include "ui_layout.h"
 #include "politics.h"     /* M1 */
-#include "ui_pol.h"       /* M1: politics panels */
+#include "ui_pol.h"         /* M1: politics panels */
+#include "ui_m7.h"          /* M7: graphs, trade panel, newspaper */
+#include "trade.h"
 #include "industry.h"     /* M3 */
 #include "civic.h"        /* M5 */
 #include "traffic.h"      /* M2 */
@@ -68,13 +70,14 @@ static const char *const s_cache_name[C_COUNT] = { "top", "side", "ticker", "win
 enum { H_NONE = 0, H_TOP = 1, H_DATE, H_FUNDS, H_POP, H_DEMAND, H_APPROVAL, H_WATER /* F1 */,
        H_SPEED0 = 10, H_MENU = 14, H_ZOOM0 = 15 /* F3: zoom out, zoom in */,
        H_SIDE = 20, H_PLATE, H_PLAQUE, H_MMAP, H_TOOLLABEL, H_ZONEV /* F3: zone-view key */,
+       H_M7K0 = 26 /* M7: graphs, trade, newspaper keys (26..28) right of the zone-view key */,
        H_KEY0 = 30, H_MINI0 = 40,
        H_TICKER = 50, H_TICK0 = 51,
        H_FLY = 60, H_FLYROW0 = 61,
        H_WIN = 100, H_CTL0 = 101 };
 #define NKEYS 10
 #define NMINI 5
-#define FLY_MAX 10
+#define FLY_MAX 12               /* M7: 10 -> 12 (landmarks in the Parks fly-out) */
 
 enum { BS_NORMAL, BS_HOVER, BS_PRESSED, BS_DISABLED, BS_SELECTED, BS_COUNT };
 static const char *const s_bs_name[BS_COUNT] = { "normal", "hover", "pressed", "disabled", "selected" };
@@ -95,6 +98,7 @@ static struct {
     int seal;
     int zoom[2][4];                  /* F3: btn_zoom_out/in x normal hover pressed disabled */
     int zonev[2];                    /* F3: icon_zoneview, _off */
+    int m7k[3][2];                   /* M7: icon_graphs, icon_trade, icon_newspaper (+ _off) */
 } S;
 static Slice9 s9_btn[BS_COUNT], s9_fly, s9_inset, s9_mmap, s9_plaque, s9_tip, s9_win;
 static Slice3 s3_well, s3_cal, s3_flyhover, s3_flysel, s3_grille, s3_plate, s3_track, s3_fill, s3_tab[3];
@@ -130,10 +134,13 @@ static const KeyDef s_keys[NKEYS] = {
         { TOOL_BUILD, B_SCHOOL, 0, "b_school" }, { TOOL_BUILD, B_CLINIC, 0, "b_clinic" }, { TOOL_BUILD, B_SAUNA, 0, "b_sauna" },
         { TOOL_BUILD, B_POLICE, 1, "b_police" }, { TOOL_BUILD, B_LIBRARY, 0, "b_library" }, { TOOL_BUILD, B_POST, 0, "b_post" },
         { TOOL_BUILD, B_HEALTH_CENTRE, 0, "b_health_centre" } } },
-    { "key_parks", "Parks", "Parks and landmarks", 6, { { TOOL_BUILD, B_PARK, 0, "b_park" },
+    { "key_parks", "Parks", "Parks and landmarks", 11, { { TOOL_BUILD, B_PARK, 0, "b_park" },
         { TOOL_BUILD, B_SPORTS_FIELD, 0, "b_sports_field" }, { TOOL_BUILD, B_ICE_RINK, 0, "b_ice_rink" },
         { TOOL_BUILD, B_CHURCH, 0, "b_church" }, { TOOL_BUILD, B_TOWN_HALL, 1, "b_town_hall" },
-        { TOOL_BUILD, B_STATION, 0, "b_station" } } },
+        { TOOL_BUILD, B_STATION, 0, "b_station" },
+        { TOOL_BUILD, B_CONCERT_HALL, 1, "b_concert_hall" }, { TOOL_BUILD, B_TV_TOWER, 0, "b_tv_tower" },   /* M7 landmarks */
+        { TOOL_BUILD, B_SKI_JUMP, 0, "b_ski_jump" }, { TOOL_BUILD, B_PRES_SAUNA, 0, "b_pres_sauna" },
+        { TOOL_BUILD, B_FRIENDSHIP_STATUE, 0, "b_friendship_statue" } } },
     { "key_bulldoze", "Bulldoze", "Bulldoze (B)", 1, { { TOOL_BULLDOZE, 0, 0, "key_bulldoze" } } },
     { "key_query", "Query", "Query: what is here, and why isn't it growing? (Q)", 1, { { TOOL_QUERY, 0, 0, "key_query" } } },
 };
@@ -813,6 +820,23 @@ static int key_state(int k)
     return BS_NORMAL;
 }
 
+/* M7: graphs / trade / newspaper keys in the zone-view row (mini positions 1..3) */
+static void m7k_rect(int k, int *x, int *y, int *w, int *h)
+{
+    *w = L->mini.w; *h = L->mini.h;
+    *x = L->mini.x + (k + 1) * (L->mini.w + L->mini_gap); *y = L->grille.y + 1;
+}
+static int m7k_state(int k)
+{
+    static const int pn[2] = { PANEL_GRAPHS, PANEL_TRADE };
+    if (s_down && s_press_hot == H_M7K0 + k && s_hot == s_press_hot) return BS_PRESSED;
+    if (k < 2 && s_panel == pn[k]) return BS_SELECTED;
+    if (k == 2 && uinews_active()) return BS_SELECTED;
+    if (s_hot == H_M7K0 + k) return BS_HOVER;
+    return BS_NORMAL;
+}
+static int s_m7k_drawn[3] = { -1, -1, -1 };
+
 static int zonev_state(void)             /* F3 */
 {
     if (s_down && s_press_hot == H_ZONEV && s_hot == s_press_hot) return BS_PRESSED;
@@ -919,6 +943,11 @@ static void compose_side(const s16 *clip)
     zonev_rect(&x, &y, &w, &h);
     s_zonev_drawn = zonev_state();
     draw_key(x, y, w, h, S.zonev, NULL, s_zonev_drawn);
+    for (i = 0; i < 3 && L->mini_count > 3; i++) {       /* M7 */
+        m7k_rect(i, &x, &y, &w, &h);
+        s_m7k_drawn[i] = m7k_state(i);
+        draw_key(x, y, w, h, S.m7k[i], NULL, s_m7k_drawn[i]);
+    }
     /* grille (radio speaker slots) + badge */
     ns = (L->grille.y + L->grille.h - grille_top() - 4 + 3) / 8;
     bs = ns / 2;
@@ -957,6 +986,8 @@ static void side_check(void)
     for (i = 0; i < NMINI && i < L->mini_count; i++)
         if (mini_state(i) != s_mini_drawn[i]) { mini_rect(i, &x, &y, &w, &h); side_dirty(x, y, w, h); }
     if (zonev_state() != s_zonev_drawn) { zonev_rect(&x, &y, &w, &h); side_dirty(x, y, w, h); }   /* F3 */
+    for (i = 0; i < 3 && L->mini_count > 3; i++)                                                  /* M7 */
+        if (m7k_state(i) != s_m7k_drawn[i]) { m7k_rect(i, &x, &y, &w, &h); side_dirty(x, y, w, h); }
     sig = hash_bytes(HASH_INIT, ss->town, NAME_LEN);
     if (sig != s_plate_sig) { s_plate_sig = sig; side_dirty(L->plate.x, L->plate.y, L->plate.w, L->plate.h); }
     tool_label_text(buf, sizeof(buf));
@@ -1136,6 +1167,15 @@ static void tip_amount(const char *label, s32 v, int money, int invert_colour)
     tip_add(l, FONT_BODY_DARK, r, v == 0 ? FONT_BODY_DARK : good ? FONT_BODY_GREEN : FONT_BODY_RED);
 }
 
+/* M5: "  Precast elements left (of 300 a month)" + the number in r */
+static void n_elem_line(char *l, int size, char *r)
+{
+    char o[24];
+    text_fmt_int(o, sizeof(o), civic_elements_output());
+    str_printf(l, size, "  Precast elements left (of %s a month)", o);
+    UNUSED(r);
+}
+
 static void tip_demand_block(int dem)
 {
     const Demand *d = sim_demand(dem);
@@ -1148,6 +1188,11 @@ static void tip_demand_block(int dem)
         if (!d->terms[k].amount) continue;
         str_printf(l, sizeof(l), "  %s", text_term_label(TERMK_DEMAND, d->terms[k].id));
         tip_amount(l + 2, d->terms[k].amount, 0, 0);
+    }
+    if (dem == DEM_R && civic_elements_output() > 0) {   /* M5: the element cap, never a mystery (scope review) */
+        text_fmt_int(r, sizeof(r), civic_elements_left());
+        n_elem_line(l, sizeof(l), r);
+        tip_add(l, FONT_BODY_DARK, r, civic_elements_left() > 0 ? FONT_BODY_GREEN : FONT_BODY_RED);
     }
     if (dem == DEM_I) {      /* M3: the same total by industry kind, one line (the tooltip has 18 rows) */
         static const char *const ab[IK_COUNT] = { "", "saw", "eng", "tex", "dairy", "elec" };
@@ -1182,7 +1227,6 @@ static int tip_build(int h)
             str_printf(a, sizeof(a), GLYPH_BULLET " Next: %s at %s residents", text_status_name(cs->town_status + 1), b);
             tip_add(a, FONT_BODY_GREY, NULL, 0);
         }
-        if (d->year < NEW_MARKKA_YEAR) tip_add("Prices in old markka until 1963", FONT_BODY_GREY, NULL, 0);
         return 1;
     }
     if (h == H_FUNDS) {
@@ -1225,6 +1269,14 @@ static int tip_build(int h)
     }
     if (h == H_DEMAND) {
         tip_demand_block(DEM_R); tip_demand_block(DEM_C); tip_demand_block(DEM_I);
+        {   /* M7: what scales the clearing and Western terms */
+            char c3[96], c4[80];
+            trade_clearing_reason(c4, sizeof(c4));
+            str_printf(c3, sizeof(c3), GLYPH_BULLET " Clearing x%d%%: %s", trade_clearing_pct(), c4);
+            tip_add(c3, FONT_BODY_GREY, NULL, 0);
+            str_printf(c3, sizeof(c3), GLYPH_BULLET " Western orders x%d%% (price index)", trade_western_pct());
+            tip_add(c3, FONT_BODY_GREY, NULL, 0);
+        }
         return 1;
     }
     if (h == H_WATER) {     /* F1 (WATER.md 3.6 D) */
@@ -1293,6 +1345,14 @@ static int tip_build(int h)
     if (h == H_ZONEV) {
         tip_add(s_zone_view ? "Zone view: on (V)" : "Zone view: off (V)", FONT_BODY_DARK, NULL, 0);
         tip_add("Shows zone borders whatever tool you hold", FONT_BODY_GREY, NULL, 0);
+        return 1;
+    }
+    if (h >= H_M7K0 && h < H_M7K0 + 3) {              /* M7 */
+        static const char *const t1[3] = { "Graphs (G)", "Trade and the treasury (T)", "The newspaper (N)" };
+        static const char *const t2[3] = { "Population, money, demand, work, approval, clearing",
+                                           "The clearing agreement, the balance, oil, the bond", "Maakunnan Sanomat: the latest issue" };
+        tip_add(t1[h - H_M7K0], FONT_BODY_DARK, NULL, 0);
+        tip_add(t2[h - H_M7K0], FONT_BODY_GREY, NULL, 0);
         return 1;
     }
     return 0;
@@ -1545,6 +1605,13 @@ static void panel_population(int x, int y, int w, int h)
                 row_lr(x + 10, yy, w - 16, b, FONT_BODY_DARK, a, v > 0 ? FONT_BODY_GREEN : FONT_BODY_RED);
                 yy += 11;
             }
+            if (d == DEM_R && civic_elements_output() > 0) {     /* M5: apartments T2+ wait for precast elements */
+                char o[24];
+                text_fmt_int(a, sizeof(a), civic_elements_left()); text_fmt_int(o, sizeof(o), civic_elements_output());
+                str_printf(b, sizeof(b), "Precast elements (apartments T2+): %s / %s left", a, o);
+                txt_fit(x + 10, yy, b, civic_elements_left() > 0 ? FONT_BODY_GREY : FONT_BODY_RED, w - 16);
+                yy += 11;
+            }
             yy += 5;
         }
     } else {
@@ -1594,13 +1661,33 @@ static void panel_population(int x, int y, int w, int h)
     }
 }
 
+/* M5 (scope review: at most 5 lines per tier): up to 5 items as they are; a longer list shows the unmet items first
+   (the first failing one at the top, red), then met ones, and sums up the rest in a fifth line */
+#define CHECKLIST_LINES 5
 static void checklist(int x, int *yy, int w, const Checklist *cl, int ymax)
 {
     char b[96];
-    int k;
-    for (k = 0; k < cl->n && *yy < ymax; k++) {
-        text_req_line(b, sizeof(b), &cl->item[k]);
-        txt_fit(x, *yy, b, cl->item[k].met ? FONT_BODY_GREEN : FONT_BODY_RED, w);
+    int k, order[REQ_COUNT], n = 0, shown, rest_met = 0, rest_unmet = 0;
+    if (cl->n <= CHECKLIST_LINES) for (k = 0; k < cl->n; k++) order[n++] = k;
+    else {
+        for (k = 0; k < cl->n; k++) if (!cl->item[k].met) order[n++] = k;
+        for (k = 0; k < cl->n; k++) if (cl->item[k].met) order[n++] = k;
+    }
+    shown = cl->n <= CHECKLIST_LINES ? cl->n : CHECKLIST_LINES - 1;
+    for (k = shown; k < n; k++) { if (cl->item[order[k]].met) rest_met++; else rest_unmet++; }
+    for (k = 0; k < shown && *yy < ymax; k++) {
+        text_req_line(b, sizeof(b), &cl->item[order[k]]);
+        txt_fit(x, *yy, b, cl->item[order[k]].met ? FONT_BODY_GREEN : FONT_BODY_RED, w);
+        *yy += 12;
+    }
+    if ((rest_met || rest_unmet) && *yy < ymax) {
+        if (rest_unmet) str_printf(b, sizeof(b), "%s %d more missing, %d met", GLYPH_CROSS, rest_unmet, rest_met);
+        else {
+            int len = str_printf(b, sizeof(b), "%s", GLYPH_CHECK);
+            for (k = shown; k < n && len < (int)sizeof(b) - 24; k++)
+                len += str_printf(b + len, (int)sizeof(b) - len, "%s %s", k == shown ? "" : ",", text_req_label(cl->item[order[k]].req));
+        }
+        txt_fit(x, *yy, b, rest_unmet ? FONT_BODY_RED : FONT_BODY_GREEN, w);
         *yy += 12;
     }
 }
@@ -1901,17 +1988,9 @@ static void legend(int x, int y, int w, int ovl)
     case OVL_LAND_VALUE: ramp = OVR_GOOD; lo = "low"; hi = "high"; break;
     case OVL_GROWTH: ramp = OVR_PROBLEM; cats = growc; ncat = GROWC_COUNT; break;
     case OVL_ZONES: ramp = OVR_ZONE; break;
-    case OVL_CRIME: ramp = OVR_BAD; lo = "safe"; hi = "rough"; break;                  /* M5 */
-    case OVL_HEAT: {
+    case OVL_HEAT: {                                  /* M5 */
         static const char *const heatc[4] = { "Heated", "Not connected", "Short of heat", "Heated pipe / land" };
         ramp = OVR_NET; cats = heatc; ncat = 4; break; }
-    case OVL_SEWAGE:                                  /* M5: homes treated / untreated, then the lake ramp */
-        swatch(OVR_NET, NETC_OK, x, y); txt(x + 36, y + 3, "Treated", FONT_BODY_DARK);
-        swatch(OVR_NET, NETC_SHORTAGE, x + w / 2, y); txt(x + w / 2 + 36, y + 3, "Untreated: to the lake", FONT_BODY_DARK);
-        for (k = 0; k < 8; k++) swatch(OVR_BAD, k, x + k * 34, y + 20);
-        txt(x, y + 38, "clean lake", FONT_BODY_GREY);
-        txt_r(x + 7 * 34 + 32, y + 38, "foul", FONT_BODY_GREY);
-        return;
     case OVL_NONE: break;
     default: ramp = OVR_COVER; lo = "none"; hi = "full"; break;
     }
@@ -1929,6 +2008,10 @@ static void legend(int x, int y, int w, int ovl)
             int cx = x + (k % 2) * (w / 2), cy = y + (k / 2) * 18;
             swatch(ramp, k, cx, cy);
             txt(cx + 36, cy + 3, cats[k], FONT_BODY_DARK);
+        }
+        if (ovl == OVL_WATER) {                       /* M5: the lake tint in the free sixth slot */
+            swatch(OVR_BAD, 5, x + w / 2, y + 2 * 18);
+            txt(x + w / 2 + 36, y + 2 * 18 + 3, "Lake: untreated sewage", FONT_BODY_DARK);
         }
         return;
     }
@@ -1951,10 +2034,8 @@ static void panel_overlays(int x, int y, int w, int h)
         spr(S.radio[s_ovl_local == k ? 1 : 0][ctl_hot(idx) ? 1 : 0], cx, cy + 1);
         str_printf(ic, sizeof(ic), "o_%s", k == OVL_NONE ? "none" : k == OVL_POWER ? "power" : k == OVL_WATER ? "water" :
                    k == OVL_POLLUTION ? "pollution" : k == OVL_LAND_VALUE ? "land_value" : k == OVL_TRAFFIC ? "traffic" :
-                   k == OVL_FIRE_RISK ? "fire_risk" : k == OVL_GROWTH ? "growth" : k == OVL_ZONES ? "zones" :
-                   k == OVL_CRIME ? "svc_police" : "none");      /* M5: crime reuses the police icon */
-        if (k == OVL_HEAT) str_copy(ic, "b_heat_plant", sizeof(ic));          /* M5: building icons (13x13 too) */
-        if (k == OVL_SEWAGE) str_copy(ic, "b_sewage_works", sizeof(ic));
+                   k == OVL_FIRE_RISK ? "fire_risk" : k == OVL_GROWTH ? "growth" : k == OVL_ZONES ? "zones" : "none");
+        if (k == OVL_HEAT) str_copy(ic, "b_heat_plant", sizeof(ic));          /* M5: the building icon (13x13 too) */
         if (k >= OVL_SVC_FIRE && k <= OVL_SVC_POST) str_printf(ic, sizeof(ic), "o_svc_%s", g_services[k - OVL_SVC_FIRE].key);
         spr(icon_id(ic, 0), cx + 15, cy);
         txt_fit(cx + 32, cy + 1, text_overlay_name(k), FONT_BODY_DARK, cw - 36);
@@ -2020,6 +2101,7 @@ static void panel_size(int p, int *w, int *h)
     case PANEL_SERVICES:   *w = 320; *h = 262; break;
     case PANEL_SETTINGS:   *w = 200; *h = 210; break;
     case PANEL_POLITICS:   *w = 340; *h = 320; break;     /* M1 */
+    case PANEL_GRAPHS: case PANEL_TRADE: *w = 340; *h = 320; break;   /* M7 */
     default:               *w = 260; *h = 100; break;
     }
     *w = IMIN(*w, WIN_MAX_W); *h = IMIN(*h, WIN_MAX_H);
@@ -2033,7 +2115,7 @@ static void panel_title(char *buf, int size)
     case PANEL_QUERY:      query_title(buf, size); break;
     case PANEL_OVERLAYS:   str_copy(buf, "Overlays", size); break;
     case PANEL_SERVICES:   str_copy(buf, "Services", size); break;
-    case PANEL_GRAPHS:     str_copy(buf, "Graphs", size); break;
+    case PANEL_GRAPHS: case PANEL_TRADE: uim7_title(s_panel, buf, size); break;   /* M7 */
     case PANEL_POLITICS:   uipol_title(buf, size); break;      /* M1 */
     case PANEL_SETTINGS:   str_copy(buf, "Game", size); break;
     default:               str_copy(buf, "", size); break;
@@ -2065,6 +2147,7 @@ static void compose_win(void)
     case PANEL_SERVICES:   panel_services(ix, iy, iw, ih); break;
     case PANEL_SETTINGS:   panel_settings(ix, iy, iw, ih); break;
     case PANEL_POLITICS:   uipol_panel(ix, iy, iw, ih); break;  /* M1 */
+    case PANEL_GRAPHS: case PANEL_TRADE: uim7_panel(s_panel, ix, iy, iw, ih); break;   /* M7 */
     default:               txt(ix + 6, iy + 8, "Graphs arrive in a later version.", FONT_BODY_GREY); break;
     }
     end_compose(C_WIN);
@@ -2095,6 +2178,9 @@ static u32 panel_data_sig(void)
         break;
     case PANEL_POLITICS:
         h = uipol_data_sig(h);      /* M1 */
+        break;
+    case PANEL_GRAPHS: case PANEL_TRADE:
+        h = uim7_data_sig(s_panel, h);   /* M7 */
         break;
     }
     return h;
@@ -2167,6 +2253,7 @@ static int hit_test(int mx, int my)
         for (i = 0; i < NMINI && i < L->mini_count; i++) { mini_rect(i, &x, &y, &w, &h); if (in_rect(mx, my, x, y, w - 1, h - 1)) return H_MINI0 + i; }
         zonev_rect(&x, &y, &w, &h);
         if (in_rect(mx, my, x, y, w - 1, h - 1)) return H_ZONEV;                     /* F3 */
+        for (i = 0; i < 3 && L->mini_count > 3; i++) { m7k_rect(i, &x, &y, &w, &h); if (in_rect(mx, my, x, y, w - 1, h - 1)) return H_M7K0 + i; }   /* M7 */
         if (in_rect(mx, my, L->mmap.x, L->mmap.y, L->mmap.w, L->mmap.h)) return H_MMAP;
         if (in_rect(mx, my, L->plaque.x, L->plaque.y, L->plaque.w, L->plaque.h)) return H_PLAQUE;
         return H_SIDE;
@@ -2215,7 +2302,9 @@ static void ctl_click(int i)
         s_ovl_local = c->a;
         cmd(UC_OVERLAY, c->a, 0);
         break;
-    case CK_POL: uipol_click(c->a, c->b); break;      /* M1 */
+    case CK_POL:                                      /* M1; M7 panels reuse the uix_* controls */
+        if (s_panel == PANEL_GRAPHS || s_panel == PANEL_TRADE) uim7_click(s_panel, c->a, c->b); else uipol_click(c->a, c->b);
+        break;
     case CK_BUTTON:
         switch (c->a) {
         case BT_RESUME: case BT_CLOSE: ui_close_panel(); break;
@@ -2237,6 +2326,12 @@ static void click(int h)
         return;
     }
     if (h == H_ZONEV) { s_zone_view = !s_zone_view; cmd(UC_ZONE_VIEW, s_zone_view, 0); return; }   /* F3 */
+    if (h >= H_M7K0 && h < H_M7K0 + 3) {                                                          /* M7 */
+        int pn = h == H_M7K0 ? PANEL_GRAPHS : PANEL_TRADE;
+        if (h == H_M7K0 + 2) { cmd(UC_M7, M7A_NEWS_LAST, 0); return; }
+        if (s_panel == pn) ui_close_panel(); else ui_open_panel(pn);
+        return;
+    }
     if (h == H_MENU) { if (s_panel == PANEL_SETTINGS) ui_close_panel(); else ui_open_panel(PANEL_SETTINGS); return; }
     if (h == H_FUNDS) { ui_open_panel(PANEL_BUDGET); return; }
     if (h == H_WATER) { cmd(UC_OVERLAY, render_overlay() == OVL_WATER ? OVL_NONE : OVL_WATER, 0); return; }   /* F1 */
@@ -2420,6 +2515,9 @@ static void art_resolve(void)
         static const char *const zs[4] = { "normal", "hover", "pressed", "disabled" };
         for (j = 0; j < 4; j++) { S.zoom[0][j] = art_findf("btn_zoom_out_%s", zs[j]); S.zoom[1][j] = art_findf("btn_zoom_in_%s", zs[j]); }
         S.zonev[0] = icon_id("zoneview", 0); S.zonev[1] = icon_id("zoneview", 1);
+        S.m7k[0][0] = icon_id("graphs", 0); S.m7k[0][1] = icon_id("graphs", 1);         /* M7 */
+        S.m7k[1][0] = icon_id("trade", 0); S.m7k[1][1] = icon_id("trade", 1);
+        S.m7k[2][0] = icon_id("newspaper", 0); S.m7k[2][1] = icon_id("newspaper", 1);
     }
     for (i = 0; i < FONT_COUNT; i++) font_build(i);
 }
@@ -2988,6 +3086,8 @@ void uix_button(int x, int y, int w, int h, const char *label, int a, int b, int
 }
 void uix_tabs(int x, int y, int right, const char *const *names, int n, int sel) { tabs(x, y, right, names, n, sel); }
 int  uix_tab(void) { return s_tab[PANEL_POLITICS]; }
+int  uix_tab_of(int panel) { return (panel > PANEL_NONE && panel < PANEL_COUNT) ? s_tab[panel] : 0; }   /* M7 */
+void ui_set_panel_tab(int tab) { if (s_panel > PANEL_NONE) { s_tab[s_panel] = tab; s_c[C_WIN].dirty = 1; } }   /* M7 */
 void uix_set_tab(int t) { s_tab[PANEL_POLITICS] = t; }
 void uix_sprite(int id, int x, int y) { if (id > 0) spr(id, x, y); }
 void uix_portrait(int mood, int x, int y)

@@ -373,3 +373,8 @@ learned while building. Append your own section when you finish a task.
 - Public repo **https://github.com/HenriVSL/project-lahio** (branch main). Commit identity in this repo: "Henri Lavikainen"
   <4943859+HenriVSL@users.noreply.github.com> (no-reply, the profile email is private). Commit messages end with the
   Co-Authored-By line. Agents: commit only when the orchestrator says so; `.gitignore` keeps build/test outputs out.
+
+## Recurring bug class: side effects in IMIN/IMAX/ICLAMP (3rd occurrence, 2026-11-03)
+- `ICLAMP(load_s32(sf), ...)` read the save up to 3 times (civic.cpp, fire.cpp, complex.cpp, trade.cpp) → every save
+  failed to load; earlier T01 hit `ICLAMP(atoi(argv[++i]))`. **M10: replace the macros in common.h with inline functions**
+  (int versions; check for non-int uses first) so the class of bug disappears. Until then: never pass calls or ++ to them.

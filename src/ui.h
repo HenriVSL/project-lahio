@@ -52,6 +52,7 @@ enum { UC_NONE,
        UC_POLITICS,        /* M1: a = POLA_* (ui_pol.h), b = decree / letter / choice */
        UC_ZONE_VIEW,       /* F3: a = 1 on / 0 off (zone-view key) */
        UC_HINTS,           /* F3: a = 0: the player clicked a hint (no more hints this game) */
+       UC_M7,              /* M7: a = M7A_* (ui_m7.h), b = argument (game.cpp executes with trade/era) */
        UC_COUNT };
 typedef struct { int type, a, b; } UiCmd;
 int  ui_poll_cmd(UiCmd *c);              /* 1 = got one (queue of 16) */
@@ -62,6 +63,7 @@ void ui_draw(void);                      /* blit caches + floating numbers onto 
 enum { PANEL_NONE, PANEL_QUERY, PANEL_BUDGET, PANEL_POPULATION, PANEL_OVERLAYS, PANEL_SERVICES,
        PANEL_GRAPHS, PANEL_POLITICS,
        PANEL_SETTINGS,     /* T09: game menu stub (resume, save, quicksave, load, main menu, quit) */
+       PANEL_TRADE,        /* M7: clearing agreement, balance meter, oil, the bond, sauna diplomacy (ui_graph.cpp) */
        PANEL_COUNT };
 void ui_open_panel(int panel);
 void ui_open_query(int lot, int x, int y); /* lot 0 = tile query at (x, y) */
@@ -105,5 +107,7 @@ int  ui_selftest(void);                  /* -test ui: fake town, frame at the cu
 void ui_set_zone_view(int on);           /* zone-view key lit (game.cpp owns the toggle; V or the key) */
 void ui_ticker_hint(const char *text);   /* opening hint (info lamp); a click on it emits UC_HINTS 0 */
 int  ui_lot_hover_ok(void);              /* 1 = no panel/fly-out/tooltip is in the way of a hover label */
+/* ---- M7 addition */
+void ui_set_panel_tab(int tab);          /* tab of the open panel (scripts: screenshots) */
 
 #endif

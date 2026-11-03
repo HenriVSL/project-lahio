@@ -1217,6 +1217,7 @@ int tools_script_line(const char *line, int *wait_months, FILE *out)
             if (n >= 2 && str_ieq(t[1], "map")) world_dump(f, 0, 0, g_world.w - 1, g_world.h - 1);
             else if (n >= 2 && str_ieq(t[1], "tools")) dump_tools(f);
             else if (n >= 2 && str_ieq(t[1], "industry")) industry_dump(f);    /* M3 */
+            else if (n >= 2 && str_ieq(t[1], "complex")) complex_dump(f);      /* M6 */
             else if (n >= 2 && str_ieq(t[1], "civic")) civic_dump(f);          /* M5 */
             else sim_dump_report(f);
             fflush(f);

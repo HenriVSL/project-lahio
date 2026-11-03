@@ -31,7 +31,6 @@ static int s_dirty_terrain, s_dirty_lots;  /* terrain: 1 = whole map, 2 = only c
 static u8  s_tcell[NCELLS];                 /* T13: terrain cells to recompute */
 static int s_tcx0, s_tcy0, s_tcx1, s_tcy1;  /* bounding box of the s_tcell marks */
 static int s_pol_runs;
-static u16 s_rescell[NCELLS];               /* M5: residents per cell (crime), rebuilt at each social step */
 
 static int cells_w(void) { return (g_world.w + 1) >> FIELD_SHIFT; }
 static int cells_h(void) { return (g_world.h + 1) >> FIELD_SHIFT; }
@@ -261,6 +260,12 @@ static int lv_terms(int cx, int cy, Term *terms, int max)
     if (access && n < max) { terms[n].id = LVT_ACCESS; terms[n].amount = access; n++; }
     if (s_f[FLD_POLLUTION][c] >= 4 && n < max) { terms[n].id = LVT_POLLUTION; terms[n].amount = -(s_f[FLD_POLLUTION][c] / 4); n++; }
     if (s_f[FLD_CRIME][c] >= 4 && n < max) { terms[n].id = LVT_CRIME; terms[n].amount = -(s_f[FLD_CRIME][c] / 4); n++; }
+    k = politics_mod(PM_CRIME_PCT);   /* M5 (scope review: no crime field): decrees that raise "crime" (medium beer) cost land
+                                         value where the police don't cover, as the named term "Crime" */
+    if (k > 100 && n < max) {
+        int cr = -((k - 100) * (100 - net_cov_quality(SVC_POLICE, tx, ty)) / 100 + 1) / 2;
+        if (cr) { terms[n].id = LVT_CRIME; terms[n].amount = cr; n++; }
+    }
     if (s_f[FLD_NOISE][c] >= 4 && n < max) { terms[n].id = LVT_NOISE; terms[n].amount = -(s_f[FLD_NOISE][c] / 4); n++; }
     for (j = cy - 1; j <= cy + 1; j++)
         for (i = cx - 1; i <= cx + 1; i++)
@@ -309,76 +314,25 @@ int fields_explain_land_value(int x, int y, Term *terms, int max)
     return lv_terms(x >> FIELD_SHIFT, y >> FIELD_SHIFT, terms, max);
 }
 
-/* ------------------------------------------------------------------ fire risk, crime, happiness (phase 12) */
-/* M5: residents per cell, each lot's occupants spread over its footprint tiles */
-static void residents_per_cell(void)
-{
-    int i;
-    memset(s_rescell, 0, sizeof(s_rescell));
-    for (i = 1; i < g_world.lot_hi; i++) {
-        const Lot *l = &g_world.lots[i];
-        const BuildingDef *d;
-        int x0, y0, x1, y1, x, y, per;
-        if (l->def == B_NONE || l->status != LOT_ACTIVE || !l->occupants) continue;
-        d = def_building(l->def);
-        if (d->cat != BCAT_ZONE || (d->zone != ZONE_HOUSES && d->zone != ZONE_APARTMENTS)) continue;
-        world_lot_rect(i, &x0, &y0, &x1, &y1);
-        per = l->occupants / ((x1 - x0 + 1) * (y1 - y0 + 1));
-        for (y = y0; y <= y1; y++)
-            for (x = x0; x <= x1; x++) {
-                int c = CELL_IDX(x >> FIELD_SHIFT, y >> FIELD_SHIFT);
-                s_rescell[c] = (u16)IMIN(60000, s_rescell[c] + per);
-            }
-    }
-}
-
-/* M5 crime target of a cell (DESIGN 5.7): density (3x3 mean of residents per cell) / 4, raised by unemployment and
-   low land value, scaled up with the town's size (a village has its constable), cut by police cover (up to 75%),
-   x politics PM_CRIME_PCT. ~5-10 in house streets, 15-25 in lamellitalo blocks, 60-80 in unpoliced point blocks. */
-static int crime_target(int cx, int cy, int unemp_pct, int scale)
-{
-    int i, j, sum = 0, base, lv = s_f[FLD_LAND_VALUE][CELL_IDX(cx, cy)], q;
-    for (j = cy - 1; j <= cy + 1; j++)
-        for (i = cx - 1; i <= cx + 1; i++)
-            if (i >= 0 && j >= 0 && i < FIELD_MAX_W && j < FIELD_MAX_H) sum += s_rescell[CELL_IDX(i, j)];
-    if (!sum) return 0;
-    base = sum / 9 / 4;
-    base += base * unemp_pct / 50;
-    if (lv < 30) base += (30 - lv) / 3;
-    base = base * scale / 100;
-    q = net_cov_quality(SVC_POLICE, cx << FIELD_SHIFT, cy << FIELD_SHIFT);
-    base = base * (100 - q * 3 / 4) / 100;
-    base = POL_PCT(base, politics_mod(PM_CRIME_PCT));
-    return ICLAMP(base, 0, 255);
-}
-
+/* ------------------------------------------------------------------ fire risk, happiness (phase 12) */
 void fields_step_social(int quarter)
 {
     int cx, cy, cw = cells_w(), ch = cells_h(), y0, y1, changed = 0, month = sim_date()->month;
     int dry = (month >= 5 && month <= 7) ? 3 : 2;           /* June-August: x1.5 */
     int taxpen = IMAX(0, g_budget.tax_res - 9) * 2;
-    const CityStats *cs = sim_stats();
-    int unemp_pct = cs->workers > 0 ? (int)((s64)cs->unemployed * 100 / cs->workers) : 0;
-    int cscale = IMIN(100, 30 + cs->population / 60);       /* M5: crime grows with the town */
     if (s_dirty_terrain) recalc_terrain();
     if (s_dirty_lots) recalc_lots();
-    residents_per_cell();
     quarter &= 3;
     y0 = quarter * ch / 4; y1 = (quarter + 1) * ch / 4;
     for (cy = y0; cy < y1; cy++)
         for (cx = 0; cx < cw; cx++) {
             int c = CELL_IDX(cx, cy), tx = cx << FIELD_SHIFT, ty = cy << FIELD_SHIFT;
-            int risk, fq, h, svc, jd, cr, oc;
+            int risk, fq, h, svc, jd;
             /* fire risk: wooden density x (1 - fire coverage) x dry summer */
             risk = s_wood[c] * 40 + s_forest[c] * 12;
             fq = net_cov_quality(SVC_FIRE, tx, ty);
             risk = risk * (100 - fq) / 100 * dry / 2;
             risk = IMIN(255, risk);
-            /* M5: crime moves 1/4 of the way to its target per update */
-            oc = s_f[FLD_CRIME][c];
-            cr = crime_target(cx, cy, unemp_pct, cscale);
-            cr = oc + (cr > oc ? (cr - oc + 3) / 4 : -((oc - cr + 3) / 4));
-            if (cr != oc) { s_f[FLD_CRIME][c] = (u8)cr; changed = 1; }
             /* happiness 0..100 */
             svc = (net_cov_quality(SVC_SCHOOL, tx, ty) + net_cov_quality(SVC_HEALTH, tx, ty) +
                    net_cov_quality(SVC_SAUNA, tx, ty) + net_cov_quality(SVC_FIRE, tx, ty)) / 20;   /* 0..20 */
@@ -394,7 +348,6 @@ void fields_step_social(int quarter)
         }
     update_avg(FLD_FIRE_RISK);
     update_avg(FLD_HAPPINESS);
-    update_avg(FLD_CRIME);
     if (changed) world_notify(0, y0 << FIELD_SHIFT, g_world.w - 1, (y1 << FIELD_SHIFT) - 1, WCHG_FIELDS);
 }
 

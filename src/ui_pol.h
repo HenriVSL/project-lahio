@@ -42,6 +42,7 @@ int  uix_ctl_hot(int idx);
 void uix_button(int x, int y, int w, int h, const char *label, int a, int b, int enabled);
 void uix_tabs(int x, int y, int right, const char *const *names, int n, int sel);
 int  uix_tab(void);                           /* selected tab of the politics panel */
+int  uix_tab_of(int panel);                   /* M7: selected tab of any panel */
 void uix_set_tab(int t);
 void uix_sprite(int id, int x, int y);
 void uix_portrait(int mood, int x, int y);    /* 64x80 President */

@@ -3,8 +3,8 @@
 
    One byte per cell (0..255; happiness 0..100), FIELD_MAX_W stride, cell = tile >> FIELD_SHIFT.
    Scales (T04): pollution 0..255 (~32 = noticeable, 128+ = heavy); land value ~15 bare land, 40-60
-   serviced town, 80+ lakeside with parks; fire risk 0..255; crime 0..255 (M5: density x unemployment x low land value, less with police
-   cover; ~10 quiet, 40+ a problem); noise 0 (traffic later). Land value is also cached
+   serviced town, 80+ lakeside with parks; fire risk 0..255; crime 0 (M5 scope review: no crime field; police is a plain
+   service, PM_CRIME_PCT is a land value term); noise 0 (traffic later). Land value is also cached
    per tile in Tile.lv (fields.cpp writes it). After a step that changes values visibly, fields.cpp calls
    world_notify(..., WCHG_FIELDS) with the changed area (render re-bakes only if that overlay is shown). */
 #ifndef FIELDS_H

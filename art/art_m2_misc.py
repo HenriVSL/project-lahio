@@ -12,6 +12,7 @@ add_colours({
     'bus_cream': '#d8cfb2', 'bus_red': '#a5432f', 'bus_roof': '#c9c2aa',
     'barn_red': '#7c3f33', 'log_wall': '#76604b', 'hay': '#b9a466', 'hay_dk': '#9a8752',
     'tractor_or': '#b56a3c', 'horse': '#6a4936', 'slash': '#6e6048', 'stump_top': '#bfa477',
+    'ash': '#5d5a55', 'ash_lt': '#76726b', 'char': '#2e2a27', 'found': '#8b867c',      # M5: burnt ruins
 })
 
 GRP_T = '3 services (transport)'
@@ -684,6 +685,41 @@ def bus_depot(name, seed=1):
     return md
 
 
+# =========================================================================== M5: burnt ruins (TF_RUBBLE)
+def g_ash(g, st, var):
+    """burnt house plot: grass at the edges, ash and soot inside the old footprint, a few dirt patches"""
+    x, y = g.W[0], g.W[1]
+    e = edge_window(x, y)
+    n = vnoise(x, y, 3.0, 420 + var)
+    if 6.0 < x < 26.0 and 6.0 < y < 26.0:
+        if n > 0.62:
+            return 'dirt_dk', 0.0
+        return ('ash_lt' if vnoise(x, y, 1.5, 421 + var) > 0.6 else 'ash'), (n - 0.5) * 0.6
+    if n * e > 0.45:
+        return 'dirt', 0.0
+    return g_grass(g, st, var, 'grass_dk')
+
+
+def rubble(var=0):
+    """what a fire leaves of a wooden house: the stone foundation, the brick chimney still standing (the classic
+    image of a burnt Finnish house), charred beams in the ash"""
+    md = Model('rubble')
+    fm = m_flat('found')
+    for (x0, y0, x1, y1) in ((7, 7, 25, 8.4), (7, 23.6, 25, 25), (7, 7, 8.4, 25), (23.6, 7, 25, 25)):
+        md.add(box(x0, y0, 0, x1, y1, 1.4 + 0.4 * var, fm, grp=new_grp()))
+    cx, cy = (15.0, 14.0) if var == 0 else (18.0, 17.0)
+    md.add(box(cx, cy, 0, cx + 3.0, cy + 3.0, 15.0 - 3.0 * var, m_chimney, key='brick', grp=new_grp()))
+    ch = m_flat('char')
+    beams = ((9.5, 11.0, 21.0, 12.2, 0.0), (10.5, 18.0, 12.0, 22.5, 0.6), (17.0, 20.0, 22.0, 21.0, 1.1))
+    for i, (x0, y0, x1, y1, z) in enumerate(beams):
+        if var and i == 1:
+            continue
+        md.add(box(x0, y0, z, x1, y1, z + 1.0, ch, grp=new_grp()))
+    md.add(Ellipsoid(12.0 + 4 * var, 20.0, 0.3, 2.6, 1.8, 1.1, m_flat('char'), grp=new_grp()))
+    md.ground = lambda g, st: g_ash(g, st, var)
+    return md
+
+
 # =========================================================================== tables
 ENTRIES = [
     ('station', (2, 2), 4, [_v(station, 'st')], None),
@@ -699,7 +735,7 @@ GROUPS = {'station': GRP_T, 'bus_stop': GRP_T, 'bus_depot': GRP_T,
           'farm_t1': GRP_R, 'farm_t2': GRP_R, 'farm_t3': GRP_R, 'logging_camp': GRP_R,
           'forest_cut*': GRP_R, 'forest_seed*': GRP_R, 'forest_young*': GRP_R, 'field_hay*': GRP_R,
           'bus_px*': GRP_F, 'bus_ny*': GRP_F, 'bus_nx*': GRP_F, 'bus_py*': GRP_F,
-          'fire0*': GRP_F, 'fire1*': GRP_F, 'fire2*': GRP_F, 'fire3*': GRP_F}
+          'fire0*': GRP_F, 'fire1*': GRP_F, 'fire2*': GRP_F, 'fire3*': GRP_F, 'rubble*': GRP_F}
 
 BUS_DIRS = (('px', 0), ('ny', 1), ('nx', 2), ('py', 3))     # = gen_art.DIRS
 
@@ -713,4 +749,6 @@ def extra_jobs():
         J.append(((lambda vv: lambda: forest_seed(vv))(v), 0, 'lot', ['forest_seed%d' % v]))
         J.append(((lambda vv: lambda: forest_young(vv))(v), 0, 'lot', ['forest_young%d' % v]))
     J.append((field_hay, 0, 'lot', ['field_hay']))
+    for v in range(2):                                   # M5: burnt ruins (render.cpp: TF_RUBBLE tiles)
+        J.append(((lambda vv: lambda: rubble(vv))(v), 0, 'lot', ['rubble%d' % v]))
     return J

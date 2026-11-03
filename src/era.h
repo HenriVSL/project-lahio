@@ -41,6 +41,17 @@ int  era_event_seen(int ee);               /* 1 = has happened in this game */
 /* ------------------------------------------------------------------ landmarks (defs rows appended by M7) */
 int  era_landmark_count(void);             /* placed and active */
 int  era_is_landmark(int def);
+/* Sauna diplomacy (one button, needs the presidential sauna and politics on): Eastern relations + 8 / (1 + times
+   used), at most once a year. era_sauna_state: 0 ready, 1 no sauna, 2 politics off, 3 used this year. */
+int  era_sauna_state(void);
+int  era_sauna_gain(void);                 /* relations the next evening would bring */
+int  era_sauna_invite(void);               /* 1 ok */
+
+/* ------------------------------------------------------------------ the agreement card (politics' one card queue) */
+void era_queue_card(void);                 /* trade.cpp at a period start (politics on): queued now or retried monthly */
+int  era_card_slot_free(void);             /* no card up and none in the last POL_EVENT_MIN months (M6 may use it too) */
+int  era_card_pending(void);               /* 1 = the agreement card is queued or waiting to be queued */
+void era_card_answered(int ev, int choice);/* politics resolve_event(EV_AGREEMENT) */
 
 /* ------------------------------------------------------------------ history
    Monthly ring (graphs, ERA_HIST months, oldest first) of series the sim doesn't keep, and a yearly table
@@ -53,7 +64,7 @@ int  era_history(int series, s32 *out, int max);
 typedef struct {
     s16 year;
     s32 pop, money, jobs, unemployed, emig_year, homeless, industry_jobs, east, west, balance;
-    s32 lots_t3, apartments, landmarks, loan_total, hc;
+    s32 lots_t3, apartments, landmarks, loan_total;
     s16 status, popularity, east_meter, west_meter, power_warn, water_warn, elections, decrees_signed;
     s16 oil_index, fulfil;
 } EraYear;
@@ -80,6 +91,8 @@ enum { NT_NONE, NT_ERA, NT_STATUS, NT_GROWTH, NT_DECLINE, NT_EMIGRATION, NT_UNEM
 const NewsIssue *era_news(void);
 int  era_news_pending(void);               /* NEWS_* waiting, 0 none */
 void era_news_seen(void);
+const NewsIssue *era_news_kind(int kind);  /* the last issue of a kind (NEWS_*) */
+void era_news_seen_kind(int kind);
 void era_news_build_year(NewsIssue *out);  /* generate the January issue for the current date (tests) */
 void era_news_build_ceremony(NewsIssue *out, int ts);
 void era_news_build_newsreel(NewsIssue *out);
@@ -88,10 +101,9 @@ int  era_news_score(int topic);            /* last generation: newsworthiness pe
 int  era_newsreel_lines(char lines[][96], int max);   /* summary lines (what you built, decrees, emigration) */
 
 /* ------------------------------------------------------------------ messages (ticker; game.cpp drains) */
-enum { EM_OFFER, EM_SIGNED, EM_AUTO_SIGNED, EM_WASTED, EM_DEFICIT, EM_SHORTFALL, EM_PRAISE, EM_OIL_SHOCK,
-       EM_OIL_SHOCK2, EM_OIL_COLLAPSE, EM_CLEARING_END, EM_NEW_MARKKA, EM_DEVALUATION, EM_LOAN, EM_LOAN_CALLED,
-       EM_LOAN_REPAID, EM_TECH, EM_ELEC_LICENCE, EM_WEST_SWING, EM_RIGHTS_PETITION, EM_SAUNA_NIGHT, EM_STATUE,
-       EM_LANDMARK, EM_LOAN_DONE, EM_SETTLEMENT, EM_COUNT };
+enum { EM_OFFER, EM_SIGNED, EM_AUTO_SIGNED, EM_DEFICIT, EM_SHORTFALL, EM_OIL_SHOCK, EM_OIL_SHOCK2, EM_OIL_COLLAPSE,
+       EM_CLEARING_END, EM_DEVALUATION, EM_LOAN, EM_LOAN_REPAID, EM_RIGHTS_PETITION, EM_SAUNA_NIGHT, EM_STATUE,
+       EM_LANDMARK, EM_COUNT };
 typedef struct { u8 type; s32 a, b; } EraMsg;
 void era_push_msg(int type, s32 a, s32 b);
 int  era_poll_msg(EraMsg *m);
@@ -100,8 +112,8 @@ int  era_msg_panel(const EraMsg *m);       /* 1 = clicking the ticker opens the 
 
 /* ------------------------------------------------------------------ scripts, debug, save */
 int  era_script_line(int n, char **t, FILE *out);   /* SCR_* (tools.h) or -1 = not an M7 command:
-        trade sign modest|standard|ambitious | trade consumer|materials on|off | trade loan bond|west|east [power|heat|elements]
-        trade repay bond|west|east | trade buy machinetools|computers | trade dump | era dump | news [year|newsreel] */
+        trade sign modest|standard|ambitious | trade bond | trade complex SLOT GOODS EAST WEST | trade dump |
+        era dump | era sauna | news [year|ceremony|newsreel|seen] */
 void era_dump(FILE *f);
 u32  era_hash(void);
 struct SaveFile;

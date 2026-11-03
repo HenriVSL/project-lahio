@@ -46,7 +46,8 @@ int text_fmt_signed(char *buf, int size, s32 v)
 
 s64 text_money_display(Money v, int year)
 {
-    return year < NEW_MARKKA_YEAR ? (s64)v * 100 : (s64)v;
+    UNUSED(year);                  /* M7 (SCOPE_REVIEW): the old-markka x100 display is cut; only the 1963 joke stays */
+    return (s64)v;
 }
 
 int text_fmt_money(char *buf, int size, Money v, int year)
@@ -103,8 +104,7 @@ const char *text_overlay_name(int ovl)
 {
     static const char *const n[OVL_COUNT] = { "No overlay", "Power", "Water", "Pollution", "Land value",
         "Traffic", "Fire risk", "Fire cover", "Schools", "Health care", "Saunas", "Police", "Libraries",
-        "Post and telephone", "Why not growing?", "Zones", "Catchment", "Crime", "District heating",
-        "Sewage and lakes" };   /* M5 */
+        "Post and telephone", "Why not growing?", "Zones", "Catchment", "District heating" };   /* M5 */
     return (ovl >= 0 && ovl < OVL_COUNT) ? n[ovl] : "?";
 }
 
@@ -148,6 +148,7 @@ const char *text_term_label(int kind, int id)
         case BL_CONSTRUCTION: return "Construction";
         case BL_POLITICS:     return "Decrees and diplomacy";
         case BL_COMPANY:      return "Company contribution";     /* M6 */
+        case BL_FUEL:         return "Fuel (oil, coal)";         /* M7 */
         }
         return "?";
     }
@@ -297,6 +298,8 @@ int text_req_line(char *buf, int size, const ReqItem *it)
         text_fmt_int(b, sizeof(b), it->need);
         return str_printf(buf, size, "%s Precast elements: this month's are used up (%s left, needs %s)", g, a, b);
     case REQ_SCHOOL: case REQ_SAUNA: case REQ_HEALTH: case REQ_PHONE:
+        if (it->req == REQ_PHONE && it->why == 2)               /* M5: before the telephone age */
+            return str_printf(buf, size, "%s Telephone (needed from %d)", g, (int)it->need);
         if (it->req == REQ_PHONE && !it->met && !it->lot)       /* M5: the phone queue */
             return str_printf(buf, size, "%s Telephone (no exchange: the waiting list is a mere two years)", g);
         if (it->why == 1 || it->lot) {

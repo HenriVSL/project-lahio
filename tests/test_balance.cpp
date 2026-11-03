@@ -25,6 +25,9 @@
 #include "mapgen.h"
 #include "politics.h"
 #include "industry.h"
+#include "complex.h"
+#include "save.h"
+#include "transit.h"
 #include "civic.h"
 #include "text.h"
 
@@ -48,7 +51,7 @@ static const BalMap s_maps[] = {
 /* service slots inside a module (north tile, relative); wells touch two streets */
 enum { SL_SCHOOL, SL_SCHOOL2, SL_SAUNA, SL_SAUNA2, SL_SAUNA3, SL_CLINIC, SL_FIRE, SL_TOWER, SL_PARK,
        SL_WELL, SL_WELL2, SL_WELL3, SL_WELL4, SL_WELL5, SL_WELL6, SL_WELL7,
-       SL_POST, SL_POLICE, SL_LIBRARY, SL_SEWAGE, SL_HEAT,        /* M5 */
+       SL_POST, SL_POLICE, SL_LIBRARY, SL_SEWAGE, SL_HEAT, SL_TOWER2, SL_TOWER3,   /* M5 */
        SL_COUNT };
 static const struct { const char *key; s8 x, y, sz; } s_slot[SL_COUNT] = {
     { "school", 1, 8, 2 }, { "school", 15, 15, 2 }, { "sauna", 15, 1, 1 }, { "sauna", 27, 8, 1 }, { "sauna", 1, 18, 1 },
@@ -57,15 +60,18 @@ static const struct { const char *key; s8 x, y, sz; } s_slot[SL_COUNT] = {
     { "well", 27, 4, 1 }, { "well", 13, 8, 1 },
     /* M5: post office (houses T3 phone), police, library, a sewage works and a heat plant (2x2, apartments T3) */
     { "post", 15, 6, 1 }, { "police", 13, 20, 1 }, { "library", 15, 13, 1 }, { "sewage_works", 11, 1, 2 },
-    { "heat_plant", 11, 8, 2 },
+    { "heat_plant", 11, 8, 2 }, { "water_tower", 15, 11, 1 }, { "water_tower", 27, 18, 1 },
 };
 
 /* ------------------------------------------------------------------ styles */
 enum { BS_PLANNER, BS_GREEDY, BS_INDUSTRY, BS_DENSE, BS_TAX13, BS_TAX5,
        BS_POLITICS,             /* M1: the planner with politics on, using decrees, letters and event cards */
        BS_RURAL,                /* M3: the planner + a forestry zone on the nearest forest and a farm zone */
+       BS_MILL,                 /* M6: rural + the paper mill in year 3, a station at Market town, every gift placed (s7) */
+       BS_METAL,                /* M6: the planner + Valtion Metalli by the railway at Market town, politics off (s7) */
        BS_COUNT };
-static const char *s_style_name[BS_COUNT] = { "planner", "greedy", "industry", "dense", "tax13", "tax5", "politics", "rural" };
+static const char *s_style_name[BS_COUNT] = { "planner", "greedy", "industry", "dense", "tax13", "tax5", "politics", "rural",
+                                              "mill", "metal" };
 
 typedef struct {
     int pop, money, net, opnet, demR, demC, demI, jobs, unemp, emig, homeless;
@@ -100,6 +106,7 @@ static void rec_flush_wait(void)
     s_rec_wait = 0;
 }
 
+static int s_cmd_try;              /* M6: a command that may fail (a logging road across a pond) is not an error */
 static int cmd(const char *fmt, ...)
 {
     char line[160];
@@ -112,7 +119,7 @@ static int cmd(const char *fmt, ...)
     if (s_rec) fprintf(s_rec, "%s\n", line);
     r = tools_script_line(line, &wait, NULL);
     s_cmds++;
-    if (r == SCR_ERROR) { s_errors++; log_printf("balance: command failed: %s", line); return 0; }
+    if (r == SCR_ERROR) { if (!s_cmd_try) s_errors++; log_printf("balance: command failed%s: %s", s_cmd_try ? " (tried)" : "", line); return 0; }
     return 1;
 }
 
@@ -237,23 +244,27 @@ static void bot_m5(Money *cash)
     int s, m, k;
     SimProblem pr[4];
     int np = sim_top_problems(pr, 4), phone_problem = 0;
+    Money keep = st->power_demand * 10 >= st->power_supply * 7 ? plant_cost() : 0;   /* power comes first */
+    Money cash0 = *cash;
     for (k = 0; k < np; k++) if (pr[k].req == REQ_PHONE && pr[k].residents >= 60) phone_problem = 1;
-    if (bot_unlocked(B_POST) && *cash >= 3500 && st->population >= 1500 &&
+    if (phone_problem && !st->svc_capacity[SVC_POST]) keep = 0;   /* the first exchange can't wait */
+    *cash -= keep;
+    if (bot_unlocked(B_POST) && *cash >= (phone_problem || !st->svc_capacity[SVC_POST] ? 800 : 3500) && st->population >= 1500 &&
         (!st->svc_capacity[SVC_POST] || st->svc_load[SVC_POST] * 10 >= st->svc_capacity[SVC_POST] * 9 || phone_problem)) {
         s = next_slot(SL_POST, SL_POST, phone_problem ? module_of(pr[0].x, pr[0].y) : -1);
-        if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 700;
+        if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 600;
     }
-    if (bot_unlocked(B_POLICE) && *cash >= 6000 && st->population >= 5000 &&
-        (!st->svc_capacity[SVC_POLICE] || st->svc_load[SVC_POLICE] * 10 >= st->svc_capacity[SVC_POLICE] * 9 || field_avg(FLD_CRIME) >= 20)) {
+    if (bot_unlocked(B_POLICE) && *cash >= 20000 && st->population >= 5000 &&
+        (!st->svc_capacity[SVC_POLICE] || st->svc_load[SVC_POLICE] * 10 >= st->svc_capacity[SVC_POLICE] * 9)) {
         s = next_slot(SL_POLICE, SL_POLICE, -1);
         if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 600;
     }
-    if (bot_unlocked(B_LIBRARY) && *cash >= 12000 && st->svc_capacity[SVC_LIBRARY] < st->population / 2) {
+    if (bot_unlocked(B_LIBRARY) && *cash >= 20000 && st->svc_capacity[SVC_LIBRARY] < st->population / 2) {
         s = next_slot(SL_LIBRARY, SL_LIBRARY, -1);
         if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 800;
     }
     civic_util_summary(UT_SEWAGE, &us);
-    if (bot_unlocked(B_SEWAGE_WORKS) && *cash >= 8000 && us.untreated >= 2000) {
+    if (bot_unlocked(B_SEWAGE_WORKS) && *cash >= 8000 && us.untreated >= 2000 && civic_lake_avg() >= CIVIC_LAKE_TINT) {
         s = next_slot(SL_SEWAGE, SL_SEWAGE, -1);
         if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 2500;
     }
@@ -264,6 +275,12 @@ static void bot_m5(Money *cash)
             cmd("bulldoze %d %d %d %d", x, y, x + 2, y + 2);
             if (cmd("build element_factory %d %d", x, y)) *cash -= 8000;
         }
+        for (m = 1; m < s_mods; m++) {           /* apartments T2+ need the water pressure: towers across the block */
+            static const u8 tw[3] = { SL_TOWER, SL_TOWER2, SL_TOWER3 };
+            if (zone_kind(m) != ZONE_APARTMENTS || !bot_unlocked(B_WATER_TOWER) || *cash < 3000) continue;
+            for (k = 0; k < 3; k++) if (!(s_used[m] & (1u << tw[k]))) break;
+            if (k < 3 && build_slot(m, tw[k])) { *cash -= 1200; break; }
+        }
         civic_util_summary(UT_HEAT, &us);
         if (bot_unlocked(B_HEAT_PLANT) && *cash >= 6000 && st->lots_tier[ZONE_APARTMENTS][2] > 0 &&
             (us.supply == 0 || us.lots_short > 0 || us.used * 10 >= us.supply * 9)) {
@@ -271,6 +288,8 @@ static void bot_m5(Money *cash)
             if (m < s_mods && build_slot(m, SL_HEAT)) *cash -= 3500;
         }
     }
+    *cash += keep;
+    UNUSED(cash0);
 }
 
 /* one decision round (monthly): at most a few actions, cheapest urgent ones first */
@@ -429,6 +448,134 @@ static void bot_rural(void)
     }
 }
 
+/* ------------------------------------------------------------------ M6: complex bots (BS_MILL, BS_METAL; map s7 only)
+   BS_MILL = the rural bot + Kuusikosken Paperi Oy once the town is a Church village with 7,000 mk (from year 3), on
+   the shore site nearest the first neighbourhood, with a gravel road, a power line and a pipe to it; a railway station
+   at Market town (PM3 needs one); every gift placed next to the mill. BS_METAL = the planner + Valtion Metalli by the
+   railway at Market town (politics off: 6,000 mk). Year table: tests/out/complex_<style>_s7.txt */
+static int s_cpx_done, s_cpx_station, s_cpx_gifts;
+static FILE *s_ctab2;
+static void cpx_track(void);
+
+static int cpx_find_site(int kind, int *ox, int *oy)
+{
+    int x, y, best = 1 << 30, cx = M->mod[0][0] + 14, cy = M->mod[0][1] + 11, w, h, m, r;
+    Money c;
+    complex_size(kind, &w, &h);
+    for (y = 1; y + h < g_world.h - 1; y++)
+        for (x = 1; x + w < g_world.w - 1; x++) {
+            int d = IABS(x + w / 2 - cx) + IABS(y + h / 2 - cy);
+            if (d >= best) continue;
+            for (m = 0; m < 4; m++) if (rect_overlaps(x, y, w, h, M->mod[m][0], M->mod[m][1], 29, 22, 1)) break;
+            if (m < 4 || rect_overlaps(x, y, w, h, M->ind[0], M->ind[1], M->ind[2] + 1, M->ind[3] + 1, 1)) continue;
+            r = complex_check_place(kind, x, y, &c);
+            if (r == REJ_CPX_ROAD) d += 12;              /* a site that needs its own road is a little worse */
+            else if (r != PLACE_OK) continue;
+            if (d >= best) continue;
+            best = d; *ox = x; *oy = y;
+        }
+    return best < (1 << 30);
+}
+
+/* nearest tile (Chebyshev rings) with a zone-byte flag that is free for a power line (no lot, no road) */
+static int cpx_nearest(int x, int y, int zf, int free_tile, int *ox, int *oy)
+{
+    int r, i, j;
+    for (r = 1; r < 60; r++)
+        for (j = y - r; j <= y + r; j++)
+            for (i = x - r; i <= x + r; i++) {
+                const Tile *t;
+                if (IMAX(IABS(i - x), IABS(j - y)) != r || !world_in(i, j)) continue;
+                t = WT(i, j);
+                if (!(t->zone & zf)) continue;
+                if (free_tile && (t->lot || TILE_ROAD(t) || TER_IS_WATER(TER_TYPE(t)))) continue;
+                *ox = i; *oy = j; return 1;
+            }
+    return 0;
+}
+
+static void cpx_connect(int kind, int x, int y, int nets)
+{
+    int w, h, ax, ay, tx, ty, sx, sy;
+    Money c;
+    complex_size(kind, &w, &h);
+    sx = x + w; sy = y + h / 2;                            /* the tile east of the footprint's middle */
+    if (!nets) {
+        if (complex_check_place(kind, x, y, &c) == REJ_CPX_ROAD && near_road(sx, sy, &ax, &ay)) {
+            int ry = (ax < sx && ay >= y && ay < y + h) ? y + h + 1 : ay;   /* never through the site: down the east side first */
+            cmd("road %d %d %d %d gravel straight", sx, sy, sx, ry);
+            cmd("road %d %d %d %d gravel", sx, ry, ax, ay);
+        }
+        return;
+    }
+    if (cpx_nearest(sx, y + h - 1, ZF_POWER_NET, 1, &tx, &ty)) cmd("power %d %d %d %d", sx, y + h - 1, tx, ty);
+    if (cpx_nearest(x + 2, y, ZF_WATER_NET, 0, &tx, &ty)) cmd("pipe %d %d %d %d", x + 2, y, tx, ty);
+}
+
+static void cpx_row(void)
+{
+    const Complex *c = complex_of_kind(s_style == BS_MILL ? CPX_PAPER : CPX_METAL);
+    if (!s_ctab2) return;
+    if (!c) { fprintf(s_ctab2, "%d %6d | not built\n", sim_date()->year, sim_stats()->population); return; }
+    fprintf(s_ctab2, "%d %6d | stage %d%s jobs %4d filled %4d out %3d%% | wood %3d got %3d%% | mood %3d gifts %d/%d | dep %2d%% town %d"
+                     " contrib %4d | vol %4d W %4d E %4d | event %d/%d\n",
+            sim_date()->year, sim_stats()->population, c->stage, c->next ? "+" : " ", c->jobs, c->employed, c->output,
+            c->wood_need, c->wood_pct, c->mood, c->gifts, s_cpx_gifts, complex_dependency_pct(), complex_company_town(),
+            (int)complex_contribution_last(), c->vol, c->west, c->east, c->ev, c->ev_state);
+}
+
+static void bot_complex(void)
+{
+    const CityStats *st = sim_stats();
+    int kind = s_style == BS_MILL ? CPX_PAPER : CPX_METAL, x, y;
+    const Complex *c = complex_of_kind(kind);
+    if (!s_cpx_done && (kind == CPX_PAPER ? st->town_status >= TS_CHURCH_VILLAGE && sim_date()->total_months >= 24
+                                          : st->town_status >= TS_MARKET_TOWN) && g_budget.money >= complex_tool_cost(kind == CPX_PAPER ? B_PM_HALL : B_VM_HALL) + 300) {
+        s_cpx_done = 1;
+        if (cpx_find_site(kind, &x, &y)) {
+            int fx, fy, ax, ay;
+            cpx_connect(kind, x, y, 0);                    /* its road first (if it needs one), the money for the works */
+            cmd("complex place %s %d %d", kind == CPX_PAPER ? "paper" : "metal", x, y);
+            cpx_connect(kind, x, y, 1);                    /* then a power line and a pipe */
+            /* the mill's own forest: a second forestry block of ~350 tiles near it (PM2 needs 80 wu, PM3 120) */
+            if (kind == CPX_PAPER && find_rect(x + 2, y + 2, 22, 16, 1, 70, 70, &fx, &fy) && near_road(fx + 11, fy + 8, &ax, &ay)) {
+                s_cmd_try = 1;
+                cmd("road %d %d %d %d gravel", ax, ay, fx + 11, fy + 8);
+                cmd("road %d %d %d %d gravel straight", fx + 11, fy, fx + 11, fy + 15);
+                cmd("road %d %d %d %d gravel straight", fx, fy + 8, fx + 21, fy + 8);
+                s_cmd_try = 0;
+                cmd("zone %d %d %d %d forestry", fx, fy, fx + 21, fy + 15);
+            }
+        }
+        return;
+    }
+    if (!c) return;
+    if (kind == CPX_PAPER && !s_cpx_station && st->town_status >= TS_MARKET_TOWN && g_budget.money >= 5000) {
+        int best = 1 << 30, bx = 0, by = 0, rot, rr;
+        s_cpx_station = 1;
+        for (y = 2; y < g_world.h - 3; y++)
+            for (x = 2; x < g_world.w - 3; x++) {
+                int d = IABS(x - c->x) + IABS(y - c->y);
+                if (d >= best || world_lot_check(B_STATION, x, y, 0) != PLACE_OK) continue;
+                rot = transit_station_rot(x, y);
+                if (rot < 0 || !transit_station_ok(x, y, rot) || !world_footprint_road_dist(x, y, x + 1, y + 1, 1, &rr)) continue;
+                best = d; bx = x; by = y;
+            }
+        if (best < (1 << 30)) cmd("build station %d %d", bx, by);
+    }
+    if (complex_gift_pending()) {                          /* the nearest free spot to the mill */
+        int best = 1 << 30, bx = 0, by = 0, br = 0, r;
+        for (y = c->y - 13; y <= c->y + 17; y++)
+            for (x = c->x - 13; x <= c->x + 17; x++)
+                for (r = 0; r < 2; r++) {
+                    int d = IABS(x - c->x - 2) + IABS(y - c->y - 2);
+                    if (d >= best || !world_in(x, y) || complex_check_gift(x, y, r) != PLACE_OK) continue;
+                    best = d; bx = x; by = y; br = r;
+                }
+        if (best < (1 << 30) && cmd("complex gift %d %d %d", bx, by, br)) s_cpx_gifts++;
+    }
+}
+
 /* M3: industry by kind, one row per year: tests/out/industry_<style>_<map>.txt */
 static FILE *s_itab;
 /* M5: services & housing, one row per year: tests/out/civic_<style>_<map>.txt (fires, crime, lakes, heat, elements,
@@ -442,11 +589,11 @@ static void ctab_row(void)
     int k;
     if (!s_ctab) return;
     civic_util_summary(UT_HEAT, &hs); civic_util_summary(UT_SEWAGE, &ss);
-    fprintf(s_ctab, "%d %6d %7d | fires %3d lost %3d out %3d rubble %3d | crime %3d lake %3d untreated %5d treated %5d |"
-                    " heat %4d/%4d lots %3d short %2d fuel %4d | elem %4d | apt %3d/%3d/%3d com3 %3d h3 %4d | svc P%d L%d T%d |",
+    fprintf(s_ctab, "%d %6d %7d | fires %3d lost %3d out %3d rubble %3d | lake %3d untreated %5d treated %5d |"
+                    " heat %4d/%4d lots %3d short %2d | elem %4d | apt %3d/%3d/%3d com3 %3d h3 %4d | svc P%d L%d T%d |",
             sim_date()->year, st->population, g_budget.money, fs->started, fs->lots_lost, fs->put_out, fs->rubble_tiles,
-            field_avg(FLD_CRIME), civic_lake_avg(), ss.untreated, ss.used, hs.used, hs.supply, hs.lots_served, hs.lots_short,
-            hs.fuel_month, civic_elements_output(), st->lots_tier[ZONE_APARTMENTS][1], st->lots_tier[ZONE_APARTMENTS][2],
+            civic_lake_avg(), ss.untreated, ss.used, hs.used, hs.supply, hs.lots_served, hs.lots_short,
+            civic_elements_output(), st->lots_tier[ZONE_APARTMENTS][1], st->lots_tier[ZONE_APARTMENTS][2],
             st->lots_tier[ZONE_APARTMENTS][3], st->lots_tier[ZONE_COMMERCIAL][3], st->lots_tier[ZONE_HOUSES][3],
             st->svc_capacity[SVC_POLICE] / 3000, st->svc_capacity[SVC_LIBRARY] / 4000, st->svc_capacity[SVC_POST] / 3000);
     for (k = 0; k < BL_COUNT; k++) fprintf(s_ctab, " %d", g_budget.last[k]);
@@ -507,6 +654,8 @@ static void bot_politics(void)
 {
     const CityStats *st = sim_stats();
     int ev = politics_pending_event(), k, best, bs, y = sim_date()->year, worst = -1, wa = 101;
+    /* M7: town status comes by decree; the bot signs the town-rights petition as soon as it is offered */
+    if (politics_decree_state(DEC_TOWN_RIGHTS) == DS_OK && cmd("pol sign townrights")) s_pol_signed++;
     /* event cards: answer at once */
     if (ev >= 0) {
         best = 0; bs = -1000;
@@ -583,6 +732,7 @@ static void bal_new_city(const BalMap *mp)
     if (!inited) { world_init(); sim_init(); tools_init(); traffic_init(); inited = 1; }
     mapgen_defaults(&p);
     p.seed = mp->seed; p.preset = mp->preset;
+    if (s_style == BS_MILL || s_style == BS_METAL) p.railway = 1;    /* M6: Valtion Metalli and the PM3 station need rail */
     mapgen_generate(&p);
     sim_default_settings(&s);
     s.seed = mp->seed;
@@ -646,6 +796,14 @@ static void bal_begin(int style, int map, BalRun *out, int record)
     M = &s_maps[map];
     s_style = style; s_mods = 0; s_ind1 = 0; s_plants = 0; s_tower = 0; s_errors = 0; s_cmds = 0; s_rec_wait = 0;
     s_month_no = 0; s_bot_off = 0; s_opsum = 0; s_prev_pop = 0; s_emig = 0; s_rural_done = 0; s_factory = 0;
+    s_cpx_done = s_cpx_station = s_cpx_gifts = 0;                                    /* M6 */
+    s_ctab2 = NULL;
+    if (record && (style == BS_MILL || style == BS_METAL)) {
+        str_printf(path, sizeof(path), "out/complex_%s_%s.txt", s_style_name[style], s_maps[map].key);
+        s_ctab2 = fopen(path, "w");
+        if (s_ctab2) fprintf(s_ctab2, "M6 complex bot: style %s, map %s (seed %u); January rows (tests/test_balance.cpp)\n",
+                             s_style_name[style], s_maps[map].key, s_maps[map].seed);
+    }
     memset(s_used, 0, sizeof(s_used)); memset(s_com_big, 0, sizeof(s_com_big));
     bal_new_city(M);
     s_rec = NULL;
@@ -740,7 +898,10 @@ static void bal_months(BalRun *out, int n)
             out->nrows = y + 1;
         }
         if (!s_bot_off) bot_month();
-        if (s_style == BS_RURAL && !s_bot_off) bot_rural();
+        if ((s_style == BS_RURAL || s_style == BS_MILL) && !s_bot_off) bot_rural();
+        if ((s_style == BS_MILL || s_style == BS_METAL) && !s_bot_off) bot_complex();   /* M6 */
+        if (months % 12 == 0 && months / 12 <= 20) cpx_row();                          /* M6 */
+        cpx_track();
         if (s_style == BS_POLITICS) {
             pol_timeline_msgs();
             if (months % 12 == 0) pol_timeline_year();
@@ -757,10 +918,39 @@ static void bal_months(BalRun *out, int n)
     }
 }
 
+/* M6: what the complex bots achieved (balance_complex_bots) */
+typedef struct { int built, stage_max, jobs_max, dep_max, gifts, contrib_sum, vol_sum, east_sum, stage_year[4]; } CpxRun;
+static CpxRun s_cpx_run[2];
+
+static void cpx_track(void)
+{
+    const Complex *c;
+    CpxRun *r;
+    if (s_style != BS_MILL && s_style != BS_METAL) return;
+    r = &s_cpx_run[s_style == BS_METAL];
+    c = complex_of_kind(s_style == BS_MILL ? CPX_PAPER : CPX_METAL);
+    if (!c) return;
+    r->built = 1;
+    if (c->stage > r->stage_max) { r->stage_max = c->stage; if (c->stage < 4) r->stage_year[c->stage] = sim_date()->year; }
+    r->jobs_max = IMAX(r->jobs_max, c->jobs);
+    r->dep_max = IMAX(r->dep_max, complex_dependency_pct());
+    r->gifts = s_cpx_gifts;
+    r->contrib_sum += complex_contribution_last();
+    r->vol_sum += c->vol; r->east_sum += c->east;
+}
+
 static void bal_end(BalRun *out)
 {
     int i;
     rec_flush_wait();
+    if (s_ctab2) {                    /* M6: a save of the end state for the VM screenshots (camera on the complex) */
+        const Complex *c = complex_of_kind(out->style == BS_MILL ? CPX_PAPER : CPX_METAL);
+        SaveMeta sm;
+        memset(&sm, 0, sizeof(sm));
+        if (c) { sm.cam_x = c->x + 2; sm.cam_y = c->y + 2; sm.zoom = ZOOM_64; }
+        save_game(out->style == BS_MILL ? "out/M6_MILL.KAU" : "out/M6_METAL.KAU", &sm);
+    }
+    if (s_ctab2) { fprintf(s_ctab2, "end: "); complex_dump(s_ctab2); world_dump(s_ctab2, 0, 0, g_world.w - 1, g_world.h - 1); fclose(s_ctab2); s_ctab2 = NULL; }
     if (s_rec) { fprintf(s_rec, "dump report bal_%s_%s_report.txt\n", s_style_name[out->style], M->key); fclose(s_rec); s_rec = NULL; }
     out->errors = s_errors; out->cmds = s_cmds;
     if (s_itab) {
@@ -849,7 +1039,7 @@ TEST(balance_runs_and_summary)
     for (st = 0; st < BS_COUNT; st++)
         for (mp = 0; mp < NMAPS; mp++) {
             const BalRun *r;
-            if ((st == BS_TAX13 || st == BS_TAX5) && mp != 0) continue;
+            if ((st == BS_TAX13 || st == BS_TAX5 || st == BS_MILL || st == BS_METAL) && mp != 0) continue;   /* M6: s7 only */
             r = get_run(st, mp);
             test_log("%-8s %-3s: pop y1 %5d y3 %5d y5 %5d y10 %5d y20 %5d | 500 @%dm 3k @%dm 10k @%dm | money y2 %6d end %7d"
                      " min %6d loans %d | opnet y10 %+5d y20 %+5d | drop %d%% fail %d",
@@ -1127,4 +1317,105 @@ TEST(balance_rural_bot)
         CHECK(r->farms >= 2);
         CHECK(r->ind_lots[IK_METAL] > 0);
     }
+}
+
+/* M6: the mill bot (rural + paper mill) and the metal bot (planner + Valtion Metalli), map s7. The mill grows with the
+   town (PM2 at 3,000 and 80 wu of wood, PM3 from 1963 with a station), the town becomes a company town, the patron's
+   gifts get placed, the slump does not wreck the town. Tables: tests/out/complex_mill_s7.txt, complex_metal_s7.txt */
+TEST(balance_complex_bots)
+{
+    const BalRun *r = get_run(BS_MILL, 0), *p = get_run(BS_RURAL, 0), *v = get_run(BS_METAL, 0), *q = get_run(BS_PLANNER, 0);
+    const CpxRun *a = &s_cpx_run[0], *b = &s_cpx_run[1];
+    test_log("mill: built %d, stage %d (PM2 %d, PM3 %d), jobs max %d, dependency max %d%%, gifts placed %d, contribution %d mk,"
+             " exports %d; pop y10 %d y20 %d (rural %d %d), min money %d, loans %d, drop %d%%, errors %d",
+             a->built, a->stage_max, a->stage_year[2], a->stage_year[3], a->jobs_max, a->dep_max, a->gifts, a->contrib_sum,
+             a->vol_sum, r->row[10].pop, r->row[20].pop, p->row[10].pop, p->row[20].pop, r->min_money, r->loans, r->max_drop_pct, r->errors);
+    test_log("metal: built %d, lines %d, jobs max %d, East exports %d of %d; pop y10 %d y20 %d (planner %d %d), min money %d,"
+             " loans %d, errors %d", b->built, b->stage_max, b->jobs_max, b->east_sum, b->vol_sum, v->row[10].pop, v->row[20].pop,
+             q->row[10].pop, q->row[20].pop, v->min_money, v->loans, v->errors);
+    CHECK_EQ(r->errors, 0);
+    CHECK_EQ(v->errors, 0);
+    CHECK(a->built && a->stage_max >= 2);
+    CHECK(a->gifts >= 1);
+    CHECK(r->loans <= 2 && r->max_drop_pct <= 20);
+    CHECK(b->built && b->jobs_max >= 300 && b->east_sum > b->vol_sum / 2);
+    /* the railway map's planner stalls 1960-66 on power and money before the works can be afforded (1970); the loans
+       come from that stall, not from the works (no upkeep, +900 jobs, exports) */
+    CHECK(v->loans <= 5 && v->row[20].pop > v->row[10].pop);
+}
+
+/* ------------------------------------------------------------------ M7: 1955-1990 (eras, the 1973 oil shock, landmarks)
+   The planner (politics off) and the politics bot (on) play 35 years on s7. Like a rich player they buy a landmark each
+   January the treasury holds more than 40,000 mk (the money sinks of DESIGN_LESSONS 4.14, BALANCE.md 5). Tables:
+   tests/out/balance_era_<style>_s7.txt (yearly: pop, money, operating net, status, clearing meter, oil, fuel,
+   landmarks, the newspaper's main headline). */
+#include "trade.h"
+#include "era.h"
+typedef struct { int pop[37], money[37], opnet[37], status[37], landmarks, town_year, max_money, money75, money90; } EraRun;
+
+static int era_buy_landmark(void)
+{
+    static const int lm[5] = { B_CONCERT_HALL, B_TV_TOWER, B_SKI_JUMP, B_PRES_SAUNA, B_FRIENDSHIP_STATUE };
+    int k, i, x, y, have;
+    for (k = 0; k < 5; k++) {
+        const BuildingDef *d = def_building(lm[k]);
+        if (!def_unlocked(lm[k], sim_date()->year, sim_stats()->town_status, 0) || g_budget.money < d->cost + 25000) continue;
+        for (i = 1, have = 0; i < g_world.lot_hi; i++) if (g_world.lots[i].def == lm[k]) have = 1;
+        if (have) continue;
+        if (!find_rect(M->mod[0][0] + 14, M->mod[0][1] + 11, d->w + 2, d->h + 2, 0, 100, 60, &x, &y)) continue;
+        if (world_lot_check(lm[k], x + 1, y + 1, 0) != PLACE_OK) continue;
+        if (cmd("build %s %d %d 0", d->key, x + 1, y + 1)) return 1;
+    }
+    return 0;
+}
+
+static void era_run(int style, EraRun *e, const char *path)
+{
+    BalRun r;
+    FILE *f = fopen(path, "w");
+    int y, k;
+    s32 opsum;
+    memset(e, 0, sizeof(*e));
+    bal_begin(style, 0, &r, 0);
+    if (f) fprintf(f, "M7 era run: style %s, map s7, 1955-1990 (tests/test_balance.cpp balance_era_1955_1990); a landmark each\n"
+                      "January the treasury holds its cost + 25,000 mk. Columns: pop, money, operating net/month (12-month mean,\n"
+                      "construction excluded), status, clearing balance/tolerance, credit lost, deficit months, review %%, oil (world /\n"
+                      "clearing), fuel mk/month, landmarks, the January paper's main headline\n", s_style_name[style]);
+    for (y = 0; y <= 35; y++) {
+        const TradeState *t = trade_state();
+        e->pop[y] = sim_stats()->population; e->money[y] = g_budget.money; e->status[y] = sim_stats()->town_status;
+        if (g_budget.money > e->max_money) e->max_money = g_budget.money;
+        if (!e->town_year && sim_stats()->town_status >= TS_TOWN) e->town_year = sim_date()->year;
+        if (f) fprintf(f, "%d %6d %7d %+5d %d %6d/%-6d %5d %3d %4d %3d/%-3d %4d %d  %s\n", sim_date()->year, e->pop[y], e->money[y],
+                       e->opnet[y], e->status[y], t->balance, t->tolerance, t->lost_month, t->deficit_months, t->fulfil_pct,
+                       t->oil_index, t->clearing_oil, t->fuel_cost, era_landmark_count(), era_news() ? era_news()->head[0] : "-");
+        if (y == 35) break;
+        while (era_news_pending()) era_news_seen();
+        if (g_budget.money > 40000) era_buy_landmark();
+        opsum = 0;
+        for (k = 0; k < 12; k++) {
+            bal_months(&r, 1);
+            opsum += budget_net_last() - g_budget.last[BL_CONSTRUCTION] - g_budget.last[BL_TIMBER] - g_budget.last[BL_INTEREST];
+        }
+        e->opnet[y + 1] = opsum / 12;
+    }
+    e->landmarks = era_landmark_count();
+    e->money75 = e->money[20]; e->money90 = e->money[35];
+    bal_end(&r);
+    if (f) { era_dump(f); fclose(f); }
+}
+
+TEST(balance_era_1955_1990)
+{
+    static EraRun pl, po;
+    era_run(BS_PLANNER, &pl, "out/balance_era_planner_s7.txt");
+    era_run(BS_POLITICS, &po, "out/balance_era_politics_s7.txt");
+    test_log("planner: pop 1965 %d 1975 %d 1990 %d, money 1975 %d 1990 %d (max %d), town %d, landmarks %d",
+             pl.pop[10], pl.pop[20], pl.pop[35], pl.money75, pl.money90, pl.max_money, pl.town_year, pl.landmarks);
+    test_log("politics: pop 1965 %d 1975 %d 1990 %d, money 1975 %d 1990 %d (max %d), town %d, landmarks %d",
+             po.pop[10], po.pop[20], po.pop[35], po.money75, po.money90, po.max_money, po.town_year, po.landmarks);
+    CHECK(pl.town_year > 0 && po.town_year > 0);             /* town status reached (by decree with politics on) */
+    CHECK(pl.pop[35] * 10 >= pl.pop[20] * 8);                /* no collapse after the oil shock or 1990 */
+    CHECK(po.pop[35] * 10 >= po.pop[20] * 8);
+    CHECK(pl.money90 < 150000 && po.money90 < 150000);       /* no runaway money pile by 1990 */
 }

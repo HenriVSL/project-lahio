@@ -567,6 +567,7 @@ static void resolve_event(int choice, int expired)
     push_msg(expired ? PMSG_EVENT_EXPIRED : PMSG_CHOICE, ev, choice);
     log_printf("politics: event %s answered: %d%s", g_events[ev].key, choice, expired ? " (expired)" : "");
     if (s_ev_hook) s_ev_hook(ev, choice);     /* M6: complex cards */
+    if (ev == EV_AGREEMENT) era_card_answered(ev, choice);   /* M7: sign the clearing agreement */
 }
 
 void politics_set_event_hook(PolEventHook fn) { s_ev_hook = fn; }

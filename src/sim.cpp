@@ -34,6 +34,7 @@
 #include "trade.h"
 
 /* T12 tuning constants (local; the shared ones are in sim.h) */
+#define PHONE_YEAR 1960                 /* M5: houses tier 3 need a telephone (post office) from this year */
 #define SIM_DECLINE_DEMAND_FLOOR (-6)   /* most negative demand term an ACTIVE lot's score sees */
 
 #define EV_RING 64
@@ -313,9 +314,15 @@ static u32 eval_reqs(int zone, int tier, int id, const Ctx *c, int keep, Checkli
             break;
         case REQ_SCHOOL: case REQ_SAUNA: case REQ_HEALTH: case REQ_PHONE: {
             int src;
+            if (req == REQ_PHONE && s_date.year < PHONE_YEAR) {    /* M5: the telephone age starts in 1960 */
+                met = 1;
+                if (cl) { it.why = 2; it.need = PHONE_YEAR; }
+                break;
+            }
             svc = svc_of_req(req);
             src = net_cov_src_map(svc)[c->cell];
             met = src && net_cov_q_map(svc)[c->cell] >= (keep ? 20 : 40);
+            if (req == REQ_PHONE && keep) met = 1;     /* M5: a house that has its line keeps it (the queue is for new ones) */
             if (cl) { it.lot = src; if (src) net_service_load(src, &it.have, &it.need); it.why = (u8)(src ? 1 : 0); }
             break; }
         case REQ_SHOP:
@@ -1008,7 +1015,6 @@ static void month_end_population(void)
     unemployed_people = s_stats.unemployed * 100 / SIM_LABOUR_PCT;
     emig = (unemployed_people + 7) / 8;
     emig = POL_PCT(emig, politics_mod(PM_EMIGRATION_PCT));    /* M1: decrees/events (100 when off) */
-    emig = POL_PCT(emig, trade_emigration_pct());             /* M7: consumer goods programme */
     emig = IMIN(emig, s_stats.population);
     emigrate(emig);
     {
@@ -1288,7 +1294,11 @@ u8 sim_overlay_value(int ovl, int param, int x, int y)
             v = net_water_tile_state(x, y);
             return OVV(OVR_NET, v == NLS_OK ? NETC_CARRIER : v == NLS_SHORT ? NETC_SHORTAGE : NETC_NOT_CONNECTED);
         }
-        if (TILE_ROAD(t) || TER_IS_WATER(TER_TYPE(t))) return OVV_NONE;
+        if (TER_IS_WATER(TER_TYPE(t)) && !TILE_ROAD(t)) {   /* M5: untreated sewage tints the lake (civic.h) */
+            v = civic_lake_pollution(x, y);
+            return v >= CIVIC_LAKE_TINT ? OVV(OVR_BAD, IMIN(7, 2 + v / 24)) : OVV_NONE;
+        }
+        if (TILE_ROAD(t)) return OVV_NONE;
         v = net_water_near(x, y);              /* wet ground: a new building here would get water */
         if (v == NLS_OK) return OVV(OVR_NET, NETC_WET);
         if (v == NLS_SHORT && TILE_ZONE(t)) return OVV(OVR_NET, NETC_SHORTAGE);
@@ -1330,7 +1340,7 @@ u8 sim_overlay_value(int ovl, int param, int x, int y)
         if (TILE_ZONE(t)) return OVV(OVR_ZONE, TILE_ZONE(t));
         if (lot && def_building(g_world.lots[lot].def)->cat == BCAT_ZONE) return OVV(OVR_ZONE, def_building(g_world.lots[lot].def)->zone);
         return OVV_NONE;
-    case OVL_CRIME: case OVL_HEAT: case OVL_SEWAGE:   /* M5 */
+    case OVL_HEAT:                                    /* M5 */
         return civic_overlay_value(ovl, param, x, y);
     case OVL_CATCHMENT: {
         const Lot *pl = world_lot(param);

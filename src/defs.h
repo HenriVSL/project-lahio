@@ -208,9 +208,9 @@ enum { OVL_NONE, OVL_POWER, OVL_WATER, OVL_POLLUTION, OVL_LAND_VALUE, OVL_TRAFFI
        OVL_GROWTH,      /* "why isn't it growing": colour = main unmet requirement */
        OVL_ZONES,       /* zone tints, buildings flat */
        OVL_CATCHMENT,   /* one service building's catchment; parameter = lot id */
-       OVL_CRIME,       /* M5: crime field (civic_overlay_value) */
-       OVL_HEAT,        /* M5: district heating: heated / short / not connected lots, heated pipes */
-       OVL_SEWAGE,      /* M5: treated / untreated homes, lake pollution on the water */
+       OVL_HEAT,        /* M5: district heating: heated / short / not connected lots, heated pipes (a sub-view of
+                           the water overlay: the water key cycles water -> heat -> off); lake pollution is a tint
+                           in OVL_WATER itself */
        OVL_COUNT };
 #define OVL_SVC(svc) (OVL_SVC_FIRE + (svc))
 /* Ramps: gradual ones use levels 0..7; categorical ones use the level as a category. */

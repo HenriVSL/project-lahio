@@ -7,7 +7,6 @@
    industry_lot_reqs (score and checklist). All state is in the structs below and the INDU save chunk. */
 #include "common.h"
 #include "industry.h"
-#include "trade.h"         /* M7: electronics licence */
 #include "world.h"
 #include "net.h"
 #include "fields.h"
@@ -137,8 +136,7 @@ static void kind_shares(int year, int sh[IK_COUNT][3])
 
 static int elec_unlocked(void)
 {
-    return sim_date()->year >= 1965 && (sim_stats()->town_status >= TS_TOWN || sim_settings()->all_unlocked)
-           && (trade_tech(TECH_ELECTRONICS) || sim_settings()->all_unlocked);   /* M7: the licence bought with Western earnings */
+    return sim_date()->year >= 1965 && (sim_stats()->town_status >= TS_TOWN || sim_settings()->all_unlocked);
 }
 
 static int wood_ok(s32 extra) { return W.supply * 100 >= IND_INPUT_GROW_PCT * (W.need + extra); }
