@@ -378,3 +378,45 @@ learned while building. Append your own section when you finish a task.
 - `ICLAMP(load_s32(sf), ...)` read the save up to 3 times (civic.cpp, fire.cpp, complex.cpp, trade.cpp) → every save
   failed to load; earlier T01 hit `ICLAMP(atoi(argv[++i]))`. **M10: replace the macros in common.h with inline functions**
   (int versions; check for non-int uses first) so the class of bug disappears. Until then: never pass calls or ++ to them.
+
+## M6 complexes (done, trimmed per DESIGN 14.7) — src/complex.*, tests/test_complex.cpp, tests/out/complex_*_s7.txt
+- Paper mill "Kuusikosken Paperi Oy": TOOL_BUILD pm_hall, 7 pm_* lots rot 0, 6 months, 5,000 mk, Church village, unique;
+  site: ≥ 2 water tiles on the log-pond (−X) side + road within 2; on rapids own turbines (no grid power). Stages
+  300/600/900 jobs, wood 40/80/120 (industry_set_ext_wood), town 3,000 / 6,000 + 1963 + station, mood > 30. Smell: LV −20
+  within 8. Hooks CPX_DEF_USE in net.cpp/fields.cpp.
+- Patron mood with named reasons; ≥ 70 → a gift per 24 months (row houses, sauna, church, school, villa) placed free with
+  TOOL_GIFT within 12 tiles. Company-town (complex jobs ≥ 40%) → 20% of school/clinic/fire upkeep (BL_COMPANY).
+  3 demand cards + 2 risk events (slump, PM3 modernisation) via politics_queue_event in the random-card slot only.
+- Valtion Metalli: hidden decree (politics on) or Market town 6,000 mk; railway within 2; +300 jobs per decade line;
+  85% East; halves from 1990.
+- APIs: complex_export_east/west, complex_risk_ahead, complex_effluent, politics_set_event_hook. Save CPLX v1.
+- Open (M8/M10): company-town state never reached in 12k bot towns (mill 9-21% of jobs); PM3 not reached (wood competition,
+  no station); rail-less maps can't have VM/station; complex/gift placement not undoable; fixed names.
+
+## M7 trade & eras (done, thin per DESIGN 14.7) — src/era.*, src/trade.*, src/ui_graph.cpp, src/ui_news.cpp, tests/test_trade.cpp
+- Town status by decree DEC_TOWN_RIGHTS (2 authority, auto-offered; sim_grant_status), auto with politics off; ceremony page.
+- Era events: devaluations 1957/1967, 1963 new markka joke (×100 display removed), oil shocks 1973/1979, oil collapse 1986,
+  Jan 1990 end of clearing + newsreel. Newspaper each January (3 scored headlines + filler; pauses; INI newspaper=0 → ticker).
+- Graphs panel 6 tabs (G); Trade panel (T); Newspaper (N). Clearing: 5-year EV_AGREEMENT card (Standard/Modest/Ambitious),
+  goods from Eastern exports, yearly review, balance meter exports − oil (5-year average clearing price), surplus lost,
+  deficit → Eastern relations −, clearing demand ×90%; oil boom ×150% (1974-80). Western = demand multiplier + devaluations.
+  One "Issue a bond" + emergency loan. BL_FUEL ledger line. Landmarks: concert hall, TV tower (Town 1970), ski jump,
+  presidential sauna (sauna diplomacy), friendship statue. Oil plant = coal-plant art alias. Save ERA + TRAD.
+- pipes-with-roads default ON (INI + New Game); `-script` runs start with it off.
+- APIs: trade_set_complex(slot, TG_PAPER|TG_SHIPS, east, west) (M6 not wired yet), era_card_slot_free() (cap not enforced in
+  politics_queue_event), trade_state()->oil_index.
+- **Open before play-test 2:** late-game books negative (planner −101k by 1990: upkeep index 150% + M5/M6 costs + fuel);
+  wire complex exports into trade; enforce the 1-card/year cap centrally; gen_art --check FAIL (M6 module rotations).
+
+## M5 services & housing (done, trimmed) — src/civic.*, src/fire.cpp, tests/test_civic.cpp, tests/out/civic_*.txt
+- Element factory pool 300 × staffing × power × PM_ELEMENTS_PCT per month; Apartments T2/T3 upgrades draw from it.
+  Apartments T3 needs district heating. Police/library/post/health centre = plain capacity services (crime cut; PM_CRIME_PCT
+  is an LV term where police don't cover). Phone requirement for houses T3 back, counted only from 1960.
+- Heat plant = source on the pipe graph (nearest-first, strict cut, spare passed on; LF_HEAT/ZF_HEAT); fuel in upkeep,
+  `civic_set_fuel_pct` (M7 oil). Water key cycles water → heat → off. Sewage works: capacity in residents on the pipe network;
+  untreated → nearest lake cell tint (water overlay), LV "Polluted lake" ≤ −10, happiness ≤ −5.
+- Fires: wooden zone lots outside fire cover (quality < 20), never with disasters off, ≤ 3 spreads, rubble (bulldoze or 6 months).
+  Own RNG stream. rubble0/1 art; 64-zoom headroom 309 KB. Checklist ≤ 5 lines.
+- Deviations: health centre at Town (1972), post office at Church village (1960).
+- **Open: Apartments T2/T3 barely grow (1 T2 block by 1975 in bot towns): upgrade needs R allowance +60/+80 in one band.**
+  Heat overlay with buildings shown draws nothing (flat view works). Overlay count still > 9.

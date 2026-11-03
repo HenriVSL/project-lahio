@@ -1117,9 +1117,8 @@ int complex_lot_line(int lot, int k, char *buf, int size, int *font)
 #define END return 1; }
     LINE(4)
         if (!(c->flags & CF_ACTIVE)) str_printf(buf, size, "%s: under construction", complex_name(c->kind));
-        else if (c->kind == CPX_PAPER) str_printf(buf, size, "%s: stage %d of 3%s", complex_name(c->kind), c->stage,
-                                                  c->stage == 1 ? " (groundwood mill + PM1)" : c->stage == 2 ? " (pulp mill + PM2)" : " (PM3)");
-        else str_printf(buf, size, "%s: %d of %d product lines", complex_name(c->kind), c->stage, VM_LINES);
+        else if (c->kind == CPX_PAPER) str_printf(buf, size, "%s, stage %d of 3", complex_name(c->kind), c->stage);
+        else str_printf(buf, size, "%s, %d of %d lines", complex_name(c->kind), c->stage, VM_LINES);
     END
     if (!(c->flags & CF_ACTIVE)) {
         int hall = hall_lot(c);
@@ -1127,7 +1126,10 @@ int complex_lot_line(int lot, int k, char *buf, int size, int *font)
         return 0;
     }
     LINE(c->output < 60 ? 2 : 0)
-        str_printf(buf, size, "Jobs %d (%d filled) " TEXT_DOT " output %d%%", c->jobs, c->employed, c->output);
+        str_printf(buf, size, "%s" TEXT_DOT " jobs %d (%d filled) " TEXT_DOT " output %d%%",
+                   c->kind == CPX_METAL ? "" : c->stage == 1 ? "Groundwood mill + PM1 " : c->stage == 2 ? "Pulp mill + PM2 " : "PM3, the big machine ",
+                   c->jobs, c->employed, c->output);
+        if (c->kind == CPX_METAL) str_printf(buf, size, "Jobs %d (%d filled) " TEXT_DOT " output %d%%", c->jobs, c->employed, c->output);
     END
     if (c->next) { LINE(3) str_printf(buf, size, "Building %s: ready in %d months", c->kind == CPX_PAPER ? (c->next == 2 ? "PM2" : "PM3") :
                                       s_vmline[ICLAMP(c->next - 1, 0, VM_LINES - 1)], c->build_left); END }

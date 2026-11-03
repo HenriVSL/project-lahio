@@ -86,7 +86,7 @@ typedef struct {
     /* T13 addition (perf experiments) */
     int   max_repairs;           /* -repairs N: non-mandatory chunk renders per frame (0 = renderer default) */
     /* F1 addition */
-    int   pipes_with_roads;      /* INI pipes_with_roads (New Game checkbox): new roads get water pipes (0) */
+    int   pipes_with_roads;      /* INI pipes_with_roads (New Game checkbox): new roads get water pipes (default 1) */
     /* F3 additions (INI) */
     int   zone_view;             /* INI zone_view: persistent zone borders on (V / zone-view key), default 0 */
     int   hints;                 /* INI hints: opening hint chain in the ticker at a new game (default 1) */

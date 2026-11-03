@@ -31,7 +31,7 @@ static IniKey s_keys[] = {
     { "show_fps",         &g_cfg.show_fps },
     { "sfx_volume",       &g_cfg.sfx_volume },       /* T10 (snd.cpp reads the same keys at init) */
     { "ambient_volume",   &g_cfg.ambient_volume },
-    { "pipes_with_roads", &g_cfg.pipes_with_roads }, /* F1: lay water pipes with new roads (default 0) */
+    { "pipes_with_roads", &g_cfg.pipes_with_roads }, /* F1: lay water pipes with new roads (default 1) */
     { "zone_view",        &g_cfg.zone_view },        /* F3: persistent zone borders (V) */
     { "hints",            &g_cfg.hints },            /* F3: opening hints at a new game (0 = off) */
     { "newspaper",        &g_cfg.newspaper },        /* M7: January paper opens (1) or ticker only (0) */
@@ -72,6 +72,7 @@ static void set_defaults(void)
     g_cfg.vsync = 1;
     g_cfg.sfx_volume = 100; g_cfg.ambient_volume = 70;
     g_cfg.hints = 1;                                 /* F3 */
+    g_cfg.pipes_with_roads = 1;                      /* user decision (M7 round): lay pipes with new roads by default */
     g_cfg.newspaper = 1;                             /* M7 */
 }
 

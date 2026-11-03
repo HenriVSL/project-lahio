@@ -2,6 +2,8 @@
 #   camera on the complex.  lahio.exe -load M6_MILL.KAU -script scripts\m6_shots.txt
 wait 1
 shot m6_mill.bmp
+wait 1
 query 95 96
+wait 1
 shot m6_mill_query.bmp
 quit

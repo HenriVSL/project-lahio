@@ -99,7 +99,7 @@ int uinews_key(int vk)
 static int column(int x, int y, int w, int ybot, const char *s, int font)
 {
     char lines[16][96];
-    int n = uix_wrap(s, font, IMIN(w, 430), lines, 16), i;   /* lines hold 95 characters: wrap at <= 430 px */
+    int n = uix_wrap(s, font, IMIN(w, 370), lines, 16), i;   /* lines hold 95 characters: wrap at <= 370 px */
     for (i = 0; i < n && y + 11 <= ybot; i++, y += 11) uix_text(x, y, lines[i], font);
     return y;
 }
@@ -110,7 +110,7 @@ static int story(int x, int y, int w, int ybot, int k, int big)
     char lines[4][96];
     int i, nl;
     if (!n->head[k][0]) return y;
-    nl = uix_wrap(n->head[k], FONT_HEAD, IMIN(w, 430), lines, 3);
+    nl = uix_wrap(n->head[k], FONT_HEAD, IMIN(w, 370), lines, 3);
     for (i = 0; i < nl; i++) {
         if (big) {   /* the main headline: drawn twice, 1 px apart, for a bolder face */
             uix_text_c(x, w, y, lines[i], FONT_HEAD);
@@ -118,7 +118,7 @@ static int story(int x, int y, int w, int ybot, int k, int big)
         } else uix_text(x, y, lines[i], FONT_HEAD);
         y += 14;
     }
-    if (big && w > 430) { x += (w - 430) / 2; w = 430; }    /* the main story's text block is centred */
+    if (big && w > 370) { x += (w - 370) / 2; w = 370; }    /* the main story's text block is centred */
     y = column(x, y, w, ybot, n->deck[k], FONT_BODY_RED) + 2;
     return column(x, y, w, ybot, n->body[k], FONT_BODY_DARK) + 6;
 }
@@ -169,7 +169,8 @@ void uinews_draw(void)
     y += 12; hrule(X + 10, y, W - 20); y += 8;
     yb = Y + H - 18;
     if (s_kind == NEWS_NEWSREEL) {
-        y = story(X + 14, y, W - 28, y + 60, 0, 1);
+        uix_text_c(X + 14, W - 28, y, n->head[0], FONT_HEAD); uix_text_c(X + 15, W - 28, y, n->head[0], FONT_HEAD); y += 14;
+        uix_text_c(X + 14, W - 28, y, n->deck[0], FONT_BODY_RED); y += 15;   /* the lines below carry the story */
         pop_curve(X + 14, y, W - 28, 80); y += 88;
         for (k = 0; k < s_nreel && y + 11 <= yb; k++, y += 11) uix_text_fit(X + 18, y, s_reel[k], FONT_BODY_DARK, W - 36);
     } else {

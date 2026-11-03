@@ -1,0 +1,46 @@
+=== Kaupunki, 1961-03 (step 4737) status Market town era Structural change
+population 5135 (houses 4660, apartments 475), homes 5288 (vacant 153), homeless 0
+jobs 2619 (com 109 lots, ind 51 lots), workers 2567, unemployed 0, jobs filled 98%
+migration: pull 177, immigrated 0 this month, emigrated to Sweden 0 (total 350)
+lots: houses T1/T2/T3 167/296/317, apartments T1 6, commercial T1/T2 108/1, industry T1/T2 45/6, building 0, abandoned 0
+power 1385/1500 (short lots 0), water 1114/1370 (short lots 94)
+service Fire protection: load 5135 / capacity 7500
+service Education: load 1027 / capacity 2000
+service Health care: load 5135 / capacity 7500
+service Public sauna: load 5135 / capacity 12000
+averages (residents): land value 53, pollution 1, happiness 64, fire risk 45, commute 7
+demand R: bar 20, smoothed 137, target 97 = open_jobs +104 migration +177 attract -31 vacant -153
+demand C: bar 63, smoothed 175, target 176 = spending +770 com_cap -594
+demand I: bar 10, smoothed 11, target 5 = clearing +125 western +114 local_need +1540 ind_cap -1774
+money 9415 mk, loan 11699, last month net -163: bl0 +1069 bl1 +558 bl2 +140 bl5 -153 bl6 -408 bl7 -214 bl8 -204 bl12 -210 bl13 -32 bl14 -384 bl15 -40 bl16 -285
+problem 1: req 9, 248 lots, 1479 residents (near 95,94)
+problem 2: req 8, 121 lots, 726 residents (near 75,90)
+problem 3: req 2, 175 lots, 525 residents (near 97,90)
+problem 4: req 3, 6 lots, 475 residents (near 97,62)
+problem 5: req 4, 6 lots, 475 residents (near 97,62)
+problem 6: req 5, 1 lots, 3 residents (near 98,90)
+problem 7: req 12, 109 lots, 0 residents (near 99,92)
+problem 8: req 17, 1 lots, 0 residents (near 107,83)
+=== Kaupunki, 1961-03 (step 4737) status Market town era Structural change
+population 5135 (houses 4660, apartments 475), homes 5288 (vacant 153), homeless 0
+jobs 2619 (com 109 lots, ind 51 lots), workers 2567, unemployed 0, jobs filled 98%
+migration: pull 177, immigrated 0 this month, emigrated to Sweden 0 (total 350)
+lots: houses T1/T2/T3 167/296/317, apartments T1 6, commercial T1/T2 108/1, industry T1/T2 45/6, building 0, abandoned 0
+power 1385/1500 (short lots 0), water 1114/1370 (short lots 94)
+service Fire protection: load 5135 / capacity 7500
+service Education: load 1027 / capacity 2000
+service Health care: load 5135 / capacity 7500
+service Public sauna: load 5135 / capacity 12000
+averages (residents): land value 53, pollution 1, happiness 64, fire risk 45, commute 7
+demand R: bar 20, smoothed 137, target 97 = open_jobs +104 migration +177 attract -31 vacant -153
+demand C: bar 63, smoothed 175, target 176 = spending +770 com_cap -594
+demand I: bar 10, smoothed 11, target 5 = clearing +125 western +114 local_need +1540 ind_cap -1774
+money 9415 mk, loan 11699, last month net -163: bl0 +1069 bl1 +558 bl2 +140 bl5 -153 bl6 -408 bl7 -214 bl8 -204 bl12 -210 bl13 -32 bl14 -384 bl15 -40 bl16 -285
+problem 1: req 9, 248 lots, 1479 residents (near 95,94)
+problem 2: req 8, 121 lots, 726 residents (near 75,90)
+problem 3: req 2, 175 lots, 525 residents (near 97,90)
+problem 4: req 3, 6 lots, 475 residents (near 97,62)
+problem 5: req 4, 6 lots, 475 residents (near 97,62)
+problem 6: req 5, 1 lots, 3 residents (near 98,90)
+problem 7: req 12, 109 lots, 0 residents (near 99,92)
+problem 8: req 17, 1 lots, 0 residents (near 107,83)

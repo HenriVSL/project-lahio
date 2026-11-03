@@ -211,7 +211,9 @@ static void hints_tick(double dt)
 static void after_world_change(void)
 {
     tools_reset();
-    tools_set_pipes_with_roads(g_cfg.pipes_with_roads);   /* F1 preference (INI / New Game); a script may change it */
+    /* F1 preference (INI / New Game, default on since M7); -script runs start with it off like the Mac tests and the
+       recorded bot scripts (a script may switch it with pipes_with_roads on) */
+    tools_set_pipes_with_roads(s_script[0] ? 0 : g_cfg.pipes_with_roads);
     s_ui_tool = -1;
     if (!s_ready) return;
     render_reset();
@@ -478,8 +480,8 @@ int game_script_headless(void)
     NewGameParams p;
     FILE *out;
     int errors;
-    game_default_params(&p);
-    if (!game_new_city(&p)) return 1;
+    if (g_cfg.load_path[0]) { if (!game_load(data_path(g_cfg.load_path))) return 1; }   /* M6: -fast -load SAVE -script FILE */
+    else { game_default_params(&p); if (!game_new_city(&p)) return 1; }
     out = fopen(data_path("script_out.txt"), "w");
     errors = tools_script_run_file(data_path(s_script), out);
     if (out) { sim_dump_report(out); fclose(out); }

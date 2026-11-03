@@ -1,18 +1,79 @@
 # m5_shots.txt - M5 screenshots from the demo town (tests/test_civic.cpp civic_demo_town_save writes M5DEMO.KAU):
 #   VM: lahio.exe -load M5DEMO.KAU -script scripts\m5_shots.txt   (window shows; shots m5_*.bmp next to the exe)
-# A "wait" runs a month at speed 3, so the burning houses are shot first, while still paused.
+# All shots while paused (a "wait" would run a month at speed 3: the fire burns out, placed blocks decline).
 speed 0
 cam 80 80
 shot m5_fire.bmp
-wait 1
+# (frame break: the game runs at most 16 script lines per frame)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 cam 84 78
 shot m5_district.bmp
-wait 1
-overlay 117
+# (frame break: the game runs at most 16 script lines per frame)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+overlay 17
 shot m5_heat.bmp
-wait 1
+# (frame break: the game runs at most 16 script lines per frame)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 overlay 2
 cam 74 74
 shot m5_water_lake.bmp
-wait 1
+# (frame break: the game runs at most 16 script lines per frame)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+overlay 0
 quit
