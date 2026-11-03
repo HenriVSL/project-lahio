@@ -3,10 +3,10 @@
 
    Money is whole markka (common.h). Formulas (T04, tuned by T12: constants and details in budget.cpp and
    docs/BALANCE.md): resident tax per month = sum over homes of residents * (30 + land value) * tier weight
-   * tax_res / 17000 (weights houses 1/4/6, apartments 4/6/9); business tax = workers * (50 + LV) * tax_bus
+   * tax_res / 17000 (weights houses 1/4/6, apartments 4/5/7 (P1; was 4/6/9)); business tax = workers * (50 + LV) * tax_bus
    / 3000; export share = industrial workers / 12; state grant = max(0, 400 - population / 8) (village
    support); upkeep = def upkeep (services x funding %), roads/lines per 10 tiles (bridges x3), all x the
-   upkeep index (100% to 1959, +2.5%/year, max 150%); interest + repayment of the emergency loan on
+   upkeep index (100% to 1959, +2.5%/year, max 130%; P1); interest + repayment of the emergency loan on
    BL_INTEREST. Negative balance for LOAN_AFTER_MONTHS months -> emergency loan (cover the deficit + 10,000
    mk) at LOAN_RATE, none above 40,000 mk of debt. Construction spending is booked immediately (budget_spend);
    taxes, upkeep and grants are booked by budget_month_end(), which the sim calls at the end of each
@@ -68,7 +68,7 @@ int   budget_save(struct SaveFile *sf);        /* chunk "BUDG" */
 int   budget_load(struct SaveFile *sf);
 int   budget_save_ext(struct SaveFile *sf);    /* T10: save: chunk "BUDX" (sub-mk remainders) */
 int   budget_load_ext(struct SaveFile *sf);    /* T10: save: after budget_load; 0 = no chunk */
-/* F3 addition: the upkeep index in % (100 to 1959, +2.5%/year from 1960, cap 150%) for the Budget panel and
+/* F3 addition: the upkeep index in % (100 to 1959, +2.5%/year from 1960, cap 130% (P1)) for the Budget panel and
    Query upkeep lines */
 int   budget_upkeep_index(void);
 

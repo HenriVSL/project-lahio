@@ -307,13 +307,13 @@ int era_sauna_invite(void)
 
 /* ------------------------------------------------------------------ the agreement card */
 /* one card per game year in total (docs/SCOPE_REVIEW.md): the agreement card waits until no card is up and the last
-   one left the desk POL_EVENT_MIN months ago */
+   one left the desk POL_EVENT_MIN months ago (P1: politics_card_slot_free, the one shared gate) */
 int era_card_slot_free(void)
 {
-    return politics_pending_event() < 0 && (s32)sim_date()->total_months - E.last_card_m >= POL_EVENT_MIN;
+    return politics_agreement_slot_free();     /* P1: one shared gate (politics.cpp); E.last_card_m is bookkeeping only */
 }
 void era_queue_card(void) { E.card = era_card_slot_free() && politics_queue_event(EV_AGREEMENT) ? 2 : 1; }
-int  era_card_pending(void) { return E.card != 0 && pol_on(); }
+int  era_card_pending(void) { return E.card == 2 && pol_on(); }   /* P1: the card is ON the desk (1 = waiting for the shared slot: the Ministry signs Standard after TRADE_OFFER_MONTHS) */
 void era_card_answered(int ev, int choice)
 {
     static const int lv[3] = { TL_STANDARD, TL_MODEST, TL_AMBITIOUS };

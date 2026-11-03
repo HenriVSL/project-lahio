@@ -201,7 +201,7 @@ int trade_clearing_pct(void)
     p = p * clearing_boom_at(month_now()) / 100;
     if (T.shortfall_months > 0) p = p * SHORTFALL_PCT / 100;
     if (T.deficit_months >= DEFICIT_AFTER) p = p * DEFICIT_PCT / 100;
-    return (int)ICLAMP(p, 10, 400);
+    return (int)ICLAMP(p, (s64)10, (s64)400);
 }
 int trade_western_pct(void) { return ICLAMP(T.west_index, 50, 150); }
 

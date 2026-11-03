@@ -99,6 +99,7 @@ static int  s_style, s_mods, s_ind1, s_plants, s_tower, s_com_big[4], s_errors, 
 static u32  s_used[4];             /* slot bits used per module */
 static FILE *s_rec;               /* recorded script */
 static int  s_rec_wait;
+static const char *s_rec_tag = "";  /* P1: file-name tag of the recorded script ("_era": the 1955-1990 runs) */
 
 static void rec_flush_wait(void)
 {
@@ -123,8 +124,10 @@ static int cmd(const char *fmt, ...)
     return 1;
 }
 
+static int s_mod_kind[4];          /* P1: the zone each module was built with (dense: module 1 predates 1960 = houses) */
 static int zone_kind(int m)
 {
+    if (m >= 0 && m < s_mods && m < 4) return s_mod_kind[m];
     if (s_style == BS_INDUSTRY && m == 2) return ZONE_INDUSTRY;
     if (s_style == BS_DENSE && sim_date()->year >= 1960 && m >= 1) return ZONE_APARTMENTS;
     return ZONE_HOUSES;
@@ -162,6 +165,7 @@ static void build_module(int m)
     }
     cmd("zone %d %d %d %d %s", ox + 1, oy + 1, ox + 27, oy + 20, zn[kind]);
     if (kind != ZONE_INDUSTRY) cmd("zone %d %d %d %d commercial", ox + 15, oy + 18, ox + 27, oy + 20);
+    if (m < 4) s_mod_kind[m] = kind;
     s_mods++;
 }
 
@@ -269,11 +273,11 @@ static void bot_m5(Money *cash)
         if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 2500;
     }
     if (s_style == BS_DENSE) {
-        if (!s_factory && bot_unlocked(B_ELEMENT_FACTORY) && *cash >= 11000) {
+        if (!s_factory && bot_unlocked(B_ELEMENT_FACTORY) && *cash >= 8000) {   /* P1: factory 5,000 mk */
             int x = M->ind[0] + M->ind[2] - 4, y = M->ind[1] + 1;
             s_factory = 1;
             cmd("bulldoze %d %d %d %d", x, y, x + 2, y + 2);
-            if (cmd("build element_factory %d %d", x, y)) *cash -= 8000;
+            if (cmd("build element_factory %d %d", x, y)) *cash -= 5000;
         }
         for (m = 1; m < s_mods; m++) {           /* apartments T2+ need the water pressure: towers across the block */
             static const u8 tw[3] = { SL_TOWER, SL_TOWER2, SL_TOWER3 };
@@ -283,7 +287,7 @@ static void bot_m5(Money *cash)
         }
         civic_util_summary(UT_HEAT, &us);
         if (bot_unlocked(B_HEAT_PLANT) && *cash >= 6000 && st->lots_tier[ZONE_APARTMENTS][2] > 0 &&
-            (us.supply == 0 || us.lots_short > 0 || us.used * 10 >= us.supply * 9)) {
+            (us.supply == 0 || us.lots_short > 0 || us.used * 10 >= us.supply * 9 || us.lots_unconnected > 0)) {   /* P1: + unheated blocks */
             for (m = 1; m < s_mods; m++) if (zone_kind(m) == ZONE_APARTMENTS && !(s_used[m] & (1u << SL_HEAT))) break;
             if (m < s_mods && build_slot(m, SL_HEAT)) *cash -= 3500;
         }
@@ -784,6 +788,7 @@ static const char *req_short(int req)
 
 /* run state between bal_begin / bal_months / bal_end (one run at a time) */
 static int s_month_no, s_bot_off;
+static int s_prev_pend = -1, s_cards_y, s_campaigns_y;   /* P1: card counter (era tables) */
 static s32 s_opsum, s_prev_pop, s_emig;
 
 static void bal_begin(int style, int map, BalRun *out, int record)
@@ -798,7 +803,7 @@ static void bal_begin(int style, int map, BalRun *out, int record)
     s_month_no = 0; s_bot_off = 0; s_opsum = 0; s_prev_pop = 0; s_emig = 0; s_rural_done = 0; s_factory = 0;
     s_cpx_done = s_cpx_station = s_cpx_gifts = 0;                                    /* M6 */
     s_ctab2 = NULL;
-    if (record && (style == BS_MILL || style == BS_METAL)) {
+    if (record == 1 && (style == BS_MILL || style == BS_METAL)) {
         str_printf(path, sizeof(path), "out/complex_%s_%s.txt", s_style_name[style], s_maps[map].key);
         s_ctab2 = fopen(path, "w");
         if (s_ctab2) fprintf(s_ctab2, "M6 complex bot: style %s, map %s (seed %u); January rows (tests/test_balance.cpp)\n",
@@ -807,27 +812,28 @@ static void bal_begin(int style, int map, BalRun *out, int record)
     memset(s_used, 0, sizeof(s_used)); memset(s_com_big, 0, sizeof(s_com_big));
     bal_new_city(M);
     s_rec = NULL;
+    s_rec_tag = record == 2 ? "_era" : "";      /* P1: record 2 = only the script, as bal_<style>_<map>_era.txt */
     if (record) {
-        str_printf(path, sizeof(path), "out/bal_%s_%s.txt", s_style_name[style], M->key);
+        str_printf(path, sizeof(path), "out/bal_%s_%s%s.txt", s_style_name[style], M->key, s_rec_tag);
         s_rec = fopen(path, "w");
     }
-    if (s_rec) fprintf(s_rec, "# bal_%s_%s.txt - T12 balance bot run, recorded by tests/test_balance.cpp (docs/BALANCE.md).\n"
-                              "#   VM: lahio.exe -seed %u -preset %s -script scripts\\bal_%s_%s.txt -fast   (same city as the Mac run)\n"
-                              "statlog bal_%s_%s.csv\n",
-                       s_style_name[style], M->key, M->seed, mapgen_preset_name(M->preset), s_style_name[style], M->key,
-                       s_style_name[style], M->key);
+    if (s_rec) fprintf(s_rec, "# bal_%s_%s%s.txt - T12 balance bot run, recorded by tests/test_balance.cpp (docs/BALANCE.md).\n"
+                              "#   VM: lahio.exe -seed %u -preset %s -script scripts\\bal_%s_%s%s.txt -fast   (same city as the Mac run)\n"
+                              "statlog bal_%s_%s%s.csv\n",
+                       s_style_name[style], M->key, s_rec_tag, M->seed, mapgen_preset_name(M->preset), s_style_name[style], M->key,
+                       s_rec_tag, s_style_name[style], M->key, s_rec_tag);
     if (style == BS_POLITICS) {         /* M1: politics on from the first month (replays with plain -seed) */
         cmd("pol enable");
         s_pol_signed = s_pol_letters = s_pol_cards = 0;
         str_printf(path, sizeof(path), "out/politics_timeline_%s.txt", M->key);
-        s_ptl = record ? fopen(path, "w") : NULL;
+        s_ptl = record == 1 ? fopen(path, "w") : NULL;
         if (s_ptl) fprintf(s_ptl, "M1 politics timeline: politics bot on map %s (seed %u %s), 1955-1975 (tests/test_balance.cpp)\n"
                                   "yearly rows: approval/weight per bloc (Workers Rural Industrialists Intelligentsia); indented: ticker lines\n",
                            M->key, M->seed, mapgen_preset_name(M->preset));
     }
     s_itab = NULL;
     s_ctab = NULL;
-    if (record) {      /* M5 */
+    if (record == 1) {      /* M5 */
         str_printf(path, sizeof(path), "out/civic_%s_%s.txt", s_style_name[style], M->key);
         s_ctab = fopen(path, "w");
         if (s_ctab) {
@@ -836,7 +842,7 @@ static void bal_begin(int style, int map, BalRun *out, int record)
             fprintf(s_ctab, "\n");
         }
     }
-    if (record) {      /* M3: industry by kind table */
+    if (record == 1) {      /* M3: industry by kind table */
         str_printf(path, sizeof(path), "out/industry_%s_%s.txt", s_style_name[style], M->key);
         s_itab = fopen(path, "w");
         if (s_itab) fprintf(s_itab, "M3 industry by kind: style %s, map %s (seed %u %s); January rows (tests/test_balance.cpp)\n"
@@ -872,6 +878,10 @@ static void bal_months(BalRun *out, int n)
         int months = ++s_month_no;
         sim_run_months(1);
         s_rec_wait++;
+        {   /* P1: cards that went up this month (the politics bot answers at once, so a pending card is new) */
+            int pe = politics_pending_event();
+            if (pe >= 0 && pe != s_prev_pend) { if (pe == EV_CAMPAIGN) s_campaigns_y++; else s_cards_y++; }
+        }
         while (sim_poll_event(&ev)) {
             if (ev.type == SE_STATUS_UP && ev.a < TS_COUNT && out->status_month[ev.a] < 0) out->status_month[ev.a] = months;
             if (ev.type == SE_BANKRUPT_WARN && ev.b == 1) out->loans++;
@@ -915,6 +925,7 @@ static void bal_months(BalRun *out, int n)
             if (!s_bot_off) bot_politics();
             pol_timeline_msgs();
         }
+        s_prev_pend = politics_pending_event();
     }
 }
 
@@ -951,7 +962,7 @@ static void bal_end(BalRun *out)
         save_game(out->style == BS_MILL ? "out/M6_MILL.KAU" : "out/M6_METAL.KAU", &sm);
     }
     if (s_ctab2) { fprintf(s_ctab2, "end: "); complex_dump(s_ctab2); world_dump(s_ctab2, 0, 0, g_world.w - 1, g_world.h - 1); fclose(s_ctab2); s_ctab2 = NULL; }
-    if (s_rec) { fprintf(s_rec, "dump report bal_%s_%s_report.txt\n", s_style_name[out->style], M->key); fclose(s_rec); s_rec = NULL; }
+    if (s_rec) { fprintf(s_rec, "dump report bal_%s_%s%s_report.txt\n", s_style_name[out->style], M->key, s_rec_tag); fclose(s_rec); s_rec = NULL; }
     out->errors = s_errors; out->cmds = s_cmds;
     if (s_itab) {
         fprintf(s_itab, "end: "); industry_dump(s_itab);
@@ -1351,7 +1362,11 @@ TEST(balance_complex_bots)
    landmarks, the newspaper's main headline). */
 #include "trade.h"
 #include "era.h"
-typedef struct { int pop[37], money[37], opnet[37], status[37], landmarks, town_year, max_money, money75, money90; } EraRun;
+typedef struct {
+    int pop[37], money[37], opnet[37], status[37], loan[37], cards[37], a2[37], a3[37];
+    int led[37][BL_COUNT];          /* the previous year's ledger, monthly mean per line */
+    int landmarks, town_year, max_money, min_money, money75, money90, loans, max_cards, neg_years;
+} EraRun;
 
 static int era_buy_landmark(void)
 {
@@ -1369,53 +1384,122 @@ static int era_buy_landmark(void)
     return 0;
 }
 
-static void era_run(int style, EraRun *e, const char *path)
+/* P1: one 1955-1990 run of any bot style on s7 with a full year table (tests/out/balance_era_<style>_s7.txt): pop,
+   money, operating net/month (12-month mean without construction/timber/interest), emergency loan outstanding and
+   loans taken, house tiers, apartment tiers 1/2/3, commercial and industrial lots, status, cards that went up that
+   year (+ election campaign cards), upkeep index, fuel, element output, clearing balance and the January headline.
+   The planner's run is recorded as a replayable script (bal_planner_s7_era.txt) for the VM check. */
+static void era_run(int style, EraRun *e, const char *path, int record)
 {
     BalRun r;
     FILE *f = fopen(path, "w");
     int y, k;
     s32 opsum;
     memset(e, 0, sizeof(*e));
-    bal_begin(style, 0, &r, 0);
-    if (f) fprintf(f, "M7 era run: style %s, map s7, 1955-1990 (tests/test_balance.cpp balance_era_1955_1990); a landmark each\n"
-                      "January the treasury holds its cost + 25,000 mk. Columns: pop, money, operating net/month (12-month mean,\n"
-                      "construction excluded), status, clearing balance/tolerance, credit lost, deficit months, review %%, oil (world /\n"
-                      "clearing), fuel mk/month, landmarks, the January paper's main headline\n", s_style_name[style]);
+    bal_begin(style, 0, &r, record ? 2 : 0);
+    s_prev_pend = -1;
+    e->min_money = g_budget.money;
+    if (f) fprintf(f, "1955-1990 run: style %s, map s7 (tests/test_balance.cpp balance_era_1955_1990); a landmark each January the\n"
+                      "treasury holds its cost + 25,000 mk (above 40,000). opnet = operating net/month (12-month mean, construction,\n"
+                      "timber and loan payments excluded); loan = emergency loan outstanding (taken); cards = event cards that went up\n"
+                      "that year (+ election campaign); upk = upkeep index %%; clearing = balance/tolerance\n"
+                      "year    pop   money opnet   loan(n)  h1/ h2/ h3   a1/a2/a3  com ind st cards upk fuel elem clearing      headline\n",
+                   s_style_name[style]);
     for (y = 0; y <= 35; y++) {
         const TradeState *t = trade_state();
-        e->pop[y] = sim_stats()->population; e->money[y] = g_budget.money; e->status[y] = sim_stats()->town_status;
+        const CityStats *st = sim_stats();
+        e->pop[y] = st->population; e->money[y] = g_budget.money; e->status[y] = st->town_status;
+        e->loan[y] = g_budget.loan; e->cards[y] = s_cards_y;
+        e->a2[y] = st->lots_tier[ZONE_APARTMENTS][2]; e->a3[y] = st->lots_tier[ZONE_APARTMENTS][3];
+        for (k = 0; k < BL_COUNT; k++) e->led[y][k] = g_budget.last_year[k] / 12;
+        if (y && s_cards_y > e->max_cards) e->max_cards = s_cards_y;
         if (g_budget.money > e->max_money) e->max_money = g_budget.money;
-        if (!e->town_year && sim_stats()->town_status >= TS_TOWN) e->town_year = sim_date()->year;
-        if (f) fprintf(f, "%d %6d %7d %+5d %d %6d/%-6d %5d %3d %4d %3d/%-3d %4d %d  %s\n", sim_date()->year, e->pop[y], e->money[y],
-                       e->opnet[y], e->status[y], t->balance, t->tolerance, t->lost_month, t->deficit_months, t->fulfil_pct,
-                       t->oil_index, t->clearing_oil, t->fuel_cost, era_landmark_count(), era_news() ? era_news()->head[0] : "-");
+        if (y >= 20 && g_budget.money < 0) e->neg_years++;
+        if (!e->town_year && st->town_status >= TS_TOWN) e->town_year = sim_date()->year;
+        if (f) fprintf(f, "%d %6d %7d %+5d %6d(%d) %3d/%3d/%3d %4d/%2d/%2d %4d %3d %d %3d+%d %3d %4d %4d %6d/%-6d %s\n",
+                       sim_date()->year, e->pop[y], e->money[y], e->opnet[y], g_budget.loan, g_budget.loans_taken,
+                       st->lots_tier[ZONE_HOUSES][1], st->lots_tier[ZONE_HOUSES][2], st->lots_tier[ZONE_HOUSES][3],
+                       st->lots_tier[ZONE_APARTMENTS][1], e->a2[y], e->a3[y],
+                       st->lots_tier[ZONE_COMMERCIAL][1] + st->lots_tier[ZONE_COMMERCIAL][2] + st->lots_tier[ZONE_COMMERCIAL][3],
+                       st->lots_tier[ZONE_INDUSTRY][1] + st->lots_tier[ZONE_INDUSTRY][2] + st->lots_tier[ZONE_INDUSTRY][3],
+                       e->status[y], s_cards_y, s_campaigns_y, budget_upkeep_index(), t->fuel_cost, civic_elements_output(),
+                       t->balance, t->tolerance, era_news() ? era_news()->head[0] : "-");
+        s_cards_y = s_campaigns_y = 0;
         if (y == 35) break;
         while (era_news_pending()) era_news_seen();
         if (g_budget.money > 40000) era_buy_landmark();
         opsum = 0;
         for (k = 0; k < 12; k++) {
             bal_months(&r, 1);
+            if (g_budget.money < e->min_money) e->min_money = g_budget.money;
             opsum += budget_net_last() - g_budget.last[BL_CONSTRUCTION] - g_budget.last[BL_TIMBER] - g_budget.last[BL_INTEREST];
         }
         e->opnet[y + 1] = opsum / 12;
     }
     e->landmarks = era_landmark_count();
+    e->loans = g_budget.loans_taken;
+    if (style == BS_DENSE) {      /* P1: the 1990 lahio town for the VM's heat-overlay / apartment screenshots */
+        SaveMeta sm;
+        int i;
+        memset(&sm, 0, sizeof(sm));
+        sm.zoom = ZOOM_64;
+        for (i = 1; i < g_world.lot_hi; i++)
+            if (g_world.lots[i].def == B_HEAT_PLANT) { sm.cam_x = g_world.lots[i].x + 1; sm.cam_y = g_world.lots[i].y + 1; break; }
+        save_game("out/P1_DENSE.KAU", &sm);
+    }
     e->money75 = e->money[20]; e->money90 = e->money[35];
     bal_end(&r);
-    if (f) { era_dump(f); fclose(f); }
+    if (f) {
+        fprintf(f, "summary: pop 1965 %d 1975 %d 1990 %d; money 1975 %d 1990 %d min %d max %d; emergency loans %d; negative Januaries"
+                   " 1975-90 %d; apartments T2/T3 1965 %d/%d 1975 %d/%d 1990 %d/%d; most cards in a year %d; town %d; landmarks %d\n",
+                e->pop[10], e->pop[20], e->pop[35], e->money75, e->money90, e->min_money, e->max_money, e->loans, e->neg_years,
+                e->a2[10], e->a3[10], e->a2[20], e->a3[20], e->a2[35], e->a3[35], e->max_cards, e->town_year, e->landmarks);
+        fprintf(f, "ledger (previous year, mk/month):");
+        for (k = 0; k < BL_COUNT; k++) fprintf(f, " %d=%s", k, text_term_label(TERMK_BUDGET, k));
+        fprintf(f, "\n");
+        for (y = 1; y <= 35; y++) {
+            fprintf(f, "%d", 1955 + y);
+            for (k = 0; k < BL_COUNT; k++) fprintf(f, " %5d", e->led[y][k]);
+            fprintf(f, "\n");
+        }
+        {   /* P1: what holds the apartment blocks back (problem bits of the T1/T2 blocks at the end) */
+            int i, q, cnt[REQ_COUNT], n = 0;
+            memset(cnt, 0, sizeof(cnt));
+            for (i = 1; i < g_world.lot_hi; i++) {
+                const Lot *l = &g_world.lots[i];
+                const BuildingDef *d = def_building(l->def);
+                if (l->def == B_NONE || d->cat != BCAT_ZONE || d->zone != ZONE_APARTMENTS || d->tier >= 3) continue;
+                n++;
+                for (q = 0; q < REQ_COUNT; q++) if (l->problems & (1u << q)) cnt[q]++;
+            }
+            fprintf(f, "apartment blocks below T3 at the end: %d; unmet next-tier items:", n);
+            for (q = 0; q < REQ_COUNT; q++) if (cnt[q]) fprintf(f, " %s %d", req_short(q), cnt[q]);
+            fprintf(f, "\n");
+        }
+        civic_dump(f);
+        era_dump(f);
+        fclose(f);
+    }
 }
 
 TEST(balance_era_1955_1990)
 {
-    static EraRun pl, po;
-    era_run(BS_PLANNER, &pl, "out/balance_era_planner_s7.txt");
-    era_run(BS_POLITICS, &po, "out/balance_era_politics_s7.txt");
-    test_log("planner: pop 1965 %d 1975 %d 1990 %d, money 1975 %d 1990 %d (max %d), town %d, landmarks %d",
-             pl.pop[10], pl.pop[20], pl.pop[35], pl.money75, pl.money90, pl.max_money, pl.town_year, pl.landmarks);
-    test_log("politics: pop 1965 %d 1975 %d 1990 %d, money 1975 %d 1990 %d (max %d), town %d, landmarks %d",
-             po.pop[10], po.pop[20], po.pop[35], po.money75, po.money90, po.max_money, po.town_year, po.landmarks);
-    CHECK(pl.town_year > 0 && po.town_year > 0);             /* town status reached (by decree with politics on) */
-    CHECK(pl.pop[35] * 10 >= pl.pop[20] * 8);                /* no collapse after the oil shock or 1990 */
-    CHECK(po.pop[35] * 10 >= po.pop[20] * 8);
-    CHECK(pl.money90 < 150000 && po.money90 < 150000);       /* no runaway money pile by 1990 */
+    static EraRun er[5];
+    static const int styles[5] = { BS_PLANNER, BS_POLITICS, BS_DENSE, BS_MILL, BS_METAL };
+    char path[96];
+    int k;
+    for (k = 0; k < 5; k++) {
+        const EraRun *e = &er[k];
+        str_printf(path, sizeof(path), "out/balance_era_%s_s7.txt", s_style_name[styles[k]]);
+        era_run(styles[k], &er[k], path, styles[k] == BS_PLANNER);
+        test_log("%-8s: pop 1965 %5d 1975 %5d 1990 %5d | money 1975 %6d 1990 %7d min %6d max %6d | loans %d neg %d |"
+                 " apt T2/T3 1965 %d/%d 1975 %d/%d 1990 %d/%d | cards max %d | town %d landmarks %d",
+                 s_style_name[styles[k]], e->pop[10], e->pop[20], e->pop[35], e->money75, e->money90, e->min_money, e->max_money,
+                 e->loans, e->neg_years, e->a2[10], e->a3[10], e->a2[20], e->a3[20], e->a2[35], e->a3[35], e->max_cards,
+                 e->town_year, e->landmarks);
+        CHECK(e->pop[35] * 10 >= e->pop[20] * 8);           /* no collapse after the oil shocks or 1990 */
+        CHECK(e->money90 < 150000);                         /* no runaway money pile by 1990 */
+        CHECK(e->max_cards <= 1);                           /* P1: <= 1 card per game year (campaign cards apart) */
+    }
+    CHECK(er[0].town_year > 0 && er[1].town_year > 0);      /* town status reached (by decree with politics on) */
 }

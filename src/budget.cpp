@@ -16,17 +16,22 @@
    resident ~0.27 (LV 55). Cottage villages live on grants and business tax; services pay back through
    upgrades (BALANCE.md). */
 static const int s_tax_weight[2][4] = { { 0, 1, 4, 6 },      /* houses T1..T3 */
-                                        { 0, 4, 6, 9 } };    /* apartments T1..T3 */
-/* Upkeep index (wage/price level, %): 100 until UPKEEP_INFL_FROM, then +UPKEEP_INFL_PCT per year (1970:
-   137%, capped at 150% from 1980). Applied to service, road, network, utility and special upkeep: the
-   welfare-state years get dearer, so a built-out town doesn't pile up money (T04 note) unless it keeps
+                                        { 0, 4, 5, 7 } };    /* apartments T1..T3 (P1: was 4/6/9 - with T2/T3 flats now
+                                                                growing on their own, a precast lahio paid 1.5x a tier-3
+                                                                house per resident and dense towns piled up 180k+ by 1975) */
+/* Upkeep index (wage/price level, %): 100 until UPKEEP_INFL_FROM, then +UPKEEP_INFL_PCT per year (1970: 125%), capped
+   at UPKEEP_INFL_CAP (P1: 130% from 1972; was 150% from 1980). Applied to service, road, network, utility and special
+   upkeep: the welfare-state years get dearer, so a built-out town doesn't pile up money (T04 note) unless it keeps
    developing (tiers, land value) or raises taxes. */
 #define UPKEEP_INFL_FROM 1960
 #define UPKEEP_INFL_PCT  25          /* per mille per year */
+#define UPKEEP_INFL_CAP  130         /* P1: was 150. With M5-M7's services, fuel and landmarks a built-out 1980s town at
+                                        150% lost ~900 mk a month (planner bot -101k by 1990, 3 emergency loans); at 130%
+                                        it runs about even and the oil-shock fuel bill (1974-86) is what tips it negative */
 static int upkeep_index(void)
 {
     int y = sim_date()->year - UPKEEP_INFL_FROM;
-    return y <= 0 ? 100 : IMIN(150, 100 + y * UPKEEP_INFL_PCT / 10);
+    return y <= 0 ? 100 : IMIN(UPKEEP_INFL_CAP, 100 + y * UPKEEP_INFL_PCT / 10);
 }
 int budget_upkeep_index(void) { return upkeep_index(); }    /* F3: shown in the Budget panel and Query */
 #define RES_TAX_LV_BASE 30

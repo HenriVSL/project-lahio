@@ -204,7 +204,12 @@ int  politics_pending_event(void);         /* EV_* or -1 */
 int  politics_event_age(void);             /* months pending */
 int  politics_event_count(int ev);         /* times answered (sauna: diminishing returns) */
 int  politics_choose(int choice);          /* answer the pending card */
-int  politics_queue_event(int ev);         /* M6/M7/tests: put a card up now (0 if one is pending) */
+int  politics_queue_event(int ev);         /* M6/M7: put a card up now if the shared card slot is free (P1: the ONE gate
+                                              for every source: <= 1 card per game year, DESIGN 14.7); 0 = refused */
+int  politics_card_slot_free(void);        /* P1: a random/patron card may go up now: nothing pending, >= 12 months since
+                                              the last card, the 12-24 month timer has run out, no election within 6 months */
+int  politics_agreement_slot_free(void);   /* P1: the same without the random timer (the 5-yearly agreement card) */
+int  politics_force_event(int ev);         /* P1: tests / `pol event` debug command: bypass the rhythm (still 1 pending) */
 void politics_choice_fx(int ev, int choice, PolFx *out);   /* effective effects (sauna scaling) */
 int  politics_months_to_event(void);
 /* meters (M3/M7 trade hooks) */

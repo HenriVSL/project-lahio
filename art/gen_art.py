@@ -1345,6 +1345,10 @@ def parse_defs():
     for mm in re.finditer(r'#define\s+(\w+)\(([^)]*)\)((?:[^\n]*\\\n)*[^\n]*)', c_nc):
         macros[mm.group(1)] = ([a.strip() for a in mm.group(2).split(',')], mm.group(3).replace('\\\n', ' '))
     flagv = dict((k, int(v, 16)) for k, v in re.findall(r'(BDF_\w+)\s*=\s*(0x[0-9a-fA-F]+)', h))
+    # P1: object-like flag macros in defs.cpp (e.g. M6's `#define MOD (BDF_MODULE | BDF_NO_ROTATE)` for the fixed-
+    # orientation complex modules) - without this their BDF_NO_ROTATE was lost and r1-r3 counted as missing
+    for om in re.finditer(r'#define\s+(\w+)\s+\(?\s*((?:BDF_\w+\s*\|?\s*)+)\)?\s*$', c_nc, re.M):
+        flagv[om.group(1)] = sum(flagv.get(t.strip(), 0) for t in om.group(2).split('|') if t.strip())
     blk = re.search(r'g_bdefs\[B_COUNT\]\s*=\s*\{(.*?)\n\};', c_nc, re.S).group(1)
     rows = _split_top(blk)
     B = []

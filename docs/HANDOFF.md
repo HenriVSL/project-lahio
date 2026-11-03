@@ -420,3 +420,32 @@ learned while building. Append your own section when you finish a task.
 - Deviations: health centre at Town (1972), post office at Church village (1960).
 - **Open: Apartments T2/T3 barely grow (1 T2 block by 1975 in bot towns): upgrade needs R allowance +60/+80 in one band.**
   Heat overlay with buildings shown draws nothing (flat view works). Overlay count still > 9.
+
+## P1 pre-play-test integration (done, feature freeze) — tests/test_p1.cpp, tests/test_balance.cpp era runs, scripts/p1_*.txt
+- **Apartments T2/T3** (sim.cpp `apt_upgrade_ok`): upgrades of existing blocks follow their own next-tier checklist
+  (tower, school, elements in this month's pool; heat + clean air + LV for T3), a full block and the site score with a
+  negative R bar ignored, guarded by town vacancy <= 4% (min 120); no R allowance needed. Element factory Market town 1962,
+  5,000 mk (was Town 1960, 8,000); apartments T3 LV 40 (was 50). Dense bot s7: first T2 1966, T3 1967; 15 T2 / 19 T3 by 1975.
+  Bot fix: modules keep the zone they were built with (dense module 1 = houses); heat plant also for unheated blocks.
+- **Economy**: upkeep index cap 130% (1972; was 150% 1980); apartment tax weights 4/5/7 (was 4/6/9). 1955-1990 s7 runs
+  (BALANCE.md 8): planner/politics/metal end 7-13k with 0 loans, -130..-140 mk/month in the oil years; dense 107k, mill 64k.
+  Early pacing and the 20-year milestones unchanged.
+- **Complex exports -> trade**: complex_month calls `trade_set_complex(i, TG_PAPER | TG_SHIPS, east, west)` every month;
+  the goods list / clearing meter / Western total now include paper and "ships and paper machines".
+- **One card per game year, centrally**: `politics_queue_event` gates every source (random, patron, risk, agreement):
+  nothing pending, >= 12 months since the last card left the desk (POLI v2 `card_since`), no election within 6 months;
+  random/patron cards also wait for the 12-24 month timer; the agreement card only needs the gap (if it can't go up within
+  TRADE_OFFER_MONTHS the Ministry signs Standard, era_card_pending = card on the desk). The campaign card is exempt (part of
+  the election). `politics_force_event` for tests and `pol event`. Politics bot: <= 1 card/year + campaign, ~24 in 35 years.
+- **gen_art --check PASS**: the checker now expands object-like flag macros (`#define MOD (BDF_MODULE | BDF_NO_ROTATE)`), so
+  the fixed-orientation M6 modules need r0 only. VRAM unchanged (64-zoom 9,521 KB, headroom 309 KB).
+- **Overlays**: the panel lists 9 + "No overlay": Power, Water and heat (sub-views Water pipes / District heating; sewage =
+  lake tint), Pollution, Land value, Traffic, Fire risk, Services (sub-views: the 7 service covers), Why not growing?,
+  Zones. Number keys unchanged. The heat overlay draws in both modes (VM shots + `dump ovl17` = 413 tiles = Mac); the M5
+  "draws nothing" was not reproducible (the dither tint is invisible in a downscaled screenshot - crop it).
+- **common.h**: IMIN/IMAX/ICLAMP/IABS are inline overloads (int, s64, u32, double); mixed s64/int calls are ambiguous by
+  design (5 casts added: traffic.cpp x3, trade.cpp, ui_graph.cpp). The macro bug class is gone.
+- New script command `dump ovlN FILE` (text map of overlay N's values).
+- VM B: VC6 /W3 clean; town1 -fast = Mac (pop 4,963, money 1,522, world 756ae986); bal_planner_s7_era.txt 1955-1990 = Mac
+  (pop 11,696, money 12,896); BENCH20K 59.81 fps (1 s min 59.0, 19 missed frames, worst 25.2 ms; speed 3 keeps up; phase 9
+  max 15.3 ms); -test menu 800 + 640 and -test ui 800 pass; 1024 starts 32-zoom only with zoom-in disabled.

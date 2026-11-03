@@ -1219,6 +1219,17 @@ int tools_script_line(const char *line, int *wait_months, FILE *out)
             else if (n >= 2 && str_ieq(t[1], "industry")) industry_dump(f);    /* M3 */
             else if (n >= 2 && str_ieq(t[1], "complex")) complex_dump(f);      /* M6 */
             else if (n >= 2 && str_ieq(t[1], "civic")) civic_dump(f);          /* M5 */
+            else if (n >= 2 && !strncmp(t[1], "ovl", 3)) {                    /* P1: `dump ovl17 FILE` = overlay values */
+                int ov = atoi(t[1] + 3), x, y;
+                fprintf(f, "overlay %d values (. none, else the level / category digit)\n", ov);
+                for (y = 0; y < g_world.h; y++) {
+                    for (x = 0; x < g_world.w; x++) {
+                        u8 v = sim_overlay_value(ov, 0, x, y);
+                        fputc(v == OVV_NONE ? '.' : '0' + OVV_LEVEL(v), f);
+                    }
+                    fputc('\n', f);
+                }
+            }
             else sim_dump_report(f);
             fflush(f);
         }

@@ -234,17 +234,20 @@ TEST(trade_agreement_card_and_balance)
         s32 pre = b0 + t->exports_east - t->oil_town - t->oil_plants;
         CHECK_EQ(lost, pre > t->tolerance ? (pre - t->tolerance + 3) / 4 : 0);
     }
-    /* politics on: the card, choose Ambitious */
+    /* politics on: the card, choose Ambitious. P1: one card a year across all sources (politics_queue_event's gate):
+       the agreement card needs 12 months since the last card left the desk, otherwise the Ministry signs Standard
+       after TRADE_OFFER_MONTHS - so the first period whose card finds the slot open is used */
     town(1, 1955, 5);
     politics_meter_add(METER_EAST, 30);
-    while (sim_date()->year < 1961) {
+    lv = 0;
+    while (sim_date()->year < 1980 && politics_pending_event() != EV_AGREEMENT) {
         months(1);
         if (politics_pending_event() >= 0 && politics_pending_event() != EV_AGREEMENT) politics_choose(0);
     }
-    if (politics_pending_event() != EV_AGREEMENT && politics_pending_event() >= 0) politics_choose(0);
-    months(1);
-    test_log("1961 on: pending card %d, offer %d", politics_pending_event(), a->offer);
+    test_log("on: agreement card up %d-%02d (period %d-%d), pending card %d, offer %d", sim_date()->year, sim_date()->month + 1,
+             a->from_year, a->to_year, politics_pending_event(), a->offer);
     CHECK_EQ(politics_pending_event(), EV_AGREEMENT);
+    politics_meter_add(METER_EAST, 30);
     lv = trade_clearing_pct();
     CHECK(politics_choose(2));
     test_log("Ambitious: level %d, clearing pct %d -> %d, goods list %d", a->level, lv, trade_clearing_pct(), a->quota_total);

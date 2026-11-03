@@ -117,7 +117,7 @@ TEST(f3_yard_only_where_no_2x2_fits)
 TEST(f3_upkeep_index)
 {
     static const int years[5] = { 1955, 1959, 1960, 1970, 1985 };
-    static const int want[5] = { 100, 100, 100, 125, 150 };
+    static const int want[5] = { 100, 100, 100, 125, 130 };   /* P1: cap 130% (was 150%) */
     int k;
     SimSettings s;
     static int inited;

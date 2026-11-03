@@ -2020,28 +2020,66 @@ static void legend(int x, int y, int w, int ovl)
     txt_r(x + 7 * 34 + 32, y + 18, hi, FONT_BODY_GREY);
 }
 
-static void panel_overlays(int x, int y, int w, int h)
+/* P1 (DESIGN 14.7 "<= 9 overlays"): the list shows 9 overlays + "No overlay". District heating is a sub-view of
+   Water (also the water key: water -> heat -> off) and the 7 service covers are sub-views of one "Services" entry
+   (fire, schools, health, saunas, police, libraries, post); a row of sub-choices appears under the list when one of
+   the two groups is active. Sewage is the lake tint inside the water view. */
+static int s_svc_ovl_last = OVL_SVC_SCHOOL;
+static int ovl_is_svc(int o) { return o >= OVL_SVC_FIRE && o <= OVL_SVC_POST; }
+static const char *ovl_icon(int k, char *ic, int size)
+{
+    if (k == OVL_HEAT) { str_copy(ic, "b_heat_plant", size); return ic; }          /* M5: the building icon (13x13 too) */
+    if (ovl_is_svc(k)) { str_printf(ic, size, "o_svc_%s", g_services[k - OVL_SVC_FIRE].key); return ic; }
+    str_printf(ic, size, "o_%s", k == OVL_NONE ? "none" : k == OVL_POWER ? "power" : k == OVL_WATER ? "water" :
+               k == OVL_POLLUTION ? "pollution" : k == OVL_LAND_VALUE ? "land_value" : k == OVL_TRAFFIC ? "traffic" :
+               k == OVL_FIRE_RISK ? "fire_risk" : k == OVL_GROWTH ? "growth" : k == OVL_ZONES ? "zones" : "none");
+    return ic;
+}
+
+static int ovl_radio(int cx, int cy, int cw, int k, int on, const char *label)
 {
     char ic[32];
-    int k, n = 0, cw = (w - 12) / 2, yy = y + 6, idx;
+    int idx = ctl_add(cx, cy, cw - 4, 16, CK_OVL, k, 0);
+    if (ctl_hot(idx)) draw3h(&s3_flyhover, cx - 2, cy - 2, cw - 2);
+    spr(S.radio[on ? 1 : 0][ctl_hot(idx) ? 1 : 0], cx, cy + 1);
+    spr(icon_id(ovl_icon(k, ic, sizeof(ic)), 0), cx + 15, cy);
+    txt_fit(cx + 32, cy + 1, label, FONT_BODY_DARK, cw - 36);
+    return idx;
+}
+
+static void panel_overlays(int x, int y, int w, int h)
+{
+    static const int menu[10] = { OVL_NONE, OVL_POWER, OVL_WATER, OVL_POLLUTION, OVL_LAND_VALUE, OVL_TRAFFIC,
+                                  OVL_FIRE_RISK, OVL_SVC_SCHOOL, OVL_GROWTH, OVL_ZONES };
+    char ic[48];
+    int k, n = 0, cw = (w - 12) / 2, yy = y + 6, cur = s_ovl_local;
+    int water = cur == OVL_WATER || cur == OVL_HEAT, svc = ovl_is_svc(cur);
     UNUSED(h);
-    for (k = 0; k < OVL_COUNT; k++) {
-        int cx, cy;
-        if (k == OVL_CATCHMENT) continue;              /* opened from a service building's query */
-        cx = x + 6 + (n % 2) * cw; cy = yy + (n / 2) * 17;
-        idx = ctl_add(cx, cy, cw - 4, 16, CK_OVL, k, 0);
-        if (ctl_hot(idx)) draw3h(&s3_flyhover, cx - 2, cy - 2, cw - 2);
-        spr(S.radio[s_ovl_local == k ? 1 : 0][ctl_hot(idx) ? 1 : 0], cx, cy + 1);
-        str_printf(ic, sizeof(ic), "o_%s", k == OVL_NONE ? "none" : k == OVL_POWER ? "power" : k == OVL_WATER ? "water" :
-                   k == OVL_POLLUTION ? "pollution" : k == OVL_LAND_VALUE ? "land_value" : k == OVL_TRAFFIC ? "traffic" :
-                   k == OVL_FIRE_RISK ? "fire_risk" : k == OVL_GROWTH ? "growth" : k == OVL_ZONES ? "zones" : "none");
-        if (k == OVL_HEAT) str_copy(ic, "b_heat_plant", sizeof(ic));          /* M5: the building icon (13x13 too) */
-        if (k >= OVL_SVC_FIRE && k <= OVL_SVC_POST) str_printf(ic, sizeof(ic), "o_svc_%s", g_services[k - OVL_SVC_FIRE].key);
-        spr(icon_id(ic, 0), cx + 15, cy);
-        txt_fit(cx + 32, cy + 1, text_overlay_name(k), FONT_BODY_DARK, cw - 36);
+    if (svc) s_svc_ovl_last = cur;
+    for (k = 0; k < 10; k++) {
+        int o = menu[k], on = o == cur;
+        const char *label = text_overlay_name(o);
+        if (o == OVL_WATER) { on = water; label = "Water and heat"; }
+        if (o == OVL_SVC_SCHOOL) { o = s_svc_ovl_last; on = svc; label = "Services"; }
+        ovl_radio(x + 6 + (n % 2) * cw, yy + (n / 2) * 17, cw, o, on, label);
         n++;
     }
-    yy += ((n + 1) / 2) * 17 + 4;
+    yy += ((n + 1) / 2) * 17 + 2;
+    if (water || svc) {                                /* the group's sub-views */
+        int m = 0;
+        draw9(&s9_inset, x + 6, yy, w - 12, water ? 6 + 17 : 6 + 4 * 17, COL(UI_COL_PAPER_DK));
+        yy += 4;
+        if (water) {
+            ovl_radio(x + 10, yy, cw - 2, OVL_WATER, cur == OVL_WATER, "Water pipes");
+            ovl_radio(x + 10 + cw - 2, yy, cw - 2, OVL_HEAT, cur == OVL_HEAT, text_overlay_name(OVL_HEAT));
+            yy += 17;
+        } else {
+            for (k = OVL_SVC_FIRE; k <= OVL_SVC_POST; k++, m++)
+                ovl_radio(x + 10 + (m % 2) * (cw - 2), yy + (m / 2) * 17, cw - 2, k, cur == k, text_overlay_name(k));
+            yy += ((m + 1) / 2) * 17;
+        }
+        yy += 4;
+    }
     checkbox(x + 6, yy, s_show_buildings, "Show buildings (Tab)", CHK_BUILDINGS);
     yy += 16;
     rule(x + 6, yy, w - 12); yy += 6;

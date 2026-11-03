@@ -1,0 +1,78 @@
+# p1_heat.txt - P1: the heat overlay (with buildings shown and flat) on the 1990 lahio town of the dense bot
+#   (tests/test_balance.cpp balance_era_1955_1990 writes tests/out/P1_DENSE.KAU).
+#   VM: lahio.exe -load tests\out\P1_DENSE.KAU -script scripts\p1_heat.txt -log
+speed 0
+dump ovl17 p1_heat_ovl.txt
+overlay 117
+shot p1_heat_b.bmp
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+overlay 17
+shot p1_heat_f.bmp
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+overlay 102
+shot p1_water_b.bmp
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+overlay 0
+shot p1_town.bmp
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+quit

@@ -423,7 +423,7 @@ TEST(politics_event_choices_apply_effects)
     Money m0;
     CHECK_EQ(town1(1, 2), 0);
     while (politics_pending_event() >= 0) politics_choose(0);
-    CHECK(politics_queue_event(EV_DELEGATION));
+    CHECK(politics_force_event(EV_DELEGATION));
     CHECK(!politics_queue_event(EV_SAUNA));          /* one card at a time */
     e0 = politics_meter(METER_EAST); m0 = g_budget.money;
     CHECK(politics_choose(0));
@@ -434,12 +434,12 @@ TEST(politics_event_choices_apply_effects)
     /* sauna diplomacy: diminishing returns */
     politics_choice_fx(EV_SAUNA, 0, fx);
     CHECK(fx_has(fx, FX_METER, METER_EAST, 12 * 2 / (2 + politics_event_count(EV_SAUNA))));
-    for (ev = 0; ev < 3; ev++) { CHECK(politics_queue_event(EV_SAUNA)); CHECK(politics_choose(0)); }
+    for (ev = 0; ev < 3; ev++) { CHECK(politics_force_event(EV_SAUNA)); CHECK(politics_choose(0)); }
     politics_choice_fx(EV_SAUNA, 0, fx);
     test_log("sauna after 3 visits: East +%d (first visit +12)", fx[1].value);
     CHECK(fx_has(fx, FX_METER, METER_EAST, 12 * 2 / 5));
     /* timed effects: strike, let it run -> industrial demand -30% for 3 months */
-    CHECK(politics_queue_event(EV_STRIKE));
+    CHECK(politics_force_event(EV_STRIKE));
     CHECK(politics_choose(1));
     CHECK_EQ(politics_mod(PM_IND_DEMAND_PCT), 70);
     months(3);
@@ -450,12 +450,12 @@ TEST(politics_event_choices_apply_effects)
     months(POL_DECREE_GAP);
     while (politics_pending_event() >= 0) politics_choose(0);
     CHECK(politics_sign(DEC_BEER));
-    CHECK(politics_queue_event(EV_TEMPERANCE));
+    CHECK(politics_force_event(EV_TEMPERANCE));
     CHECK(politics_choose(1));
     CHECK(!politics_decree_active(DEC_BEER));
     /* an unanswered card resolves itself (first choice) after a year */
     k = politics_event_count(EV_TV);
-    CHECK(politics_queue_event(EV_TV));
+    CHECK(politics_force_event(EV_TV));
     months(POL_EVENT_EXPIRE - 1);
     CHECK_EQ(politics_pending_event(), EV_TV);
     months(1);
@@ -569,9 +569,9 @@ TEST(politics_determinism_and_save_roundtrip)
     politics_authority_add(20);
     CHECK(politics_sign(DEC_RENT));
     months(14);
-    if (politics_pending_event() < 0) politics_queue_event(EV_STRIKE);
+    if (politics_pending_event() < 0) politics_force_event(EV_STRIKE);
     CHECK(politics_choose(0));
-    CHECK(politics_queue_event(EV_SAUNA));          /* a pending card, timed effects and a decree in the save */
+    CHECK(politics_force_event(EV_SAUNA));          /* a pending card, timed effects and a decree in the save */
     ph0 = politics_hash();
     sf = snap();
     months(30);
@@ -596,9 +596,9 @@ TEST(politics_determinism_and_save_roundtrip)
     politics_authority_add(20);
     CHECK(politics_sign(DEC_RENT));
     months(14);
-    if (politics_pending_event() < 0) politics_queue_event(EV_STRIKE);
+    if (politics_pending_event() < 0) politics_force_event(EV_STRIKE);
     CHECK(politics_choose(0));
-    CHECK(politics_queue_event(EV_SAUNA));
+    CHECK(politics_force_event(EV_SAUNA));
     months(30);
     c = sim_hash();
     test_log("politics hash at save %08x, after load %08x; re-save identical %d (%d/%d bytes); 30 months later: run 1 %08x,"

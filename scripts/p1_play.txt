@@ -1,0 +1,83 @@
+# p1_play.txt - P1 pre-play-test check: the first minute of a new town in real time (speed 2), 800x600 shots.
+#   VM: lahio.exe -seed 7 -preset lakeland -script scripts\p1_play.txt -log   (shots p1_play_*.bmp next to the exe)
+#   The opening of scripts/town1.txt, then a few months at speed 2 with shots, the water/heat and services overlays.
+speed 0
+shot p1_play_0.bmp
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+townhall
+# west residential grid: streets y = 73 79 85 91, x = 74 83 93
+road 73 73 101 73 street
+road 74 79 101 79 street
+road 74 85 101 85 street
+road 74 91 101 91 street
+road 74 73 74 91 street
+road 83 73 83 95 street
+road 93 73 93 95 street
+# east: industry streets
+road 103 82 116 82 street
+road 103 88 116 88 street
+road 103 95 116 95 street
+road 103 98 116 98 gravel
+road 110 82 110 98 street
+# power: coal plant south of the industry, trunk on the national road, lines along the streets
+build coal_plant 107 99
+power 102 98 106 98
+power 102 74 102 98
+power 74 73 102 73
+power 74 79 102 79
+power 74 85 102 85
+power 74 91 102 91
+# water: pumping station on the west lake shore + wells
+# F1: pipes under every second housing street (buildings and zoned land carry water through the blocks;
+#     industry needs no water in M1), a short pipe from the pumping station into the zone; the station needs
+#     power (a line on the street tile beside it)
+pipe 73 73 75 73
+pipe 74 79 101 79
+pipe 74 85 101 85
+power 73 73 73 73
+build pump 73 72
+build well 75 92
+build well 85 92
+# service sites first
+build school 84 80
+build sauna 75 80
+build fire_station 94 80
+build clinic 94 86
+build sauna 84 86
+# zones
+zone 75 71 98 95 houses
+zone 99 71 101 95 commercial
+zone 103 71 112 80 commercial
+zone 103 83 116 100 industry
+speed 3
+speed 2
+wait 2
+shot p1_play_1.bmp
+wait 4
+shot p1_play_2.bmp
+overlay 102
+wait 1
+shot p1_play_3.bmp
+overlay 108
+wait 1
+shot p1_play_4.bmp
+overlay 0
+wait 3
+shot p1_play_5.bmp
+wait 1
+quit

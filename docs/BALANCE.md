@@ -178,3 +178,36 @@ only). A 9,000 town's busiest street went from level 17 to ~85-95 of 128; 1975 t
   to tier-1 houses being bulldozed.
 - Keep the bot test: add a "politics on" style and assert that decrees never make the planner's books
   structurally negative at 9%.
+
+## 8. P1 pre-play-test pass (2026-11-03): 1955-1990 runs
+
+`make -f tests/Makefile.mac T=balance_era` (~5 s) plays planner, politics, dense, mill and metal 1955-1990 on s7 and
+writes `tests/out/balance_era_<style>_s7.txt`: a yearly row (pop, money, operating net, emergency loan outstanding
+(taken), house tiers, **apartment tiers 1/2/3**, commercial / industrial lots, status, cards that went up that year +
+campaign cards, upkeep index, fuel, element output, clearing balance, headline), the yearly ledger per line, the
+apartment blockers at the end and the civic/era/trade dumps. The planner's run is also recorded as
+`scripts/bal_planner_s7_era.txt` (VM replay = Mac: 1990 pop 11,696, money 12,896). The dense run saves its 1990 town as
+`tests/out/P1_DENSE.KAU` (heat-overlay / lahio screenshots).
+
+| constant | old | new | why |
+|---|---|---|---|
+| Apartments T2/T3 upgrade (sim.cpp `apt_upgrade_ok`) | needed R allowance >= +60/+80 in one band | own checklist + full block + site score (a negative R bar doesn't count) + town vacancy <= 4% (min 120); the element pool is the cap | late towns never have that allowance: 1 T2 block by 1975 |
+| Element factory (defs.cpp) | Town, 1960, 8,000 mk | Market town, 1962, 5,000 mk | towns below 10,000 (most dense towns) never got one |
+| Apartments T3 land value | 50 | 40 | towers stood on cheap edge land; heat is the real T3 gate |
+| Upkeep index cap (budget.cpp `UPKEEP_INFL_CAP`) | 150% (1980) | 130% (1972) | M5-M7 costs + fuel: built-out planner lost ~900 mk/month in the 1980s (-101k, 3 loans) |
+| Apartment tax weights T1/T2/T3 | 4/6/9 | 4/5/7 | with flats now upgrading, dense towns piled up 180k+ by 1975 |
+
+Results (s7, Normal funds; money in mk on 1 January; L = emergency loans taken; apartments T2/T3):
+
+| run | 1960 | 1965 | 1970 | 1975 | 1980 | 1985 | 1990 | min | L | apt T2/T3 1975 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| planner | 798 | 2,574 | 40,761 | 30,142 | 21,523 | 13,026 | 12,896 | 52 | 0 | - (houses only) |
+| politics | 3,717 | 26,082 | 42,506 | 29,652 | 11,763 | 4,902 | 7,110 | 44 | 0 | - |
+| dense | 798 | 8,343 | 37,747 | 48,234 | 68,945 | 87,108 | 106,950 | 81 | 0 | 15/19 (first T2 1966, T3 1967) |
+| mill | 1,537 | 33,599 | 52,047 | 54,765 | 56,287 | 57,328 | 64,473 | 139 | 0 | - |
+| metal | 1,836 | 4,676 | 27,011 | 31,385 | 23,252 | 15,289 | 13,510 | 61 | 0 | - |
+
+A built-out planner town runs about -140 mk/month during the oil years (fuel ~210 mk/month 1975-86) and turns positive
+after the 1986 oil collapse. Dense (apartment) towns stay richer: fewer service buildings per resident. Cards: at most one
+per year from all sources (+ the election campaign card in election years), ~24 in 35 years for the politics bot.
+The 20-year milestones (section 2) are unchanged up to 1972; 1973-75 rows are slightly better (index 130 vs 137.5).

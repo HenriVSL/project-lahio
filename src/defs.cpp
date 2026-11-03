@@ -76,7 +76,7 @@ const BuildingDef g_bdefs[B_COUNT] = {
     PB("sports_field", "Sports field",        BCAT_PARK,    2, 2, SVC_NONE, BDF_NO_CONDUCT, TS_CHURCH_VILLAGE, 1960, 400,   5,    0,  1, 0, 0,   0, 15, 5, 0),
     PB("ice_rink", "Ice rink",                BCAT_PARK,    2, 2, SVC_NONE, BDF_NO_CONDUCT, TS_TOWN, 1965,          1500,  20,    0,  2, 2, 1,   0, 15, 5, 0),
     PB("church", "Church",                    BCAT_SPECIAL, 2, 2, SVC_NONE, 0, TS_CHURCH_VILLAGE, 1955,             2500,  10,    0,  2, 1, 1,   0, 15, 6, 0),
-    PB("element_factory", "Element factory",  BCAT_SPECIAL, 3, 3, SVC_NONE, BDF_SMOKE, TS_TOWN, 1960,               8000, 100,  300, 120, 30, 10, 200, -10, 5, 1),   /* M5: cap = elements/month (civic.h) */
+    PB("element_factory", "Element factory",  BCAT_SPECIAL, 3, 3, SVC_NONE, BDF_SMOKE, TS_MARKET_TOWN, 1962,       5000, 100,  300, 120, 30, 10, 200, -10, 5, 1),   /* M5: cap = elements/month (civic.h); P1: Market town 1962, 5,000 mk (was Town 1960, 8,000: towns below 10,000 never got T2 flats) */
     PB("station", "Railway station",          BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_UNIQUE, TS_MARKET_TOWN, 1955,       3000,  30,    0, 10, 3, 2,   0,  8, 5, 1),   /* M2: back to the rail (transit.h) */
     /* M3 industry kinds (docs/research/INDUSTRY.md 5.1; art keys ART.md 3.1, several are aliases of the
        M1 tier art). The kind is industry_def_kind() (industry.cpp), chosen per new lot by site + kind demand.
@@ -208,7 +208,7 @@ static const TierReq s_req_apt[3][8] = {
       { REQ_SCHOOL, 0 }, { REQ_HEAT, 0 }, { REQ_LOW_POLLUTION, 48 } },   /* M5: district heating (DESIGN 5.4 v1.0) */
 };
 static const int s_nreq_apt[3] = { 3, 6, 8 };
-static const TierReq s_req_apt3_lv = { REQ_LAND_VALUE, 50 };
+static const TierReq s_req_apt3_lv = { REQ_LAND_VALUE, 40 };   /* P1: was 50 (lahio towers rose on cheap edge-of-town land; heat is the real T3 gate) */
 static const TierReq s_req_com[3][6] = {
     { { REQ_ROAD, 3 } },
     { { REQ_ROAD, 3 }, { REQ_POWER, 0 }, { REQ_CUSTOMERS, 25 }, { REQ_LAND_VALUE, 25 } },

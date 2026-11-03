@@ -594,6 +594,20 @@ static int elements_ok(int zone, int up, s32 n)
     return civic_elements_take(n);
 }
 
+/* P1: Apartments tier 2/3 (the wooden town -> concrete lahio theme) upgrade on the block's OWN conditions: the next
+   tier's checklist (water tower, school, precast elements in this month's pool, heat + clean air + land value for
+   T3), a full block and a good site score - NOT fresh R demand (a late town never has +60/+80 of allowance left in one
+   band, so M5 saw one T2 block by 1975). A negative R bar doesn't count against the site; the element factory's
+   monthly pool is the real cap. Guard: the town's vacant homes stay under 4% of its housing (min 120), so towers
+   don't go up empty when nobody is moving in (jobs and migration still set the population). */
+#define APT_UP_VACANT_PCT 4
+#define APT_UP_VACANT_MIN 120
+static int apt_upgrade_ok(s32 score, int dm)
+{
+    s32 own = score - IMIN(0, s_dem[dm].value / 2);
+    return own > SIM_T_GROW && s_stats.vacant <= IMAX(APT_UP_VACANT_MIN, s_stats.capacity_res * APT_UP_VACANT_PCT / 100);
+}
+
 static int lower_def(const BuildingDef *d)
 {
     int k, id = (int)(d - g_bdefs);
@@ -693,8 +707,10 @@ static void process_lot(int id)
         s_res_track += add;
     }
     if (unmet_cur || score < SIM_T_DECLINE) l->growth = (s8)IMAX(l->growth - 1, -8);
-    else if (up && !unmet_next && score > SIM_T_GROW && full &&
-             s_band_allow[dm] >= def_building(up)->capacity - d->capacity) l->growth = (s8)IMIN(l->growth + 1, 8);
+    else if (up && !unmet_next && full && (zone == ZONE_APARTMENTS && def_building(up)->tier >= 2
+                                           ? apt_upgrade_ok(score, dm)
+                                           : score > SIM_T_GROW && s_band_allow[dm] >= def_building(up)->capacity - d->capacity))
+        l->growth = (s8)IMIN(l->growth + 1, 8);
     else if (l->growth > 0) l->growth--;
     else if (l->growth < 0) l->growth++;
     if (l->growth >= SIM_G_UP && up && elements_ok(zone, up, def_building(up)->capacity - d->capacity)) {
@@ -705,7 +721,7 @@ static void process_lot(int id)
             displace(l->occupants - def_building(up)->capacity);
             l->occupants = (u16)def_building(up)->capacity;
         }
-        s_band_allow[dm] -= add; s_dem[dm].allowance -= add;
+        s_band_allow[dm] = IMAX(0, s_band_allow[dm] - add); s_dem[dm].allowance = IMAX(0, s_dem[dm].allowance - add);
         l->growth = 0;
         count_first(zone, d->tier + 1, SE_LOT_UPGRADED, x0, y0, up);
     } else if (l->growth <= -SIM_G_DOWN) {

@@ -174,7 +174,7 @@ static void trade_panel(int x, int y, int w, int h)
         yy += 3; uix_rule(x + 6, yy, w - 12); yy += 6;
         /* the balance meter */
         uix_text(x + 6, yy, "Clearing balance", FONT_BODY_DARK);
-        v = t->tolerance > 0 ? (int)ICLAMP((s64)t->balance * 100 / t->tolerance, -100, 100) : 0;
+        v = t->tolerance > 0 ? (int)ICLAMP((s64)t->balance * 100 / t->tolerance, (s64)-100, (s64)100) : 0;
         uix_bar(x + 110, yy + 1, w - 118, 8, v, 1, col(IABS(v) >= 100 ? 156 : 57, IABS(v) >= 100 ? 56 : 85, IABS(v) >= 100 ? 41 : 106));
         yy += 13;
         n = trade_balance_tip(tip, 3);

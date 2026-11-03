@@ -114,12 +114,27 @@ enum { SPEED_PAUSE, SPEED_1, SPEED_2, SPEED_3, SPEED_COUNT };
 #define SIM_STEPS_PER_SEC_3  16          /* speed 3: a year ~ 48 s */
 #define START_YEAR_DEFAULT   1955
 
-/* ------------------------------------------------------------------ small macros
-   (Upper-case names on purpose: min/max are windows.h macros.) */
-#define IMIN(a, b)        ((a) < (b) ? (a) : (b))
-#define IMAX(a, b)        ((a) > (b) ? (a) : (b))
-#define ICLAMP(v, lo, hi) ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
-#define IABS(a)           ((a) < 0 ? -(a) : (a))
+/* ------------------------------------------------------------------ small helpers
+   (Upper-case names on purpose: min/max are windows.h macros.)
+   P1: IMIN/IMAX/ICLAMP/IABS are inline FUNCTIONS, not macros, so an argument with a side effect (a call that reads
+   the save, ++i, atoi(argv[++i])) is evaluated exactly once - the macros evaluated it up to three times (3 bugs, see
+   docs/HANDOFF.md). Overloads for int, s64, u32 and double (all the types the code uses); u8/u16/s8/s16/enum promote
+   to int. Mixed arguments (s64 with int, u32 with int) are ambiguous on purpose: cast one side. */
+inline int    IMIN(int a, int b)       { return a < b ? a : b; }
+inline s64    IMIN(s64 a, s64 b)       { return a < b ? a : b; }
+inline u32    IMIN(u32 a, u32 b)       { return a < b ? a : b; }
+inline double IMIN(double a, double b) { return a < b ? a : b; }
+inline int    IMAX(int a, int b)       { return a > b ? a : b; }
+inline s64    IMAX(s64 a, s64 b)       { return a > b ? a : b; }
+inline u32    IMAX(u32 a, u32 b)       { return a > b ? a : b; }
+inline double IMAX(double a, double b) { return a > b ? a : b; }
+inline int    ICLAMP(int v, int lo, int hi)          { return v < lo ? lo : (v > hi ? hi : v); }
+inline s64    ICLAMP(s64 v, s64 lo, s64 hi)          { return v < lo ? lo : (v > hi ? hi : v); }
+inline u32    ICLAMP(u32 v, u32 lo, u32 hi)          { return v < lo ? lo : (v > hi ? hi : v); }
+inline double ICLAMP(double v, double lo, double hi) { return v < lo ? lo : (v > hi ? hi : v); }
+inline int    IABS(int a)              { return a < 0 ? -a : a; }
+inline s64    IABS(s64 a)              { return a < 0 ? -a : a; }
+inline double IABS(double a)           { return a < 0 ? -a : a; }
 #define COUNTOF(a)        ((int)(sizeof(a) / sizeof((a)[0])))
 #define UNUSED(x)         ((void)(x))
 /* floor division / modulo for possibly negative numerators (chunk grids, world pixels) */

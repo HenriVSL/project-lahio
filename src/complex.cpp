@@ -17,6 +17,7 @@
 #include "text.h"
 #include "tools.h"
 #include "util.h"
+#include "trade.h"          /* P1: trade_set_complex */
 
 /* ------------------------------------------------------------------ tables */
 typedef struct { u8 def, ox, oy; } Mod;
@@ -697,7 +698,7 @@ static void mood_step(Complex *c, int fill)
    (politics_months_to_event() == 0, nothing pending), so all sources together stay 12-24 months apart. */
 static int card_slot_free(void)
 {
-    return politics_enabled() && politics_pending_event() < 0 && politics_months_to_event() <= 0;
+    return politics_card_slot_free();          /* P1: the shared gate (politics_queue_event enforces it too) */
 }
 
 static int ev_card(int ev)
@@ -985,8 +986,16 @@ void complex_month(void)
         } else if (!X.vm_said) { X.vm_said = 1; push_msg(CM_VM_UNLOCK, 0, 0, 0); }
     }
     UNUSED(mi);
+    if (X.any) for (i = 0; i < MAX_COMPLEX; i++) if (X.c[i].kind) update(&X.c[i], i);
+    /* P1: the complexes' exports reach M7's trade every month (the clearing goods list / balance meter count the
+       Eastern part, the Western total the rest): paper -> TG_PAPER, Valtion Metalli -> TG_SHIPS. Slot = complex index
+       (MAX_COMPLEX == TRADE_COMPLEX_SLOTS); an empty or idle slot sends 0/0 (= none). */
+    for (i = 0; i < MAX_COMPLEX && i < TRADE_COMPLEX_SLOTS; i++) {
+        const Complex *c = &X.c[i];
+        int on = c->kind && (c->flags & CF_ACTIVE);
+        trade_set_complex(i, c->kind == CPX_PAPER ? TG_PAPER : TG_SHIPS, on ? c->east : 0, on ? c->west : 0);
+    }
     if (!X.any) return;
-    for (i = 0; i < MAX_COMPLEX; i++) if (X.c[i].kind) update(&X.c[i], i);
     /* the company-town rule */
     for (i = 0; i < MAX_COMPLEX; i++) {
         const Complex *c = &X.c[i];

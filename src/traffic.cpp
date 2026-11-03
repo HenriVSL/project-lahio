@@ -415,7 +415,7 @@ static u32 edge_cost(int e)
     u32 base = (u32)s_elen[e] * s_tu[cls], f;
     s32 r;
     if (cap <= 0) return base ? base : 1;
-    r = (s32)IMIN((s64)s_eflow[e] * 256 / cap, 1024);              /* flow/capacity, Q8, max 4 */
+    r = (s32)IMIN((s64)s_eflow[e] * 256 / cap, (s64)1024);              /* flow/capacity, Q8, max 4 */
     r = (r * r) >> 8; r = (r * r) >> 8;                             /* ^4, Q8 */
     f = (u32)(256 + IMIN(r * 38 / 256, 16 * 256));                  /* 1 + 0.15 x^4, max 17x */
     base = (base * f) >> 8;
@@ -430,7 +430,7 @@ static u32 tile_cost(int t)
     s32 cap, r;
     if (!c) return 16;
     cap = g_roads[c].capacity;
-    r = (s32)IMIN((s64)s_tflow[t] * 256 / IMAX(1, cap), 1024);
+    r = (s32)IMIN((s64)s_tflow[t] * 256 / IMAX(1, cap), (s64)1024);
     r = (r * r) >> 8; r = (r * r) >> 8;
     return (u32)s_tu[c] * (u32)(256 + IMIN(r * 38 / 512, 8 * 256)) >> 8;
 }
@@ -903,7 +903,7 @@ static void pass_finish(void)
     }
     s_msa_used = s_msa_k;
     for (i = 0; i < s_nn; i++) {
-        s_ncom[i] = s_caden[i] ? (u8)IMIN(254, (s_canum[i] / s_caden[i]) / TU_COMMUTE) : 255;
+        s_ncom[i] = s_caden[i] ? (u8)IMIN((s64)254, (s64)((s_canum[i] / s_caden[i]) / TU_COMMUTE)) : 255;
         if (s_ocden[i]) { num += (s64)s_ocnum[i] * 4; den += s_ocden[i]; }
         nflow[i] = 0;
     }

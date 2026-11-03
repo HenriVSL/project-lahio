@@ -39,6 +39,7 @@ static struct {
     Timed timed[TIMED_MAX];
     int   ntimed;
     int   pending, pending_age, event_next, campaign_done;
+    int   card_since;                       /* P1: months since the last card (not the campaign) left the desk */
     u8    ev_count[EV_COUNT];
     int   election_year, campaign_bonus, skip_from, elections_held;
     PolElection last;
@@ -143,6 +144,7 @@ void politics_reset(int enabled)
     P.auth10 = AUTH_START;
     P.pending = -1;
     P.event_next = 9 + rng_below(&P.rng, 8);
+    P.card_since = POL_EVENT_MIN;             /* P1: no card yet: the gap is open */
     P.election_year = first_election(ss->start_year);
     P.forest0 = count_forest();
     recompute_mods();
@@ -563,6 +565,7 @@ static void resolve_event(int choice, int expired)
     apply_list(fx);
     if (P.ev_count[ev] < 255) P.ev_count[ev]++;
     if (ev != EV_CAMPAIGN) P.event_next = POL_EVENT_MIN + rng_below(&P.rng, POL_EVENT_MAX - POL_EVENT_MIN + 1);
+    if (ev != EV_CAMPAIGN) P.card_since = 0;                   /* P1: the shared card gap restarts */
     recompute_mods();
     push_msg(expired ? PMSG_EVENT_EXPIRED : PMSG_CHOICE, ev, choice);
     log_printf("politics: event %s answered: %d%s", g_events[ev].key, choice, expired ? " (expired)" : "");
@@ -579,7 +582,34 @@ int politics_choose(int choice)
     return 1;
 }
 
+/* P1: the card rhythm, enforced HERE for every source (random cards, the patron's demand cards and risk events, the
+   clearing agreement): a card goes up only when nothing is pending, at least POL_EVENT_MIN (12) months after the last
+   card left the desk (P.card_since: the hard <= 1 card per game year cap of DESIGN 14.7), and not in the POL_CARD_QUIET
+   months before an election. Random and patron cards also wait for the 12-24 month timer (event_next, reset whenever a
+   card leaves the desk); the Delegation's agreement card (one per 5 years) only needs the 12-month gap, otherwise the
+   timer would hand most offers to the Ministry's automatic Standard signature. The election campaign card is part of
+   the election (like election night), queued in the quiet window, and does not restart the gap. */
+#define POL_CARD_QUIET 6
+static int card_gate(int ev)
+{
+    int mte;
+    if (!P.enabled || P.pending >= 0) return 0;
+    if (ev == EV_CAMPAIGN) return 1;
+    if (P.card_since < POL_EVENT_MIN) return 0;
+    mte = politics_months_to_election();
+    if (mte >= 0 && mte <= POL_CARD_QUIET) return 0;
+    return ev == EV_AGREEMENT || P.event_next <= 0;
+}
+int politics_card_slot_free(void) { return card_gate(-1); }
+int politics_agreement_slot_free(void) { return card_gate(EV_AGREEMENT); }
+
 int politics_queue_event(int ev)
+{
+    if (!card_gate(ev)) return 0;
+    return politics_force_event(ev);
+}
+
+int politics_force_event(int ev)
 {
     if (!P.enabled || P.pending >= 0 || ev < 0 || ev >= EV_COUNT) return 0;
     P.pending = ev;
@@ -619,7 +649,7 @@ static void maybe_fire_event(void)
     int ev, total = 0, r, w[EV_COUNT];
     if (P.pending >= 0) return;
     if (P.event_next > 0) { P.event_next--; return; }
-    if (politics_months_to_election() <= 6 && politics_months_to_election() >= 0) return;   /* the campaign has the stage */
+    if (!politics_card_slot_free()) return;            /* P1: the campaign has the stage (POL_CARD_QUIET) */
     for (ev = 0; ev < EV_COUNT; ev++) { w[ev] = event_weight(ev); total += w[ev]; }
     if (!total) { P.event_next = 3; return; }
     r = rng_below(&P.rng, total);
@@ -714,6 +744,7 @@ void politics_month(void)
     for (i = P.ntimed - 1; i >= 0; i--) if (--P.timed[i].months <= 0) P.timed[i] = P.timed[--P.ntimed];
     for (d = 0; d < DEC_COUNT; d++) if (P.cooldown[d] > 0) P.cooldown[d]--;
     if (P.decree_gap > 0) P.decree_gap--;
+    if (P.card_since < 1000) P.card_since++;      /* P1 */
     if (P.letter_gap > 0) P.letter_gap--;
     recompute_mods();
     /* event cards: waiting ones resolve themselves after a year */
@@ -771,7 +802,7 @@ int politics_script(char **tok, int n, FILE *out)
     else if (str_ieq(a, "repeal") && n >= 3) { id = politics_find_decree(tok[2]); ok = id >= 0 && politics_repeal(id); }
     else if (str_ieq(a, "letter") && n >= 3) { id = politics_find_letter(tok[2]); ok = id >= 0 && politics_send_letter(id); }
     else if (str_ieq(a, "choose") && n >= 3) ok = politics_choose(atoi(tok[2]));
-    else if (str_ieq(a, "event") && n >= 3) { id = politics_find_event(tok[2]); ok = id >= 0 && politics_queue_event(id); }
+    else if (str_ieq(a, "event") && n >= 3) { id = politics_find_event(tok[2]); ok = id >= 0 && politics_force_event(id); }   /* P1: debug, bypasses the rhythm */
     else if (str_ieq(a, "meter") && n >= 4) { politics_meter_add(str_ieq(tok[2], "west") ? METER_WEST : METER_EAST, atoi(tok[3])); ok = 1; }
     else if (str_ieq(a, "auth") && n >= 3) { politics_authority_add(atoi(tok[2])); ok = 1; }
     else if (str_ieq(a, "dump")) { if (out) politics_dump(out); ok = 1; }
@@ -815,6 +846,7 @@ u32 politics_hash(void)
     h = hash_bytes(h, P.cooldown, sizeof(P.cooldown));
     h = hash_bytes(h, &P.pending, sizeof(P.pending));
     h = hash_bytes(h, &P.event_next, sizeof(P.event_next));
+    h = hash_bytes(h, &P.card_since, sizeof(P.card_since));
     h = hash_bytes(h, &P.election_year, sizeof(P.election_year));
     h = hash_bytes(h, P.mods, sizeof(P.mods));
     return h;
@@ -825,7 +857,7 @@ int politics_save(struct SaveFile *sf)
 {
     int i, k;
     if (!P.enabled) return 1;                 /* politics off: no chunk (files identical to before) */
-    save_begin_chunk(sf, "POLI", 1);
+    save_begin_chunk(sf, "POLI", 2);          /* P1: v2 appends card_since */
     save_s32(sf, P.enabled);
     save_u32(sf, P.rng.s);
     for (k = 0; k < BLOC_COUNT; k++) { save_s32(sf, P.approval[k]); save_s32(sf, P.target[k]); save_s32(sf, P.weight[k]); save_s32(sf, P.members[k]); }
@@ -850,6 +882,7 @@ int politics_save(struct SaveFile *sf)
     save_s32(sf, P.forest0);
     save_s32(sf, P.frost_warned); save_s32(sf, P.auth_full_warned);
     for (k = 0; k < BLOC_COUNT; k++) save_s32(sf, P.angry_warned[k]);
+    save_s32(sf, P.card_since);
     save_end_chunk(sf);
     return 1;
 }
@@ -896,7 +929,7 @@ int politics_load(struct SaveFile *sf)
     P.forest0 = load_s32(sf);
     P.frost_warned = load_s32(sf); P.auth_full_warned = load_s32(sf);
     for (k = 0; k < BLOC_COUNT; k++) P.angry_warned[k] = load_s32(sf);
-    UNUSED(ver);
+    P.card_since = ver >= 2 ? load_s32(sf) : POL_EVENT_MIN;   /* P1 */
     recompute_mods();
     return load_ok(sf);
 }
