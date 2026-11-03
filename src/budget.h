@@ -26,6 +26,7 @@ enum { BL_TAX_RES, BL_TAX_BUS, BL_EXPORT, BL_GRANTS, BL_TIMBER, BL_INCOME_END,
        BL_INTEREST,
        BL_CONSTRUCTION,                              /* player building/bulldozing (+ refunds) */
        BL_POLITICS,                                  /* M1: decrees, letters, event cards (booked by politics) */
+       BL_COMPANY,                                   /* M6: company contribution (income, booked by complex.cpp) */
        BL_COUNT };
 #define BL_SVC(svc) (BL_SVC_FIRST + (svc))
 

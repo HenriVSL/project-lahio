@@ -108,7 +108,9 @@ enum { BDF_WOODEN      = 0x01,  /* burns easily (fire risk) */
        BDF_UNIQUE      = 0x08,  /* at most one (town hall, presidential sauna) */
        BDF_NO_CONDUCT  = 0x10,  /* does NOT conduct power to neighbours (parks) */
        BDF_NO_ROTATE   = 0x20,  /* art has only r0 (symmetric: water tower, park) */
-       BDF_SMOKE       = 0x40   /* has chimney smoke (life.cpp uses the sprite hotspot) */ };
+       BDF_SMOKE       = 0x40,  /* has chimney smoke (life.cpp uses the sprite hotspot) */
+       BDF_MODULE      = 0x80   /* M6: piece of a complex (complex.h): placed with the complex at rot 0, may be
+                                   non-square with BDF_NO_ROTATE; power/water/pollution come from complex.cpp */ };
 
 enum { B_NONE,
        /* grown zone buildings: key = sprite stem, e.g. "house_t2", "apt_t1_3x1" */
@@ -138,6 +140,16 @@ enum { B_NONE,
        B_IND_YARD,
        /* M2 transit (transit.h): bus depot (lines run only with one), bus stop shelter (placed by the bus line tool) */
        B_BUS_DEPOT, B_BUS_STOP,
+       /* M6 complexes (complex.h; ART.md 3.1 pm_* / vm_* keys, offsets in complex.cpp): paper mill 5x5 and
+          Valtion Metalli 5x4. pm_hall / vm_hall double as the complex tool (TOOL_BUILD param) */
+       B_PM_LOGYARD, B_PM_HALL, B_PM_CHIPPER, B_PM_BOILER, B_PM_DIGESTER, B_PM_GATE, B_PM_OFFICE,
+       B_VM_HALL, B_VM_YARD, B_VM_STORE, B_VM_SIDING, B_VM_GATE,
+       /* M6 patron gifts (placed free with TOOL_GIFT): wooden workers' row houses (tier-2 housing), the villa */
+       B_ROW_HOUSES, B_PATRON_VILLA,
+       /* M5 utilities (civic.h): district heating plant (heat over the water pipes), sewage treatment works */
+       B_HEAT_PLANT, B_SEWAGE_WORKS,
+       /* M7 landmarks / money sinks (era.cpp: authority, tourism, sauna diplomacy; ART.md 3.1 keys), all unique */
+       B_CONCERT_HALL, B_TV_TOWER, B_SKI_JUMP, B_PRES_SAUNA, B_FRIENDSHIP_STATUE,
        B_COUNT };
 
 typedef struct {
@@ -196,6 +208,9 @@ enum { OVL_NONE, OVL_POWER, OVL_WATER, OVL_POLLUTION, OVL_LAND_VALUE, OVL_TRAFFI
        OVL_GROWTH,      /* "why isn't it growing": colour = main unmet requirement */
        OVL_ZONES,       /* zone tints, buildings flat */
        OVL_CATCHMENT,   /* one service building's catchment; parameter = lot id */
+       OVL_CRIME,       /* M5: crime field (civic_overlay_value) */
+       OVL_HEAT,        /* M5: district heating: heated / short / not connected lots, heated pipes */
+       OVL_SEWAGE,      /* M5: treated / untreated homes, lake pollution on the water */
        OVL_COUNT };
 #define OVL_SVC(svc) (OVL_SVC_FIRE + (svc))
 /* Ramps: gradual ones use levels 0..7; categorical ones use the level as a category. */

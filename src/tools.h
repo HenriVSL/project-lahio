@@ -26,6 +26,7 @@ enum { TOOL_NONE,
        TOOL_BULLDOZE,
        TOOL_PIPE,          /* F1: water pipe, L-path like power lines; param 0 = lay, 1 = remove (Ctrl+drag) */
        TOOL_BUS_LINE,      /* M2: click stops on roads (transit.h); right-click ends the line, Ctrl+click deletes */
+       TOOL_GIFT,          /* M6: place the patron's next gift free near the complex (complex.h); param unused (0) */
        TOOL_COUNT };
 
 typedef struct {
@@ -40,7 +41,8 @@ typedef struct {
 /* Rejection reasons (PreviewTile.reason, ToolPreview.main_reason). 1..PLACE_COUNT-1 reuse PLACE_* (world.h). */
 enum { REJ_NONE = 0, REJ_NO_ROAD_REACH = 32, REJ_LOCKED, REJ_NO_MONEY, REJ_BRIDGE_TOO_LONG,
        REJ_BRIDGE_NOT_STRAIGHT, REJ_NOTHING_TO_DO, REJ_PROTECTED_TILE, REJ_WRONG_TERRAIN,
-       REJ_NEEDS_RAIL, REJ_BUS_NOT_ROAD, REJ_BUS_MAX, REJ_BUS_NO_ROUTE };   /* M2 (transit.h) */
+       REJ_NEEDS_RAIL, REJ_BUS_NOT_ROAD, REJ_BUS_MAX, REJ_BUS_NO_ROUTE,   /* M2 (transit.h) */
+       REJ_CPX_WATER, REJ_CPX_RAIL, REJ_CPX_FAR, REJ_CPX_NO_GIFT, REJ_CPX_ROAD };   /* M6 (complex.h) */
 enum { PT_OK, PT_UPGRADE, PT_NOOP, PT_REJECT };
 typedef struct { u8 x, y, state, reason; } PreviewTile;
 #define TOOL_MAX_PREVIEW 2048

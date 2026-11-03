@@ -36,6 +36,7 @@
 #include "politics.h"
 #include "ui_pol.h"       /* M1 */
 #include "tools.h"
+#include "complex.h"      /* M6 */
 #include "text.h"
 #include "ui.h"
 #include "snd.h"
@@ -904,6 +905,16 @@ static void drain_events(void)
         else if (pm.type == PMSG_ELECTION) { snd_play(SND_FANFARE, 80); ui_president_say(pm.b > 0 ? PRES_MOOD_DELIGHTED : pm.b < 0 ? PRES_MOOD_WORRIED : PRES_MOOD_CONTENT); }
         else if (pm.type == PMSG_FROST || pm.type == PMSG_BLOC_ANGRY) snd_play(SND_WARN, 50);
     }
+    {   /* M6: complex messages (mill, patron, Valtion Metalli) -> ticker */
+        CpxMsg cm;
+        char ct[200];
+        int sev, cx, cy;
+        while (complex_poll_msg(&cm))
+            if (complex_msg_text(ct, sizeof(ct), &cm, &sev, &cx, &cy)) {
+                ui_ticker_push(sev, ct, cx, cy);
+                if (cm.type == CM_GIFT_OFFER || cm.type == CM_EV_ANNOUNCE) snd_play(SND_PAPER, 60);
+            }
+    }
     while (sim_poll_event(&e)) {
         ui_ticker_event(&e);
         switch (e.type) {
@@ -923,7 +934,7 @@ static void drain_events(void)
         case SE_UNLOCK:
             break;
         case SE_FIRE:
-            snd_play(SND_FIREBELL, 80);
+            if (e.b == 0) snd_play(SND_FIREBELL, 80);    /* M5: the bell rings when it starts, not when it is out */
             break;
         default:
             if (e.severity == SEV_URGENT) snd_play(SND_WARN, 70);
@@ -1059,6 +1070,15 @@ static void preview_marks(void)
         int t = tools_tool(NULL);
         if ((t == TOOL_NONE || t == TOOL_QUERY) && !s_consumed && in->inside && cam_pick(in->mx, in->my, &x, &y))
             render_tile_mark(t == TOOL_QUERY ? s_id_query : s_id_sel, x, y);
+        return;
+    }
+    if (tool == TOOL_BUILD && (def_building(p->lot_def)->flags & BDF_MODULE)) {   /* M6: complex = one ghost per module */
+        int k, mdef, ox, oy, kind = complex_kind_of_def(p->lot_def);
+        for (i = 0; i < p->n; i++) render_tile_mark(p->tiles[i].state == PT_REJECT || !p->lot_ok ? s_id_bad : s_id_ok, p->tiles[i].x, p->tiles[i].y);
+        for (k = 0; complex_layout(kind, k, &mdef, &ox, &oy); k++) {
+            const BuildingDef *md = def_building(mdef);
+            render_lot_ghost(art_lot_sprite(md->key, 0, ROT_0, ART_LOT_NORMAL, md->w, md->h), p->lot_x + ox, p->lot_y + oy, md->w, md->h);
+        }
         return;
     }
     if (tool == TOOL_BUILD) {

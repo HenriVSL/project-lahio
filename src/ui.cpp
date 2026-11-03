@@ -38,8 +38,10 @@
 #include "politics.h"     /* M1 */
 #include "ui_pol.h"       /* M1: politics panels */
 #include "industry.h"     /* M3 */
+#include "civic.h"        /* M5 */
 #include "traffic.h"      /* M2 */
 #include "transit.h"      /* M2 */
+#include "complex.h"      /* M6 */
 
 /* ================================================================== constants */
 #define WIN_MAX_W   340          /* the panel target; every panel fits (600x420 rule: fits 640x480) */
@@ -112,15 +114,18 @@ static const KeyDef s_keys[NKEYS] = {
     { "key_homes", "Homes", "Homes: houses and apartments (H, A)", 3, { { TOOL_ZONE, ZONE_HOUSES, 0, "z_houses" },
         { TOOL_ZONE, ZONE_APARTMENTS, 0, "z_apartments" }, { TOOL_DEZONE, 0, 1, "dezone" } } },
     { "key_shops", "Shops", "Commercial zone (C)", 1, { { TOOL_ZONE, ZONE_COMMERCIAL, 0, "z_commercial" } } },
-    { "key_industry", "Industry", "Industry, forestry and farms (I)", 4, { { TOOL_ZONE, ZONE_INDUSTRY, 0, "z_industry" },
+    { "key_industry", "Industry", "Industry, forestry and farms (I)", 7, { { TOOL_ZONE, ZONE_INDUSTRY, 0, "z_industry" },
         { TOOL_ZONE, ZONE_FORESTRY, 0, "z_forestry" }, { TOOL_ZONE, ZONE_FARM, 0, "z_farm" },   /* M3 */
-        { TOOL_BUILD, B_ELEMENT_FACTORY, 1, "b_element_factory" } } },
+        { TOOL_BUILD, B_ELEMENT_FACTORY, 1, "b_element_factory" },
+        { TOOL_BUILD, B_PM_HALL, 1, "b_paper_mill" }, { TOOL_BUILD, B_VM_HALL, 0, "b_valtion_metalli" },   /* M6 complexes */
+        { TOOL_GIFT, 0, 0, "b_row_houses" } } },
     { "key_power", "Power", "Power lines and plants (P)", 6, { { TOOL_POWER_LINE, 0, 0, "powerline" },
         { TOOL_BUILD, B_COAL_PLANT, 1, "b_coal_plant" }, { TOOL_BUILD, B_HYDRO_PLANT, 0, "b_hydro_plant" },
         { TOOL_BUILD, B_OIL_PLANT, 0, "b_oil_plant" }, { TOOL_BUILD, B_PEAT_PLANT, 0, "b_peat_plant" },
         { TOOL_BUILD, B_NUCLEAR_PLANT, 0, "b_nuclear_plant" } } },
-    { "key_water", "Water", "Water pipes and supply (W)", 4, { { TOOL_PIPE, 0, 0, "pipe" }, { TOOL_BUILD, B_PUMP, 1, "b_pump" }, { TOOL_BUILD, B_WELL, 0, "b_well" },
-        { TOOL_BUILD, B_WATER_TOWER, 0, "b_water_tower" } } },
+    { "key_water", "Water", "Water, heating and sewage (W)", 6, { { TOOL_PIPE, 0, 0, "pipe" }, { TOOL_BUILD, B_PUMP, 1, "b_pump" }, { TOOL_BUILD, B_WELL, 0, "b_well" },
+        { TOOL_BUILD, B_WATER_TOWER, 0, "b_water_tower" },
+        { TOOL_BUILD, B_HEAT_PLANT, 1, "b_heat_plant" }, { TOOL_BUILD, B_SEWAGE_WORKS, 0, "b_sewage_works" } } },   /* M5 */
     { "key_services", "Services", "Services (S)", 8, { { TOOL_BUILD, B_FIRE_STATION, 0, "b_fire_station" },
         { TOOL_BUILD, B_SCHOOL, 0, "b_school" }, { TOOL_BUILD, B_CLINIC, 0, "b_clinic" }, { TOOL_BUILD, B_SAUNA, 0, "b_sauna" },
         { TOOL_BUILD, B_POLICE, 1, "b_police" }, { TOOL_BUILD, B_LIBRARY, 0, "b_library" }, { TOOL_BUILD, B_POST, 0, "b_post" },
@@ -464,8 +469,13 @@ static int ent_locked(const FlyEnt *e, char *hint, int hsize)
         if (def_zone_unlocked(e->param, y, st, all)) return 0;
         if (e->param == ZONE_APARTMENTS) text_unlock_hint(hint, hsize, TS_CHURCH_VILLAGE, 1955, y, st);
         break;
+    case TOOL_GIFT:                                    /* M6: the patron's gift waiting to be placed */
+        if (complex_gift_pending()) return 0;
+        str_copy(hint, "None waiting", hsize);
+        return 1;
     case TOOL_BUILD: {
         const BuildingDef *d = def_building(e->param);
+        if (d->flags & BDF_MODULE) return complex_tool_locked(e->param, hint, hsize);   /* M6 */
         if (def_unlocked(e->param, y, st, all)) {
             if (d->variants > 0) return 0;
             str_copy(hint, "Coming later", hsize);
@@ -497,7 +507,8 @@ static void ent_cost(const FlyEnt *e, char *buf, int size)
         if (g_misc.zone_tile) { text_fmt_money(m, sizeof(m), g_misc.zone_tile, y); str_printf(buf, size, "%s/tile", m); }
         else str_copy(buf, "free", size);
         break;
-    case TOOL_BUILD:      text_fmt_money(buf, size, def_building(e->param)->cost, y); break;
+    case TOOL_BUILD:      text_fmt_money(buf, size, complex_tool_cost(e->param), y); break;   /* M6: = def cost except complexes */
+    case TOOL_GIFT:       str_copy(buf, "free", size); break;                                /* M6 */
     case TOOL_BULLDOZE:   text_fmt_money(m, sizeof(m), g_misc.bulldoze_tile, y); str_printf(buf, size, "%s/tile", m); break;
     case TOOL_BUS_LINE: { /* M2: "300 mk + 40 mk/stop" */
         char m2[32];
@@ -1702,6 +1713,11 @@ static void panel_query(int x, int y, int w, int h)
                 txt_fit(x + 6, yy, b, k ? FONT_BODY_GREY : FONT_BODY_DARK, w - 12); yy += 11;
             }
             if (k) yy += 3;
+            for (k = 0; k < 4 && yy < ymax - 80; k++) {     /* M5: heating, sewage, fire */
+                if (!civic_lot_line(s_q_lot, k, b, sizeof(b))) break;
+                txt_fit(x + 6, yy, b, FONT_BODY_DARK, w - 12); yy += 11;
+            }
+            if (k) yy += 3;
             if (li.next.n) {
                 str_printf(b, sizeof(b), "To reach tier %d:", li.next.tier);
                 txt(x + 6, yy, b, FONT_HEAD); yy += 16;
@@ -1733,6 +1749,18 @@ static void panel_query(int x, int y, int w, int h)
             }
             txt(x + 6, yy, b, FONT_BODY_DARK); yy += 14;
             yy = query_transit(x, yy, w, ymax, s_q_lot);      /* M2 */
+            for (k = 0; k < 16 && yy < ymax - 22; k++) {      /* M6: complex panel (stage, jobs, wood, exports, owner, gifts) */
+                static const int fonts[5] = { FONT_BODY_DARK, FONT_BODY_GREY, FONT_BODY_RED, FONT_BODY_GREEN, FONT_HEAD };
+                int f = 0;
+                if (!complex_lot_line(s_q_lot, k, b, sizeof(b), &f)) break;
+                if (k == 0) yy += 2;
+                txt_fit(x + 6, yy, b, fonts[ICLAMP(f, 0, 4)], w - 12); yy += f == 4 ? 15 : 11;
+            }
+            for (k = 0; k < 5 && yy < ymax - 11; k++) {       /* M5: heat plant, sewage works, element factory, heating */
+                if (!civic_lot_line(s_q_lot, k, b, sizeof(b))) break;
+                txt_fit(x + 6, yy, b, k ? FONT_BODY_GREY : FONT_BODY_DARK, w - 12); yy += 11;
+            }
+            if (k) yy += 3;
         }
         if (yy < ymax - 11) {
             str_printf(b, sizeof(b), "Land value %d " TEXT_DOT " Pollution %d " TEXT_DOT " Happiness %d", li.land_value, li.pollution, li.happy);
@@ -1751,6 +1779,11 @@ static void panel_query(int x, int y, int w, int h)
         for (k = 0; k < 2; k++) {                     /* M3: forest stage, forestry / farm land */
             if (!industry_tile_line(s_q_x, s_q_y, k, b, sizeof(b))) break;
             txt_fit(x + 6, yy, b, k ? FONT_BODY_GREY : FONT_BODY_DARK, w - 12); yy += 11;
+        }
+        if (k) yy += 3;
+        for (k = 0; k < 3; k++) {                     /* M5: lake water, ruins, crime */
+            if (!civic_tile_line(s_q_x, s_q_y, k, b, sizeof(b))) break;
+            txt_fit(x + 6, yy, b, FONT_BODY_DARK, w - 12); yy += 11;
         }
         if (k) yy += 3;
         if (ti.zone && !ti.lot) {
@@ -1868,6 +1901,17 @@ static void legend(int x, int y, int w, int ovl)
     case OVL_LAND_VALUE: ramp = OVR_GOOD; lo = "low"; hi = "high"; break;
     case OVL_GROWTH: ramp = OVR_PROBLEM; cats = growc; ncat = GROWC_COUNT; break;
     case OVL_ZONES: ramp = OVR_ZONE; break;
+    case OVL_CRIME: ramp = OVR_BAD; lo = "safe"; hi = "rough"; break;                  /* M5 */
+    case OVL_HEAT: {
+        static const char *const heatc[4] = { "Heated", "Not connected", "Short of heat", "Heated pipe / land" };
+        ramp = OVR_NET; cats = heatc; ncat = 4; break; }
+    case OVL_SEWAGE:                                  /* M5: homes treated / untreated, then the lake ramp */
+        swatch(OVR_NET, NETC_OK, x, y); txt(x + 36, y + 3, "Treated", FONT_BODY_DARK);
+        swatch(OVR_NET, NETC_SHORTAGE, x + w / 2, y); txt(x + w / 2 + 36, y + 3, "Untreated: to the lake", FONT_BODY_DARK);
+        for (k = 0; k < 8; k++) swatch(OVR_BAD, k, x + k * 34, y + 20);
+        txt(x, y + 38, "clean lake", FONT_BODY_GREY);
+        txt_r(x + 7 * 34 + 32, y + 38, "foul", FONT_BODY_GREY);
+        return;
     case OVL_NONE: break;
     default: ramp = OVR_COVER; lo = "none"; hi = "full"; break;
     }
@@ -1907,7 +1951,10 @@ static void panel_overlays(int x, int y, int w, int h)
         spr(S.radio[s_ovl_local == k ? 1 : 0][ctl_hot(idx) ? 1 : 0], cx, cy + 1);
         str_printf(ic, sizeof(ic), "o_%s", k == OVL_NONE ? "none" : k == OVL_POWER ? "power" : k == OVL_WATER ? "water" :
                    k == OVL_POLLUTION ? "pollution" : k == OVL_LAND_VALUE ? "land_value" : k == OVL_TRAFFIC ? "traffic" :
-                   k == OVL_FIRE_RISK ? "fire_risk" : k == OVL_GROWTH ? "growth" : k == OVL_ZONES ? "zones" : "none");
+                   k == OVL_FIRE_RISK ? "fire_risk" : k == OVL_GROWTH ? "growth" : k == OVL_ZONES ? "zones" :
+                   k == OVL_CRIME ? "svc_police" : "none");      /* M5: crime reuses the police icon */
+        if (k == OVL_HEAT) str_copy(ic, "b_heat_plant", sizeof(ic));          /* M5: building icons (13x13 too) */
+        if (k == OVL_SEWAGE) str_copy(ic, "b_sewage_works", sizeof(ic));
         if (k >= OVL_SVC_FIRE && k <= OVL_SVC_POST) str_printf(ic, sizeof(ic), "o_svc_%s", g_services[k - OVL_SVC_FIRE].key);
         spr(icon_id(ic, 0), cx + 15, cy);
         txt_fit(cx + 32, cy + 1, text_overlay_name(k), FONT_BODY_DARK, cw - 36);

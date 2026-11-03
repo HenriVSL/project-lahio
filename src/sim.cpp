@@ -28,6 +28,10 @@
 #include "politics.h"
 #include "save.h"
 #include "industry.h"
+#include "complex.h"
+#include "civic.h"
+#include "era.h"           /* M7: eras, town status by decree, trade hooks */
+#include "trade.h"
 
 /* T12 tuning constants (local; the shared ones are in sim.h) */
 #define SIM_DECLINE_DEMAND_FLOOR (-6)   /* most negative demand term an ACTIVE lot's score sees */
@@ -79,6 +83,9 @@ static void push_event(int type, int sev, int x, int y, s32 a, s32 b)
     s_ev[idx].x = (s16)x; s_ev[idx].y = (s16)y; s_ev[idx].a = a; s_ev[idx].b = b;
     s_ev_count++;
 }
+
+/* M5: other sim modules (fire.cpp) queue ticker events through the same ring */
+void sim_queue_event(int type, int sev, int x, int y, s32 a, s32 b) { push_event(type, sev, x, y, a, b); }
 
 int sim_poll_event(SimEvent *e)
 {
@@ -179,11 +186,14 @@ void sim_new_city(const SimSettings *s)
     fields_reset();
     traffic_reset();
     industry_reset();
+    complex_reset();           /* M6 */
+    civic_reset();             /* M5 */
     politics_reset(s->politics);
     s_status_max = TS_VILLAGE;
     s_stats.town_status = TS_VILLAGE;
     s_stats.era = def_era(s_date.year);
     snapshot_unlocks(0);
+    era_reset();               /* M7: trade agreement, history, newspaper */
 }
 
 const SimSettings *sim_settings(void) { return &s_set; }
@@ -282,9 +292,24 @@ static u32 eval_reqs(int zone, int tier, int id, const Ctx *c, int keep, Checkli
             met = net_water_tower_reach(c->cx, c->cy);
             if (cl) { it.have = met; it.need = 1; }
             break;
-        case REQ_ELEMENTS:
-            met = net_element_factories() > 0;
-            if (cl) { it.have = net_element_factories(); it.need = 1; }
+        case REQ_ELEMENTS: {      /* M5: this month's precast pool must cover the upgrade; standing blocks keep their tier */
+            s32 nd = 1;
+            if (id) {
+                const BuildingDef *cd = def_building(g_world.lots[id].def);
+                if (cd->upgrade_to != B_NONE && cd->tier < tier) nd = IMAX(1, def_building(cd->upgrade_to)->capacity - cd->capacity);
+            }
+            met = keep || civic_elements_left() >= nd;
+            if (cl) { it.have = civic_elements_left(); it.need = nd; it.why = (u8)(civic_elements_output() > 0 ? 1 : 0); }
+            break; }
+        case REQ_HEAT:            /* M5: district heating (civic.cpp); an upgrade also needs the network's spare */
+            st = id ? civic_lot_util_state(UT_HEAT, id) : NLS_NONE;
+            met = st == NLS_OK;
+            if (met && !keep && id) {
+                const BuildingDef *cd = def_building(g_world.lots[id].def);
+                if (cd->upgrade_to != B_NONE && cd->tier < tier)
+                    met = civic_heat_spare_for(id) >= def_building(cd->upgrade_to)->water_use - cd->water_use;
+            }
+            if (cl) { it.why = (u8)civic_req_why(REQ_HEAT, id, &it.have, &it.need); it.lot = civic_lot_util_src(UT_HEAT, id, NULL); }
             break;
         case REQ_SCHOOL: case REQ_SAUNA: case REQ_HEALTH: case REQ_PHONE: {
             int src;
@@ -398,7 +423,7 @@ static int rect_free_zone(int zone, int x0, int y0, int x1, int y1)
     for (j = y0; j <= y1; j++)
         for (i = x0; i <= x1; i++) {
             const Tile *t = WT(i, j);
-            if (TILE_ZONE(t) != zone || !world_is_buildable(i, j)) return 0;
+            if (TILE_ZONE(t) != zone || !world_is_buildable(i, j) || (t->flags & TF_RUBBLE)) return 0;   /* M5: ruins first */
         }
     return 1;
 }
@@ -555,6 +580,13 @@ static void process_empty(int x, int y)
     }
 }
 
+/* M5: Apartments tier 2+ take precast elements from this month's pool (civic.h) */
+static int elements_ok(int zone, int up, s32 n)
+{
+    if (zone != ZONE_APARTMENTS || def_building(up)->tier < 2) return 1;
+    return civic_elements_take(n);
+}
+
 static int lower_def(const BuildingDef *d)
 {
     int k, id = (int)(d - g_bdefs);
@@ -658,7 +690,7 @@ static void process_lot(int id)
              s_band_allow[dm] >= def_building(up)->capacity - d->capacity) l->growth = (s8)IMIN(l->growth + 1, 8);
     else if (l->growth > 0) l->growth--;
     else if (l->growth < 0) l->growth++;
-    if (l->growth >= SIM_G_UP && up) {
+    if (l->growth >= SIM_G_UP && up && elements_ok(zone, up, def_building(up)->capacity - d->capacity)) {
         s32 add = def_building(up)->capacity - d->capacity;
         world_lot_set_def(id, up);
         world_lot_set_variant(id, (int)(hash_xy(x0, y0, (u32)up) % (u32)IMAX(1, def_building(up)->variants)));
@@ -756,7 +788,7 @@ static void aggregate(void)
     if (res < s_res_track) s_homeless += s_res_track - res;
     s_res_track = res;
     st->population = res;
-    st->jobs = jobs + s_jobs_other;
+    st->jobs = jobs + s_jobs_other + complex_jobs();   /* M6: complexes (their own staffing) */
     st->workers = res * SIM_LABOUR_PCT / 100;
     st->unemployed = IMAX(0, st->workers - st->jobs);
     st->jobs_fill_pct = st->jobs ? IMIN(100, st->workers * 100 / st->jobs) : 100;
@@ -860,6 +892,8 @@ static void compute_demand(void)
     v[1] = 10 + res * (era >= ERA_STRUCTURAL ? 2 : 1) / 100;            ids[1] = DT_WESTERN;
     v[0] = POL_PCT(v[0], politics_mod(PM_CLEARING_PCT));                /* M1: Eastern relations, decrees */
     v[1] = POL_PCT(v[1], politics_mod(PM_WESTERN_PCT));                 /* M1: Western trade, decrees */
+    v[0] = POL_PCT(v[0], trade_clearing_pct());                         /* M7: agreement level, oil boom, penalties */
+    v[1] = POL_PCT(v[1], trade_western_pct());                          /* M7: Western price index */
     v[2] = W * 60 / 100;                                                ids[2] = DT_LOCAL_NEED;
     v[3] = -s_cap_ind;                                                  ids[3] = DT_IND_CAPACITY;
     v[4] = -(v[0] + v[1] + v[2]) * tax_pct / 100;                       ids[4] = DT_TAX;
@@ -974,6 +1008,7 @@ static void month_end_population(void)
     unemployed_people = s_stats.unemployed * 100 / SIM_LABOUR_PCT;
     emig = (unemployed_people + 7) / 8;
     emig = POL_PCT(emig, politics_mod(PM_EMIGRATION_PCT));    /* M1: decrees/events (100 when off) */
+    emig = POL_PCT(emig, trade_emigration_pct());             /* M7: consumer goods programme */
     emig = IMIN(emig, s_stats.population);
     emigrate(emig);
     {
@@ -997,6 +1032,20 @@ static void month_end_population(void)
     s_month_pending = 1;
 }
 
+/* M7: raise the town status to st (rewards, events, ceremony page); month end and the town-rights decree */
+void sim_grant_status(int st)
+{
+    if (st <= s_status_max || st >= TS_COUNT) return;
+    while (s_status_max < st) {
+        s_status_max++;
+        if (g_statuses[s_status_max].reward) budget_spend(-g_statuses[s_status_max].reward, BL_GRANTS);
+        push_event(SE_STATUS_UP, SEV_POLITICAL, -1, -1, s_status_max, g_statuses[s_status_max].reward);
+    }
+    s_stats.town_status = s_status_max;
+    era_status_granted(s_status_max);
+    snapshot_unlocks(1);
+}
+
 static void month_end_books(void)
 {
     int i, st, k;
@@ -1007,17 +1056,13 @@ static void month_end_books(void)
     else if (g_budget.months_negative == 1) push_event(SE_NO_MONEY, SEV_WARN, -1, -1, g_budget.money, 0);
     else if (g_budget.months_negative == 3) push_event(SE_BANKRUPT_WARN, SEV_URGENT, -1, -1, g_budget.money, 0);
     industry_month();          /* M3: regrowth, harvest, farm claims, exports (before the politics reasons) */
+    complex_month();           /* M6: paper mill / Valtion Metalli: stages, owner, gifts, events, company town */
     politics_month();
-    /* town status + rewards */
-    st = def_status_for_population(s_stats.population);
-    if (st > s_status_max) {
-        while (s_status_max < st) {
-            s_status_max++;
-            if (g_statuses[s_status_max].reward) budget_spend(-g_statuses[s_status_max].reward, BL_GRANTS);
-            push_event(SE_STATUS_UP, SEV_POLITICAL, -1, -1, s_status_max, g_statuses[s_status_max].reward);
-        }
-        s_stats.town_status = s_status_max;
-    }
+    civic_month();             /* M5: element pool, heat fuel, ruins */
+    /* town status + rewards (M7: with politics on only by decree, era.h) */
+    st = era_status_target(def_status_for_population(s_stats.population));
+    sim_grant_status(st);
+    era_month();               /* M7: trade, landmarks, era events, history, the January paper */
     {
         static const s32 ms[] = { 100, 1000, 2000, 5000, 20000, 50000 };
         for (k = 0; k < COUNTOF(ms); k++)
@@ -1088,6 +1133,7 @@ void sim_step(void)
         if (cycle == SIM_CYCLES_PER_MONTH - 1) month_end_population();
         break;
     }
+    civic_step(phase, cycle);                  /* M5: heat/sewage solves (phase 9), fires */
     if (phase != 14) traffic_slice();          /* M2: bounded cluster work of the running traffic pass */
     dt = time_ms() - t0;
     s_phase_sum[phase] += dt;
@@ -1284,6 +1330,8 @@ u8 sim_overlay_value(int ovl, int param, int x, int y)
         if (TILE_ZONE(t)) return OVV(OVR_ZONE, TILE_ZONE(t));
         if (lot && def_building(g_world.lots[lot].def)->cat == BCAT_ZONE) return OVV(OVR_ZONE, def_building(g_world.lots[lot].def)->zone);
         return OVV_NONE;
+    case OVL_CRIME: case OVL_HEAT: case OVL_SEWAGE:   /* M5 */
+        return civic_overlay_value(ovl, param, x, y);
     case OVL_CATCHMENT: {
         const Lot *pl = world_lot(param);
         const BuildingDef *d;
@@ -1330,6 +1378,9 @@ u32 sim_hash(void)
     h = hash_bytes(h, field_data(FLD_LAND_VALUE), FIELD_MAX_W * FIELD_MAX_H);
     if (politics_enabled()) h ^= politics_hash();   /* M1: off = the hash as before */
     h ^= industry_hash();                          /* M3 */
+    h ^= complex_hash();                           /* M6: 0 without a complex */
+    h ^= civic_hash();                             /* M5 */
+    h ^= era_hash();                               /* M7: era + trade */
     return h;
 }
 

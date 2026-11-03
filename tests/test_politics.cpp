@@ -29,7 +29,10 @@ static void drain(void)
 
 static void months(int n)
 {
-    while (n-- > 0) { sim_run_months(1); tools_month_changed(); drain(); }
+    while (n-- > 0) {
+        sim_run_months(1); tools_month_changed(); drain();
+        if (politics_decree_state(DEC_TOWN_RIGHTS) == DS_OK) politics_sign(DEC_TOWN_RIGHTS);   /* M7: status by decree */
+    }
 }
 
 /* town1.txt with politics on/off; script waits run the sim (drained like the game would) */

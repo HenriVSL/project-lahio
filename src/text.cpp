@@ -6,6 +6,7 @@
    "\xe4" must start a new string literal ("M\xe4" "en..."). tests/test_text.cpp checks the name lists. */
 #include "common.h"
 #include "text.h"
+#include "complex.h"
 #include "util.h"
 #include "world.h"
 #include "tools.h"
@@ -102,7 +103,8 @@ const char *text_overlay_name(int ovl)
 {
     static const char *const n[OVL_COUNT] = { "No overlay", "Power", "Water", "Pollution", "Land value",
         "Traffic", "Fire risk", "Fire cover", "Schools", "Health care", "Saunas", "Police", "Libraries",
-        "Post and telephone", "Why not growing?", "Zones", "Catchment" };
+        "Post and telephone", "Why not growing?", "Zones", "Catchment", "Crime", "District heating",
+        "Sewage and lakes" };   /* M5 */
     return (ovl >= 0 && ovl < OVL_COUNT) ? n[ovl] : "?";
 }
 
@@ -123,7 +125,7 @@ const char *text_term_label(int kind, int id)
     static const char *const st[ST_COUNT] = { "Demand", "Land value", "Services", "Pollution", "Commute",
         "Noise", "Luck", "Decrees" };
     static const char *const lvt[LVT_COUNT] = { "Base value", "Lakeside", "Forest edge", "Rock", "Services",
-        "Parks", "Road access", "Pollution", "Crime", "Noise", "Empty buildings nearby" };
+        "Parks", "Road access", "Pollution", "Crime", "Noise", "Empty buildings nearby", "Polluted lake" };   /* M5 */
     static const char *const svc[SVC_COUNT] = { "Fire brigade", "Schools", "Health care", "Public saunas",
         "Police", "Libraries", "Post and telephone" };
     switch (kind) {
@@ -135,16 +137,17 @@ const char *text_term_label(int kind, int id)
         switch (id) {
         case BL_TAX_RES:      return "Residential tax";
         case BL_TAX_BUS:      return "Business tax";
-        case BL_EXPORT:       return "Export share";
+        case BL_EXPORT:       return "Exports and trade";      /* M7: + the Western premium */
         case BL_GRANTS:       return "State grant";
         case BL_TIMBER:       return "Timber sales";
         case BL_ROADS:        return "Roads and bridges";
         case BL_NETWORKS:     return "Power lines";
         case BL_UTILITIES:    return "Plants and pumps";
-        case BL_SPECIAL:      return "Town hall and parks";
-        case BL_INTEREST:     return "Loan interest";
+        case BL_SPECIAL:      return "Town hall, parks, landmarks";
+        case BL_INTEREST:     return "Loans and interest";     /* M7: loans taken and repaid */
         case BL_CONSTRUCTION: return "Construction";
         case BL_POLITICS:     return "Decrees and diplomacy";
+        case BL_COMPANY:      return "Company contribution";     /* M6 */
         }
         return "?";
     }
@@ -176,6 +179,11 @@ const char *text_place_reason(int place)
     case REJ_BUS_NOT_ROAD:      return "Bus stops go on streets";
     case REJ_BUS_MAX:           return "Too many lines or stops";
     case REJ_BUS_NO_ROUTE:      return "No road route from the last stop";
+    case REJ_CPX_WATER:         return "The log pond side (west) must touch a lake or river";   /* M6 */
+    case REJ_CPX_RAIL:          return "Needs a railway within 2 tiles";
+    case REJ_CPX_FAR:           return "Gifts go within 12 tiles of the works";
+    case REJ_CPX_NO_GIFT:       return "No gift is waiting";
+    case REJ_CPX_ROAD:          return "Needs a road within 2 tiles";
     }
     return "?";
 }
@@ -209,6 +217,7 @@ const char *text_tool_name(int tool, int param)
     case TOOL_BULLDOZE:   return "Bulldoze";
     case TOOL_PIPE:       return param ? "Remove pipes" : "Water pipe";   /* F1 */
     case TOOL_BUS_LINE:   return "Bus line";                             /* M2 */
+    case TOOL_GIFT:       return complex_gift_tool_name();               /* M6 */
     }
     return "?";
 }
@@ -281,10 +290,15 @@ int text_req_line(char *buf, int size, const ReqItem *it)
     case REQ_WATER_TOWER:
         if (it->met) return str_printf(buf, size, "%s Water tower", g);
         return str_printf(buf, size, "%s Water tower (outside a tower's pressure zone)", g);
-    case REQ_ELEMENTS:
+    case REQ_ELEMENTS:      /* M5: have = left this month, need = this upgrade's share; why 0 = no factory output */
         if (it->met) return str_printf(buf, size, "%s Precast elements", g);
-        return str_printf(buf, size, "%s Precast elements (no element factory)", g);
+        if (it->why == 0) return str_printf(buf, size, "%s Precast elements (no element factory at work)", g);
+        text_fmt_int(a, sizeof(a), it->have);
+        text_fmt_int(b, sizeof(b), it->need);
+        return str_printf(buf, size, "%s Precast elements: this month's are used up (%s left, needs %s)", g, a, b);
     case REQ_SCHOOL: case REQ_SAUNA: case REQ_HEALTH: case REQ_PHONE:
+        if (it->req == REQ_PHONE && !it->met && !it->lot)       /* M5: the phone queue */
+            return str_printf(buf, size, "%s Telephone (no exchange: the waiting list is a mere two years)", g);
         if (it->why == 1 || it->lot) {
             text_fmt_int(a, sizeof(a), it->have);
             text_fmt_int(b, sizeof(b), it->need);
@@ -317,8 +331,15 @@ int text_req_line(char *buf, int size, const ReqItem *it)
         if (it->met) return str_printf(buf, size, "%s Main road", g);
         return str_printf(buf, size, "%s Main road (only a %s)", g,
                           (it->have > 0 && it->have < ROAD_CLASS_COUNT) ? lc(g_roads[it->have].name) : "lane");
-    case REQ_HEAT:
-        return str_printf(buf, size, "%s District heating%s", g, it->met ? "" : " (not connected)");
+    case REQ_HEAT:          /* M5: why 0 not connected, 2 heat plants full (have/need = used/output), 3 no spare for more */
+        if (it->met) return str_printf(buf, size, "%s District heating", g);
+        if (it->why == 2 || it->why == 3) {
+            text_fmt_int(a, sizeof(a), it->have);
+            text_fmt_int(b, sizeof(b), it->need);
+            return str_printf(buf, size, "%s District heating: %s (heat plant %s/%s)", g,
+                              it->why == 2 ? "short" : "no spare for a bigger block", a, b);
+        }
+        return str_printf(buf, size, "%s District heating (no heated pipe within reach)", g);
     case REQ_ROUTE:                 /* M2: traffic.cpp; have = commute in walk tiles */
         if (it->met) return str_printf(buf, size, "%s Route to jobs (%d tiles)", g, (int)it->have);
         return str_printf(buf, size, "%s Route to jobs (no road to the town's jobs)", g);
@@ -418,8 +439,13 @@ int text_event(char *buf, int size, const SimEvent *e, int *severity)
         text_fmt_money(a, sizeof(a), e->a, year);
         if (e->b == 1) return str_printf(buf, size, "Emergency loan taken: %s owed, at a rate nobody will mention.", a);
         return str_printf(buf, size, "Three months in the red. The ministry will send an emergency loan, and a lecture.");
-    case SE_FIRE:
-        return str_printf(buf, size, "Fire! A wooden building is burning.");
+    case SE_FIRE:           /* M5: b 0 = an outbreak starts; b >= 1: it is over, b - 1 lots lost, a residents displaced */
+        if (e->b == 0) return str_printf(buf, size, "Fire! A wooden building is burning. The volunteers run for the hoses.");
+        if (e->b == 1) return str_printf(buf, size, "The fire is out. No home was lost, only a good deal of sleep.");
+        text_fmt_int(a, sizeof(a), e->a);
+        if (e->b == 2) return str_printf(buf, size, "The fire is out. One building burned down; %s residents need a roof.", a);
+        return str_printf(buf, size, "The fire is out. %d buildings burned down; %s residents need a roof. Concrete is "
+                          "suddenly popular.", (int)e->b - 1, a);
     case SE_MILESTONE:
         text_fmt_int(a, sizeof(a), e->a);
         return str_printf(buf, size, "%s passes %s residents. A brass band is considered.", town(), a);

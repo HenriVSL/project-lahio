@@ -19,6 +19,7 @@
 #include "budget.h"
 #include "util.h"
 #include "politics.h"
+#include "complex.h"            /* M6: CPX_DEF_USE (complex modules: power/water per stage) */
 
 #define NTILES      (MAP_MAX_W * MAP_MAX_H)
 #define NCELLS      (FIELD_MAX_W * FIELD_MAX_H)
@@ -373,7 +374,7 @@ static void solve_power_full(void)
         left = supply;
         for (k = 0; k < nl; k++) {
             Lot *l = &g_world.lots[s_order[k]];
-            int use = lot_active(l) ? g_bdefs[l->def].power_use : 0;
+            int use = lot_active(l) ? CPX_DEF_USE(l->def, power_use, CPXU_POWER) : 0;
             ns->demand += use;
             if (!shorted && use > left) shorted = 1;
             if (!shorted) { left -= use; s_lot_pstate[s_order[k]] = NLS_OK; if (use) ns->lots_served++; }
@@ -397,7 +398,7 @@ static void solve_power_full(void)
         Lot *l = &g_world.lots[i];
         if (l->def == B_NONE) continue;
         if (s_lot_pstate[i] == NLS_OK) l->flags |= LF_POWERED; else l->flags &= ~LF_POWERED;
-        if (s_lot_pstate[i] == NLS_NONE && lot_active(l) && g_bdefs[l->def].power_use > 0) ns->lots_unconnected++;
+        if (s_lot_pstate[i] == NLS_NONE && lot_active(l) && CPX_DEF_USE(l->def, power_use, CPXU_POWER) > 0) ns->lots_unconnected++;
     }
     for (y = 0; y < h; y++)
         for (x = 0; x < w; x++) {
@@ -490,7 +491,7 @@ static int solve_power_incremental(void)
             u8 want;
             if (g_bdefs[l->def].cat == BCAT_POWER) { st = NLS_OK; }
             else {
-                use = lot_active(l) ? g_bdefs[l->def].power_use : 0;
+                use = lot_active(l) ? CPX_DEF_USE(l->def, power_use, CPXU_POWER) : 0;
                 ns->demand += use;
                 if (!shorted && use > left) shorted = 1;
                 if (!shorted) { left -= use; st = NLS_OK; if (use) ns->lots_served++; }
@@ -519,7 +520,7 @@ static int solve_power_incremental(void)
     ns->networks = s_pncomp;
     for (i = 1; i < g_world.lot_hi; i++) {
         const Lot *l = &g_world.lots[i];
-        if (l->def != B_NONE && !s_lot_pcomp[i] && lot_active(l) && g_bdefs[l->def].power_use > 0) {
+        if (l->def != B_NONE && !s_lot_pcomp[i] && lot_active(l) && CPX_DEF_USE(l->def, power_use, CPXU_POWER) > 0) {
             s_lot_pstate[i] = NLS_NONE; ns->lots_unconnected++;
         }
     }
@@ -837,7 +838,7 @@ static void solve_water(void)
             s_lot_wdist[i] = (u16)best; s_lot_wown[i] = (u16)own; s_lc_ok[i] = 1;
         }
         if (!s_lot_wown[i]) {
-            if (lot_active(l) && g_bdefs[l->def].water_use > 0) ns->lots_unconnected++;
+            if (lot_active(l) && CPX_DEF_USE(l->def, water_use, CPXU_WATER) > 0) ns->lots_unconnected++;
             continue;
         }
         if (lot_is_water_source(l)) { s_lot_wnew[i] = (u8)(s_lot_out[i] > 0 ? NLS_OK : NLS_SHORT); continue; }
@@ -855,7 +856,7 @@ static void solve_water(void)
     for (k = 0; k < nl; k++) {
         int id = s_order[k], si = s_lot_wown[id];
         const Lot *l = &g_world.lots[id];
-        int use = lot_active(l) ? g_bdefs[l->def].water_use : 0;
+        int use = lot_active(l) ? CPX_DEF_USE(l->def, water_use, CPXU_WATER) : 0;
         WaterSrc *ws = &s_ws[si];
         ns->demand += use;
         if (!s_wcut[si] && use <= ws->left) { ws->left -= use; ws->own_used += use; s_lot_wserved[id] = 1; }
@@ -871,7 +872,7 @@ static void solve_water(void)
         int use;
         if (s_lot_wserved[id]) continue;
         l = &g_world.lots[id];
-        use = lot_active(l) ? g_bdefs[l->def].water_use : 0;
+        use = lot_active(l) ? CPX_DEF_USE(l->def, water_use, CPXU_WATER) : 0;
         n = s_ws[s_lot_wown[id]].net;
         if (!s_wcutn[n] && use <= s_wpool[n]) { s_wpool[n] -= use; s_lot_wserved[id] = 2; }
         else s_wcutn[n] = 1;
@@ -893,7 +894,7 @@ static void solve_water(void)
     for (k = 0; k < nl; k++) {
         int id = s_order[k], si = s_lot_wown[id], dist = s_lot_wdist[id];
         const Lot *l = &g_world.lots[id];
-        int use = lot_active(l) ? g_bdefs[l->def].water_use : 0;
+        int use = lot_active(l) ? CPX_DEF_USE(l->def, water_use, CPXU_WATER) : 0;
         WaterSrc *ws = &s_ws[si];
         if (s_lot_wserved[id]) {
             s_lot_wnew[id] = NLS_OK;

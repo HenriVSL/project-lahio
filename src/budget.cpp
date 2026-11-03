@@ -3,6 +3,7 @@
 #include "common.h"
 #include "budget.h"
 #include "industry.h"
+#include "complex.h"
 #include "world.h"
 #include "sim.h"
 #include "save.h"
@@ -109,7 +110,7 @@ static void compute_lines(Money *out, int book)
             continue;
         }
         if (d->cat == BCAT_SERVICE) svc[d->service] += d->upkeep;
-        else if (d->cat == BCAT_POWER || d->cat == BCAT_WATER) util += d->upkeep;
+        else if (d->cat == BCAT_POWER || d->cat == BCAT_WATER || l->def == B_HEAT_PLANT || l->def == B_SEWAGE_WORKS) util += d->upkeep;   /* M5 */
         else special += d->upkeep;
         if (d->jobs && l->status == LOT_ACTIVE) bus += (s64)l->occupants * (50 + lv) / 2;
     }
@@ -125,6 +126,7 @@ static void compute_lines(Money *out, int book)
     roads10 *= ui; lines10 *= ui;
     util = (Money)((s64)util * ui / 100); special = (Money)((s64)special * ui / 100);
     out[BL_TAX_RES] = div_rem(res * g_budget.tax_res, RES_TAX_DIV, BL_TAX_RES, book);
+    complex_budget_base(&bus, &ind_workers);   /* M6: mill / state works staff (half rate) + export volume */
     out[BL_TAX_BUS] = div_rem(bus * g_budget.tax_bus, 3000, BL_TAX_BUS, book);
     out[BL_EXPORT] = div_rem(ind_workers, 12, BL_EXPORT, book);
     out[BL_GRANTS] = IMAX(0, GRANT_BASE - pop / GRANT_FADE_DIV);   /* village support, fades out by 3,200 */

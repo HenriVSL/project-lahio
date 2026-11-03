@@ -25,6 +25,8 @@
 #include "mapgen.h"
 #include "politics.h"
 #include "industry.h"
+#include "civic.h"
+#include "text.h"
 
 /* ------------------------------------------------------------------ maps: neighbourhood modules
    A module is 29 x 22 tiles incl. its border streets (rows 0/7/14/21, columns 0/14/28): every zone tile
@@ -45,12 +47,17 @@ static const BalMap s_maps[] = {
 
 /* service slots inside a module (north tile, relative); wells touch two streets */
 enum { SL_SCHOOL, SL_SCHOOL2, SL_SAUNA, SL_SAUNA2, SL_SAUNA3, SL_CLINIC, SL_FIRE, SL_TOWER, SL_PARK,
-       SL_WELL, SL_WELL2, SL_WELL3, SL_WELL4, SL_WELL5, SL_WELL6, SL_WELL7, SL_COUNT };
+       SL_WELL, SL_WELL2, SL_WELL3, SL_WELL4, SL_WELL5, SL_WELL6, SL_WELL7,
+       SL_POST, SL_POLICE, SL_LIBRARY, SL_SEWAGE, SL_HEAT,        /* M5 */
+       SL_COUNT };
 static const struct { const char *key; s8 x, y, sz; } s_slot[SL_COUNT] = {
     { "school", 1, 8, 2 }, { "school", 15, 15, 2 }, { "sauna", 15, 1, 1 }, { "sauna", 27, 8, 1 }, { "sauna", 1, 18, 1 },
     { "clinic", 15, 8, 1 }, { "fire_station", 1, 15, 1 }, { "water_tower", 1, 1, 1 }, { "park", 13, 1, 1 },
     { "well", 27, 1, 1 }, { "well", 27, 15, 1 }, { "well", 1, 6, 1 }, { "well", 13, 13, 1 }, { "well", 1, 3, 1 },
     { "well", 27, 4, 1 }, { "well", 13, 8, 1 },
+    /* M5: post office (houses T3 phone), police, library, a sewage works and a heat plant (2x2, apartments T3) */
+    { "post", 15, 6, 1 }, { "police", 13, 20, 1 }, { "library", 15, 13, 1 }, { "sewage_works", 11, 1, 2 },
+    { "heat_plant", 11, 8, 2 },
 };
 
 /* ------------------------------------------------------------------ styles */
@@ -217,6 +224,55 @@ static int empty_zone_tiles(int zone)
     return n;
 }
 
+/* M5: the Milestone-2 services as a careful player adds them: post offices (the phone queue: houses T3), police
+   when the town grows or crime shows, a library when there is money, sewage works when untreated sewage reaches
+   the lakes; the dense style also builds the element factory (apartments T2+) and heat plants (apartments T3). */
+static int bot_unlocked(int def) { return def_unlocked(def, sim_date()->year, sim_stats()->town_status, 0); }
+
+static int s_factory;
+static void bot_m5(Money *cash)
+{
+    const CityStats *st = sim_stats();
+    UtilSummary us;
+    int s, m, k;
+    SimProblem pr[4];
+    int np = sim_top_problems(pr, 4), phone_problem = 0;
+    for (k = 0; k < np; k++) if (pr[k].req == REQ_PHONE && pr[k].residents >= 60) phone_problem = 1;
+    if (bot_unlocked(B_POST) && *cash >= 3500 && st->population >= 1500 &&
+        (!st->svc_capacity[SVC_POST] || st->svc_load[SVC_POST] * 10 >= st->svc_capacity[SVC_POST] * 9 || phone_problem)) {
+        s = next_slot(SL_POST, SL_POST, phone_problem ? module_of(pr[0].x, pr[0].y) : -1);
+        if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 700;
+    }
+    if (bot_unlocked(B_POLICE) && *cash >= 6000 && st->population >= 5000 &&
+        (!st->svc_capacity[SVC_POLICE] || st->svc_load[SVC_POLICE] * 10 >= st->svc_capacity[SVC_POLICE] * 9 || field_avg(FLD_CRIME) >= 20)) {
+        s = next_slot(SL_POLICE, SL_POLICE, -1);
+        if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 600;
+    }
+    if (bot_unlocked(B_LIBRARY) && *cash >= 12000 && st->svc_capacity[SVC_LIBRARY] < st->population / 2) {
+        s = next_slot(SL_LIBRARY, SL_LIBRARY, -1);
+        if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 800;
+    }
+    civic_util_summary(UT_SEWAGE, &us);
+    if (bot_unlocked(B_SEWAGE_WORKS) && *cash >= 8000 && us.untreated >= 2000) {
+        s = next_slot(SL_SEWAGE, SL_SEWAGE, -1);
+        if (s >= 0 && build_slot(s / 32, s % 32)) *cash -= 2500;
+    }
+    if (s_style == BS_DENSE) {
+        if (!s_factory && bot_unlocked(B_ELEMENT_FACTORY) && *cash >= 11000) {
+            int x = M->ind[0] + M->ind[2] - 4, y = M->ind[1] + 1;
+            s_factory = 1;
+            cmd("bulldoze %d %d %d %d", x, y, x + 2, y + 2);
+            if (cmd("build element_factory %d %d", x, y)) *cash -= 8000;
+        }
+        civic_util_summary(UT_HEAT, &us);
+        if (bot_unlocked(B_HEAT_PLANT) && *cash >= 6000 && st->lots_tier[ZONE_APARTMENTS][2] > 0 &&
+            (us.supply == 0 || us.lots_short > 0 || us.used * 10 >= us.supply * 9)) {
+            for (m = 1; m < s_mods; m++) if (zone_kind(m) == ZONE_APARTMENTS && !(s_used[m] & (1u << SL_HEAT))) break;
+            if (m < s_mods && build_slot(m, SL_HEAT)) *cash -= 3500;
+        }
+    }
+}
+
 /* one decision round (monthly): at most a few actions, cheapest urgent ones first */
 static void bot_month(void)
 {
@@ -261,6 +317,7 @@ static void bot_month(void)
             for (s = first; s <= last; s++) if (!(s_used[m] & (1u << s))) break;
             if (s <= last && build_slot(m, s)) { cash -= cost; done++; }
         }
+        bot_m5(&cash);
         if (!s_tower && st->town_status >= TS_MARKET_TOWN && cash >= 2000 && s_mods >= 2) {
             s_tower = 1;
             if (build_slot(1, SL_TOWER)) cash -= 1200;
@@ -374,6 +431,27 @@ static void bot_rural(void)
 
 /* M3: industry by kind, one row per year: tests/out/industry_<style>_<map>.txt */
 static FILE *s_itab;
+/* M5: services & housing, one row per year: tests/out/civic_<style>_<map>.txt (fires, crime, lakes, heat, elements,
+   apartments by tier, and last month's budget lines so a money drain is visible) */
+static FILE *s_ctab;
+static void ctab_row(void)
+{
+    const FireStats *fs = civic_fire_stats();
+    const CityStats *st = sim_stats();
+    UtilSummary hs, ss;
+    int k;
+    if (!s_ctab) return;
+    civic_util_summary(UT_HEAT, &hs); civic_util_summary(UT_SEWAGE, &ss);
+    fprintf(s_ctab, "%d %6d %7d | fires %3d lost %3d out %3d rubble %3d | crime %3d lake %3d untreated %5d treated %5d |"
+                    " heat %4d/%4d lots %3d short %2d fuel %4d | elem %4d | apt %3d/%3d/%3d com3 %3d h3 %4d | svc P%d L%d T%d |",
+            sim_date()->year, st->population, g_budget.money, fs->started, fs->lots_lost, fs->put_out, fs->rubble_tiles,
+            field_avg(FLD_CRIME), civic_lake_avg(), ss.untreated, ss.used, hs.used, hs.supply, hs.lots_served, hs.lots_short,
+            hs.fuel_month, civic_elements_output(), st->lots_tier[ZONE_APARTMENTS][1], st->lots_tier[ZONE_APARTMENTS][2],
+            st->lots_tier[ZONE_APARTMENTS][3], st->lots_tier[ZONE_COMMERCIAL][3], st->lots_tier[ZONE_HOUSES][3],
+            st->svc_capacity[SVC_POLICE] / 3000, st->svc_capacity[SVC_LIBRARY] / 4000, st->svc_capacity[SVC_POST] / 3000);
+    for (k = 0; k < BL_COUNT; k++) fprintf(s_ctab, " %d", g_budget.last[k]);
+    fprintf(s_ctab, "\n");
+}
 static void itab_row(void)
 {
     const IndKinds *K = industry_kinds();
@@ -567,7 +645,7 @@ static void bal_begin(int style, int map, BalRun *out, int record)
     for (k = 0; k < TS_COUNT; k++) out->status_month[k] = -1;
     M = &s_maps[map];
     s_style = style; s_mods = 0; s_ind1 = 0; s_plants = 0; s_tower = 0; s_errors = 0; s_cmds = 0; s_rec_wait = 0;
-    s_month_no = 0; s_bot_off = 0; s_opsum = 0; s_prev_pop = 0; s_emig = 0; s_rural_done = 0;
+    s_month_no = 0; s_bot_off = 0; s_opsum = 0; s_prev_pop = 0; s_emig = 0; s_rural_done = 0; s_factory = 0;
     memset(s_used, 0, sizeof(s_used)); memset(s_com_big, 0, sizeof(s_com_big));
     bal_new_city(M);
     s_rec = NULL;
@@ -590,6 +668,16 @@ static void bal_begin(int style, int map, BalRun *out, int record)
                            M->key, M->seed, mapgen_preset_name(M->preset));
     }
     s_itab = NULL;
+    s_ctab = NULL;
+    if (record) {      /* M5 */
+        str_printf(path, sizeof(path), "out/civic_%s_%s.txt", s_style_name[style], M->key);
+        s_ctab = fopen(path, "w");
+        if (s_ctab) {
+            fprintf(s_ctab, "M5 services & housing: style %s, map %s; January rows (tests/test_balance.cpp). Budget lines:", s_style_name[style], M->key);
+            for (k = 0; k < BL_COUNT; k++) fprintf(s_ctab, " %d=%s", k, text_term_label(TERMK_BUDGET, k));
+            fprintf(s_ctab, "\n");
+        }
+    }
     if (record) {      /* M3: industry by kind table */
         str_printf(path, sizeof(path), "out/industry_%s_%s.txt", s_style_name[style], M->key);
         s_itab = fopen(path, "w");
@@ -648,6 +736,7 @@ static void bal_months(BalRun *out, int n)
             s_prev_pop = out->row[y].pop;
             s_opsum = 0;
             itab_row();
+            ctab_row();
             out->nrows = y + 1;
         }
         if (!s_bot_off) bot_month();
@@ -679,6 +768,7 @@ static void bal_end(BalRun *out)
         if (out->style == BS_RURAL) world_dump(s_itab, 0, 0, g_world.w - 1, g_world.h - 1);   /* M3: where it all grew */
         fclose(s_itab); s_itab = NULL;
     }
+    if (s_ctab) { civic_dump(s_ctab); sim_dump_report(s_ctab); fclose(s_ctab); s_ctab = NULL; }
     for (i = 0; i < IK_COUNT; i++) out->ind_lots[i] = industry_kinds()->lots[i];
     out->camps = industry_wood()->camps; out->farms = industry_milk()->farm_lots; out->farms_t3 = industry_milk()->farm_tier[3];
     out->wood_cut = industry_wood()->cut_tiles_total; out->farm_res = industry_milk()->farm_residents;

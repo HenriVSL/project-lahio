@@ -121,6 +121,7 @@ static double s_totalChunkMs;
 static int s_idGrass[3], s_idWater[3], s_idShore[16][3], s_idCrop, s_idPlough, s_idMarsh;
 static int s_idRock[2], s_idForest[FOREST_COUNT][3], s_idTree[6];
 static int s_idStage[3][2], s_idHay;      /* M3: forest_cut/seed/young (regrowing forestry tiles), field_hay */
+static int s_idRubble[2];                  /* M5: burnt ruins (TF_RUBBLE): rubble0/1, else the 1x1 construction ground */
 #define FARM_HAY(t, h) (TER_TYPE(t) == TER_FIELD && TILE_ZONE(t) == ZONE_FARM && !TILE_ROAD(t) && s_idHay >= 0 && ((h) % 3u) == 0)
 static int s_idRoad[ROAD_CLASS_COUNT][16], s_idBridge[ROAD_CLASS_COUNT][2];
 static int s_idRiver[2][3][3];          /* [rapids][axis x, y, n][frame] */
@@ -186,7 +187,7 @@ static int lot_sprite_id(const Lot *l, int flat)
 {
     const BuildingDef *d = def_building(l->def);
     int kind = flat ? ART_LOT_GROUND : l->status == LOT_BUILDING ? ART_LOT_BUILDING :
-               l->status == LOT_ABANDONED ? ART_LOT_ABANDONED : ART_LOT_NORMAL;
+               (l->status == LOT_ABANDONED || l->status == LOT_BURNING) ? ART_LOT_ABANDONED : ART_LOT_NORMAL;   /* M5: burning = charred (life draws the flames) */
     int v = (kind == ART_LOT_NORMAL || kind == ART_LOT_ABANDONED) ? (l->variant & 15) : 0;
     int r = (d->flags & BDF_NO_ROTATE) ? 0 : (l->rot & 3);
     s16 *c = &s_lotCache[l->def][v][r][kind];
@@ -274,7 +275,7 @@ static int tile_objects(int z, int x, int y, int flat, Piece *p, int max, int n)
         return n;
     }
     if (ter != TER_FOREST && ter != TER_ROCK && !(t->flags & TF_TREE) && !(t->road & TR_POWER_LINE) &&
-        !(TILE_ROAD(t) && TER_IS_WATER(ter)) && !(ter == TER_FIELD && TILE_ZONE(t) == ZONE_FARM)) return n;
+        !(TILE_ROAD(t) && TER_IS_WATER(ter)) && !(ter == TER_FIELD && TILE_ZONE(t) == ZONE_FARM) && !(t->flags & TF_RUBBLE)) return n;
     south_vertex(z, x, y, &svx, &svy);
     h = hash_xy(x, y, 0x5EED);
     if ((ter == TER_FOREST || ter == TER_ROCK) && shore_of(x, y)) {      /* shore tile: ground stays shore */
@@ -294,6 +295,7 @@ static int tile_objects(int z, int x, int y, int flat, Piece *p, int max, int n)
     if ((t->flags & TF_TREE) && !TILE_ROAD(t) && ter != TER_FOREST)
         n = add_piece(p, max, n, z, s_idTree[(h >> 8) % 6], svx, svy, D * 4 + SUB_TREE, 0, x, y, 0);
     if (FARM_HAY(t, h)) n = add_piece(p, max, n, z, s_idHay, svx, svy, D * 4 + SUB_BASE, 0, x, y, 0);   /* M3: hay poles */
+    if ((t->flags & TF_RUBBLE) && !TILE_ROAD(t)) n = add_piece(p, max, n, z, s_idRubble[(h >> 5) & 1], svx, svy, D * 4 + SUB_BASE, 0, x, y, 0);   /* M5 */
     if (t->road & TR_POWER_LINE) {
         int m = power_mask(x, y);
         int id = TILE_ROAD(t) ? (m ? s_idWire[m] : -1) : s_idPower[m];
@@ -307,7 +309,8 @@ static int tile_has_objects(const Tile *t)
     int ter = TER_TYPE(t);
     if (t->lot) return (t->flags & TF_LOT_FRONT) != 0;
     return ter == TER_FOREST || ter == TER_ROCK || (t->flags & TF_TREE) || (t->road & TR_POWER_LINE) ||
-           (TILE_ROAD(t) && TER_IS_WATER(ter)) || (ter == TER_FIELD && TILE_ZONE(t) == ZONE_FARM);   /* M3: hay */
+           (TILE_ROAD(t) && TER_IS_WATER(ter)) || (ter == TER_FIELD && TILE_ZONE(t) == ZONE_FARM) ||   /* M3: hay */
+           (t->flags & TF_RUBBLE);                                                                    /* M5: ruins */
 }
 
 /* F3: persistent zone view, ART.md 6 front-edge rule. For tile T and its front edges SE (02, neighbour +X)
@@ -701,6 +704,8 @@ static void resolve_ids(void)
             s_idStage[k][i] = art_exists(buf) ? art_find(buf) : s_idForest[FOREST_MIXED][i];
         }
     s_idHay = art_exists("field_hay") ? art_find("field_hay") : -1;
+    for (i = 0; i < 2; i++)                   /* M5: ruins; fallback = the bare construction ground */
+        s_idRubble[i] = art_exists(i ? "rubble1" : "rubble0") ? art_find(i ? "rubble1" : "rubble0") : art_find("build_1x1_r0");
     for (k = 0; k < ROAD_CLASS_COUNT; k++)
         for (m = 0; m < 16; m++) s_idRoad[k][m] = k ? art_findf("%s_%02d", g_roads[k].key, m) : ART_MISSING;
     for (k = 1; k < ROAD_CLASS_COUNT; k++) {

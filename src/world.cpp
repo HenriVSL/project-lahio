@@ -229,7 +229,7 @@ void world_set_terrain(int x, int y, int ter, int variant)
 static void clear_vegetation(Tile *t)
 {
     if (TER_TYPE(t) == TER_FOREST) t->terrain = (u8)(TER_GRASS | ((t->terrain >> 4) % 3) << 4);
-    t->flags &= ~TF_TREE;
+    t->flags &= ~(TF_TREE | TF_RUBBLE);      /* M5: a new building clears the ruins */
 }
 
 void world_set_road(int x, int y, int cls)
@@ -379,7 +379,7 @@ int world_lot_place(int def, int x, int y, int rot, int variant, int status)
     for (j = 0; j < h; j++)
         for (i = 0; i < w; i++) {
             Tile *t = WT(x + i, y + j);
-            if (TER_TYPE(t) == TER_FOREST || (t->flags & TF_TREE)) kinds |= WCHG_TERRAIN | WCHG_FLAGS;
+            if (TER_TYPE(t) == TER_FOREST || (t->flags & (TF_TREE | TF_RUBBLE))) kinds |= WCHG_TERRAIN | WCHG_FLAGS;
             clear_vegetation(t);
             t->lot = (u16)id;
             t->flags &= ~TF_LOT_FRONT;

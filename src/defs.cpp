@@ -6,6 +6,7 @@
 #include "common.h"
 #include "defs.h"
 #include "util.h"
+#include "era.h"           /* M7: era_unlock_override */
 
 /* Units (T04): capacity = residents (R) / jobs (C, I) per LOT, power units (plants; 1 unit ~ one tier-2
    house tile, DESIGN 4.3), water units (pump/well), residents served (services; school: pupils).
@@ -34,19 +35,19 @@ const BuildingDef g_bdefs[B_COUNT] = {
     ZB("house_t3", "Two-storey rintamamiestalo", ZONE_HOUSES,     3, 1, 1, BDF_WOODEN,     8, 2, 2,  0, 1, 6, B_NONE),
     ZB("apt_t1_3x1", "Lamellitalo",              ZONE_APARTMENTS, 1, 3, 1, 0,             75, 9, 9,  0, 2, 3, B_APT_T2_3X1),
     ZB("apt_t1_2x2", "Lamellitalo",              ZONE_APARTMENTS, 1, 2, 2, 0,            100, 12, 12, 0, 2, 3, B_APT_T2_2X2),
-    ZB("apt_t2_3x1", "Precast lamellitalo",      ZONE_APARTMENTS, 2, 3, 1, 0,            135, 15, 15, 0, 2, 0, B_APT_T3_3X1),
-    ZB("apt_t2_2x2", "Precast lamellitalo",      ZONE_APARTMENTS, 2, 2, 2, 0,            180, 20, 20, 0, 2, 0, B_APT_T3_2X2),
-    ZB("apt_t3_3x1", "Elementtitalo",            ZONE_APARTMENTS, 3, 3, 1, 0,            210, 24, 24, 0, 2, 0, B_NONE),
-    ZB("apt_t3_2x2", "Pistetalo",                ZONE_APARTMENTS, 3, 2, 2, 0,            280, 32, 32, 0, 2, 0, B_NONE),
+    ZB("apt_t2_3x1", "Precast lamellitalo",      ZONE_APARTMENTS, 2, 3, 1, 0,            135, 15, 15, 0, 2, 2, B_APT_T3_3X1),   /* M5: art (ART.md 3.1) */
+    ZB("apt_t2_2x2", "Precast lamellitalo",      ZONE_APARTMENTS, 2, 2, 2, 0,            180, 20, 20, 0, 2, 2, B_APT_T3_2X2),
+    ZB("apt_t3_3x1", "Elementtitalo",            ZONE_APARTMENTS, 3, 3, 1, 0,            210, 24, 24, 0, 2, 2, B_NONE),
+    ZB("apt_t3_2x2", "Pistetalo",                ZONE_APARTMENTS, 3, 2, 2, 0,            280, 32, 32, 0, 2, 2, B_NONE),
     ZB("com_t1_1x1", "Kiosk",                    ZONE_COMMERCIAL, 1, 1, 1, BDF_WOODEN,     4, 1, 1,  0, 1, 3, B_COM_T2_1X1),
     ZB("com_t1_2x1", "Co-op shop",               ZONE_COMMERCIAL, 1, 2, 1, 0,              8, 2, 1,  0, 1, 3, B_COM_T2_2X1),
     ZB("com_t1_2x2", "Co-op store",              ZONE_COMMERCIAL, 1, 2, 2, 0,             16, 4, 2,  0, 1, 2, B_COM_T2_2X2),
     ZB("com_t2_1x1", "Corner shop",              ZONE_COMMERCIAL, 2, 1, 1, 0,             10, 2, 1,  0, 1, 3, B_COM_T3_1X1),
     ZB("com_t2_2x1", "Shop row",                 ZONE_COMMERCIAL, 2, 2, 1, 0,             20, 4, 2,  0, 1, 3, B_COM_T3_2X1),
     ZB("com_t2_2x2", "Shops with flats",         ZONE_COMMERCIAL, 2, 2, 2, 0,             40, 8, 4,  0, 1, 2, B_COM_T3_2X2),
-    ZB("com_t3_1x1", "Bank office",              ZONE_COMMERCIAL, 3, 1, 1, 0,             20, 4, 2,  0, 2, 0, B_NONE),
-    ZB("com_t3_2x1", "Office building",          ZONE_COMMERCIAL, 3, 2, 1, 0,             40, 8, 4,  0, 2, 0, B_NONE),
-    ZB("com_t3_2x2", "Department store",         ZONE_COMMERCIAL, 3, 2, 2, 0,             80, 16, 8, 0, 2, 0, B_NONE),
+    ZB("com_t3_1x1", "Bank office",              ZONE_COMMERCIAL, 3, 1, 1, 0,             20, 4, 2,  0, 2, 2, B_NONE),   /* M5: art */
+    ZB("com_t3_2x1", "Office building",          ZONE_COMMERCIAL, 3, 2, 1, 0,             40, 8, 4,  0, 2, 2, B_NONE),
+    ZB("com_t3_2x2", "Department store",         ZONE_COMMERCIAL, 3, 2, 2, 0,             80, 16, 8, 0, 2, 2, B_NONE),
     ZB("ind_t1_2x2", "Workshop",                 ZONE_INDUSTRY,   1, 2, 2, BDF_WOODEN,    40, 6, 2, 40, 2, 2, B_IND_T2_2X2),
     ZB("ind_t1_3x3", "Sawmill",                  ZONE_INDUSTRY,   1, 3, 3, BDF_WOODEN,    90, 12, 4, 80, 2, 2, B_IND_T2_3X3),
     ZB("ind_t2_2x2", "Factory",                  ZONE_INDUSTRY,   2, 2, 2, BDF_SMOKE,    100, 12, 4, 80, 2, 2, B_IND_T3_2X2),
@@ -57,7 +58,7 @@ const BuildingDef g_bdefs[B_COUNT] = {
     PB("town_hall", "Town hall",              BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_UNIQUE, TS_VILLAGE, 1955,              0,  20,    0, 10, 3, 2,   0, 10, 6, 1),
     PB("coal_plant", "Coal power plant",      BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_VILLAGE, 1955,            2500, 110,  500, 30, 0, 2, 400, -15, 6, 1),
     PB("hydro_plant", "Hydro power plant",    BCAT_POWER,   2, 2, SVC_NONE, BDF_NEEDS_RAPIDS, TS_VILLAGE, 1955,     6000,  40,  600, 10, 0, 0,   0,  0, 0, 0),
-    PB("oil_plant", "Oil power plant",        BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_VILLAGE, 1965,            5000, 100,  900, 30, 0, 2, 300, -15, 6, 0),
+    PB("oil_plant", "Oil power plant",        BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_VILLAGE, 1965,            5000, 100,  900, 30, 0, 2, 300, -15, 6, 1),   /* M7: art = coal plant alias; fuel at the oil price (trade.cpp) */
     PB("peat_plant", "Peat power plant",      BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_VILLAGE, 1970,            4000,  80,  700, 30, 0, 2, 350, -15, 6, 0),
     PB("nuclear_plant", "Nuclear power plant",BCAT_POWER,   3, 3, SVC_NONE, 0, TS_CITY, 1977,                      30000, 400, 3000, 80, 0, 8,   0, -10, 6, 0),
     PB("pump", "Pumping station",             BCAT_WATER,   1, 1, SVC_NONE, BDF_NEEDS_SHORE, TS_VILLAGE, 1955,       600,  20,  500,  3, 4, 0,   0,  0, 0, 1),
@@ -67,15 +68,15 @@ const BuildingDef g_bdefs[B_COUNT] = {
     PB("school", "School",                    BCAT_SERVICE, 2, 2, SVC_SCHOOL, 0, TS_VILLAGE, 1955,                  1000, 100,  500, 15, 4, 4,   0,  5, 4, 1),
     PB("clinic", "Health clinic",             BCAT_SERVICE, 1, 1, SVC_HEALTH, 0, TS_VILLAGE, 1955,                   700,  70, 2500, 10, 3, 3,   0,  3, 3, 1),
     PB("sauna", "Public sauna",               BCAT_SERVICE, 1, 1, SVC_SAUNA, BDF_WOODEN | BDF_SMOKE, TS_VILLAGE, 1955, 400, 25, 1500,  3, 1, 4,   4,  3, 3, 1),
-    PB("police", "Police station",            BCAT_SERVICE, 1, 1, SVC_POLICE, 0, TS_MARKET_TOWN, 1960,               600,  40, 3000, 12, 2, 2,   0,  0, 0, 0),
-    PB("library", "Library",                  BCAT_SERVICE, 1, 1, SVC_LIBRARY, 0, TS_MARKET_TOWN, 1960,              800,  30, 4000,  6, 2, 2,   0,  6, 4, 0),
-    PB("post", "Post and telephone",          BCAT_SERVICE, 1, 1, SVC_POST, 0, TS_MARKET_TOWN, 1960,                 700,  30, 3000, 15, 3, 2,   0,  0, 0, 0),
-    PB("health_centre", "Health centre",      BCAT_SERVICE, 2, 2, SVC_HEALTH, 0, TS_REGIONAL_CENTRE, 1972,          4000, 150, 8000, 40, 8, 8,   0,  5, 4, 0),
+    PB("police", "Police station",            BCAT_SERVICE, 1, 1, SVC_POLICE, 0, TS_MARKET_TOWN, 1960,               600,  40, 3000, 12, 2, 2,   0,  0, 0, 1),   /* M5: art */
+    PB("library", "Library",                  BCAT_SERVICE, 1, 1, SVC_LIBRARY, 0, TS_MARKET_TOWN, 1960,              800,  30, 4000,  6, 2, 2,   0,  6, 4, 1),
+    PB("post", "Post and telephone",          BCAT_SERVICE, 1, 1, SVC_POST, 0, TS_CHURCH_VILLAGE, 1955,              700,  30, 3000, 15, 3, 2,   0,  0, 0, 1),   /* M5: houses T3 need it (DESIGN 7: Market town 1960 kept T3 out of reach until 1960) */
+    PB("health_centre", "Health centre",      BCAT_SERVICE, 2, 2, SVC_HEALTH, 0, TS_TOWN, 1972,                     4000, 150, 8000, 40, 8, 8,   0,  5, 4, 1),   /* M5: Town (DESIGN 7: Regional centre, 40k, out of reach in most towns) */
     PB("park", "Park",                        BCAT_PARK,    1, 1, SVC_NONE, BDF_NO_CONDUCT | BDF_NO_ROTATE, TS_VILLAGE, 1955, 100, 2, 0, 0, 0, 0, 0, 12, 4, 3),
     PB("sports_field", "Sports field",        BCAT_PARK,    2, 2, SVC_NONE, BDF_NO_CONDUCT, TS_CHURCH_VILLAGE, 1960, 400,   5,    0,  1, 0, 0,   0, 15, 5, 0),
     PB("ice_rink", "Ice rink",                BCAT_PARK,    2, 2, SVC_NONE, BDF_NO_CONDUCT, TS_TOWN, 1965,          1500,  20,    0,  2, 2, 1,   0, 15, 5, 0),
     PB("church", "Church",                    BCAT_SPECIAL, 2, 2, SVC_NONE, 0, TS_CHURCH_VILLAGE, 1955,             2500,  10,    0,  2, 1, 1,   0, 15, 6, 0),
-    PB("element_factory", "Element factory",  BCAT_SPECIAL, 3, 3, SVC_NONE, BDF_SMOKE, TS_TOWN, 1960,               8000, 100,  200, 120, 30, 10, 200, -10, 5, 0),
+    PB("element_factory", "Element factory",  BCAT_SPECIAL, 3, 3, SVC_NONE, BDF_SMOKE, TS_TOWN, 1960,               8000, 100,  300, 120, 30, 10, 200, -10, 5, 1),   /* M5: cap = elements/month (civic.h) */
     PB("station", "Railway station",          BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_UNIQUE, TS_MARKET_TOWN, 1955,       3000,  30,    0, 10, 3, 2,   0,  8, 5, 1),   /* M2: back to the rail (transit.h) */
     /* M3 industry kinds (docs/research/INDUSTRY.md 5.1; art keys ART.md 3.1, several are aliases of the
        M1 tier art). The kind is industry_def_kind() (industry.cpp), chosen per new lot by site + kind demand.
@@ -107,6 +108,41 @@ const BuildingDef g_bdefs[B_COUNT] = {
        tool next to a stop (decoration: no jobs, no upkeep; the stop itself is the road tile) */
     PB("bus_depot", "Bus depot",              BCAT_SPECIAL, 2, 2, SVC_NONE, 0, TS_CHURCH_VILLAGE, 1955,      1500,  25,    0, 12, 2, 1,  10, -3, 3, 1),
     PB("bus_stop", "Bus stop",                BCAT_SPECIAL, 1, 1, SVC_NONE, 0, TS_VILLAGE, 1955,                0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    /* M6 complexes (complex.h, INDUSTRY.md 7): modules are ordinary lots placed together at rot 0. Power, water and
+       pollution are 0 here: complex.cpp sets them per stage (CPX_DEF_USE in net/fields). The halls carry the
+       complex price (the tool shows it) and the land value effect ("the smell of money": -20 within 8 tiles).
+       Jobs are the complex's own (complex_jobs), so every module has jobs 0. No upkeep: the company pays its own. */
+#define MOD (BDF_MODULE | BDF_NO_ROTATE)
+    PB("pm_logyard", "Log yard",              BCAT_SPECIAL, 2, 2, SVC_NONE, MOD, TS_CHURCH_VILLAGE, 1955,      0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    PB("pm_hall", "Paper mill",               BCAT_SPECIAL, 3, 3, SVC_NONE, MOD | BDF_SMOKE, TS_CHURCH_VILLAGE, 1955, 5000, 0, 0, 0, 0, 0,  0, -20, 8, 1),
+    PB("pm_chipper", "Debarking drum",        BCAT_SPECIAL, 2, 1, SVC_NONE, MOD, TS_CHURCH_VILLAGE, 1955,      0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    PB("pm_boiler", "Boiler house",           BCAT_SPECIAL, 2, 2, SVC_NONE, MOD | BDF_SMOKE, TS_CHURCH_VILLAGE, 1955, 0, 0,  0,  0, 0, 0,   0,  0, 0, 1),
+    PB("pm_digester", "Digesters and chip silos", BCAT_SPECIAL, 2, 2, SVC_NONE, MOD, TS_CHURCH_VILLAGE, 1955,  0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    PB("pm_gate", "Mill gate",                BCAT_SPECIAL, 1, 1, SVC_NONE, MOD, TS_CHURCH_VILLAGE, 1955,      0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    PB("pm_office", "Mill office",            BCAT_SPECIAL, 1, 1, SVC_NONE, MOD, TS_CHURCH_VILLAGE, 1955,      0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    PB("vm_hall", "Valtion Metalli works",    BCAT_SPECIAL, 3, 3, SVC_NONE, MOD | BDF_SMOKE, TS_MARKET_TOWN, 1955, 6000, 0, 0, 0, 0, 0,   0, -10, 4, 1),
+    PB("vm_yard", "Crane yard",               BCAT_SPECIAL, 2, 2, SVC_NONE, MOD, TS_MARKET_TOWN, 1955,         0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    PB("vm_store", "Roll store",              BCAT_SPECIAL, 2, 1, SVC_NONE, MOD, TS_MARKET_TOWN, 1955,         0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    PB("vm_siding", "Rail siding",            BCAT_SPECIAL, 3, 1, SVC_NONE, MOD, TS_MARKET_TOWN, 1955,         0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+    PB("vm_gate", "Works gate",               BCAT_SPECIAL, 2, 1, SVC_NONE, MOD, TS_MARKET_TOWN, 1955,         0,   0,    0,  0, 0, 0,   0,  0, 0, 1),
+#undef MOD
+    /* M6 patron gifts: wooden workers' row houses = tier-2 housing (30 residents, the needs of a tier-2 house), never
+       grown by the sim (only placed with TOOL_GIFT); the patron's villa = a land value landmark, closed to the public */
+    ZB("row_houses",         "Workers' row houses",     ZONE_HOUSES,   2, 3, 1, BDF_WOODEN,                   30,  5,  5,   0, 1, 2, B_NONE),
+    PB("patron_villa", "The patron's villa",  BCAT_SPECIAL, 2, 2, SVC_NONE, 0, TS_VILLAGE, 1955,                0,   0,    0,  2, 1, 1,   0, 20, 5, 1),
+    /* M5 utilities (civic.h): capacity = heat units (heat plant; consumers take their water_use) / residents treated
+       (sewage works). Both sit on the water pipe network. Coal-fired heat plant: smoke, fuel booked monthly. */
+    PB("heat_plant", "District heat plant",   BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_SMOKE, TS_MARKET_TOWN, 1960,      3500,  60,  600, 15, 4, 4, 150, -8, 4, 1),
+    PB("sewage_works", "Sewage works",        BCAT_SPECIAL, 2, 2, SVC_NONE, 0, TS_MARKET_TOWN, 1960,              2500,  40, 4000,  8, 4, 0,   0, -6, 4, 1),
+    /* M7 landmarks (era.cpp): expensive money sinks for built-out towns with land value, authority (politics) and
+       tourism income (less than the upkeep). Unlocks by status + year (DESIGN 7; TV tower at Town 1970 instead of
+       City so towns of 10-40k reach it); the ski jump and the friendship statue also unlock with their event cards
+       (era_unlock_override). The presidential sauna doubles sauna diplomacy (Eastern relations). */
+    PB("concert_hall", "Concert hall",        BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_UNIQUE, TS_TOWN, 1962,           15000, 120,    0, 20, 6, 4,   0, 30, 8, 1),
+    PB("tv_tower", "Television tower",        BCAT_SPECIAL, 1, 1, SVC_NONE, BDF_UNIQUE, TS_TOWN, 1970,           12000,  60,    0,  8, 8, 1,   0, 10, 6, 1),
+    PB("ski_jump", "Ski jump",                BCAT_SPECIAL, 3, 1, SVC_NONE, BDF_UNIQUE | BDF_NO_ROTATE, TS_MARKET_TOWN, 1958, 6000, 40, 0, 4, 2, 0, 0, 15, 6, 1),
+    PB("pres_sauna", "Presidential sauna",    BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_UNIQUE | BDF_WOODEN, TS_MARKET_TOWN, 1955, 4000, 25, 0, 3, 1, 2, 0, 20, 5, 1),
+    PB("friendship_statue", "Friendship statue", BCAT_SPECIAL, 1, 1, SVC_NONE, BDF_UNIQUE, TS_MARKET_TOWN, 1960,   2000,   5,    0,  0, 0, 0,   0,  5, 3, 1),
 };
 
 /* key, name, era_year, status_req, flags, capacity, speed, pollution, noise, cost, bridge_cost, upkeep10 */
@@ -158,17 +194,16 @@ static const TierReq s_req_house[3][8] = {
     { { REQ_ROAD, 3 }, { REQ_POWER, 0 }, { REQ_WATER, 0 }, { REQ_SCHOOL, 0 }, { REQ_SAUNA, 0 },
       { REQ_HEALTH, 0 }, { REQ_SHOP, 0 }, { REQ_PHONE, 0 } },
 };
-/* T12: the post office (REQ_PHONE) has no art in Milestone 1 (variants 0, the tool is hidden), so the
-   DESIGN's phone requirement would make tier-3 houses unreachable. Count 7 drops it (the last item);
-   Milestone 2: back to 8 when B_POST gets variants. */
-static const int s_nreq_house[3] = { 1, 5, 7 };
+/* T12: the post office (REQ_PHONE) had no art in Milestone 1, so count 7 dropped it. M5: B_POST has art, the
+   phone queue is back (8). */
+static const int s_nreq_house[3] = { 1, 5, 8 };
 static const TierReq s_req_house3_lv = { REQ_LAND_VALUE, 40 };
 static const TierReq s_req_apt[3][8] = {
     { { REQ_ROAD, 3 }, { REQ_POWER, 0 }, { REQ_WATER, 0 } },
     { { REQ_ROAD, 3 }, { REQ_POWER, 0 }, { REQ_WATER, 0 }, { REQ_WATER_TOWER, 0 }, { REQ_ELEMENTS, 0 },
       { REQ_SCHOOL, 0 } },
     { { REQ_ROAD, 3 }, { REQ_POWER, 0 }, { REQ_WATER, 0 }, { REQ_WATER_TOWER, 0 }, { REQ_ELEMENTS, 0 },
-      { REQ_SCHOOL, 0 }, { REQ_HEALTH, 0 }, { REQ_LOW_POLLUTION, 48 } },
+      { REQ_SCHOOL, 0 }, { REQ_HEAT, 0 }, { REQ_LOW_POLLUTION, 48 } },   /* M5: district heating (DESIGN 5.4 v1.0) */
 };
 static const int s_nreq_apt[3] = { 3, 6, 8 };
 static const TierReq s_req_apt3_lv = { REQ_LAND_VALUE, 50 };
@@ -262,6 +297,7 @@ int def_unlocked(int id, int year, int status, int all_unlocked)
     const BuildingDef *d = def_building(id);
     if (id <= B_NONE || id >= B_COUNT) return 0;
     if (all_unlocked) return 1;
+    if (era_unlock_override(id, year, status)) return 1;     /* M7: landmarks unlocked by event cards */
     return year >= d->era_year && status >= d->status_req;
 }
 
@@ -343,7 +379,7 @@ int def_selfcheck(void)
             if (d->cat == BCAT_SERVICE && d->service >= SVC_COUNT) { log_printf("defs: error: %s service", d->key); bad++; }
             if (d->cat == BCAT_SERVICE && d->capacity <= 0) { log_printf("defs: error: %s capacity", d->key); bad++; }
         }
-        if ((d->flags & BDF_NO_ROTATE) && d->w != d->h) { log_printf("defs: error: %s no-rotate but not square", d->key); bad++; }
+        if ((d->flags & BDF_NO_ROTATE) && d->w != d->h && !(d->flags & BDF_MODULE) && i != B_SKI_JUMP) {   /* M6: modules sit at rot 0; M7: the ski jump is fixed art */ log_printf("defs: error: %s no-rotate but not square", d->key); bad++; }
     }
     for (i = 1; i < ZONE_COUNT; i++) {
         const TierReq *r;

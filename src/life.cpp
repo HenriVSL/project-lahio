@@ -21,6 +21,7 @@
 #include "config.h"
 #include "util.h"
 #include "ui_layout.h"
+#include "civic.h"
 
 #define SMOKE_SRC_MAX   48
 #define SMOKE_SCAN_LOTS 768          /* lots examined per frame by the smoke-source scan */
@@ -44,6 +45,8 @@ static int      s_inited, s_carsOn = 1, s_smokeOn = 1;
 static int      s_carIds[LC_COLOURS][DIR_COUNT];
 static int      s_busIds[DIR_COUNT];      /* M2: bus_<dir> (lifebus.cpp) */
 static int      s_smokeIds[6];
+static int      s_fireIds[4];         /* M5: fire0..3 flame frames (ART.md 3.1), drawn on burning lots */
+static s32      s_fireT, s_fireSmokeT;
 static Puff     s_puffs[LIFE_MAX_SMOKE];
 static int      s_npuffs;
 static SmokeSrc s_src[SMOKE_SRC_MAX], s_scan[SMOKE_SRC_MAX];
@@ -65,6 +68,7 @@ void life_init(void)
         for (d = 0; d < DIR_COUNT; d++) s_carIds[i][d] = art_findf("car%d_%s", i, dn[d]);
     for (i = 0; i < 6; i++) s_smokeIds[i] = art_findf("smoke%d", i);
     for (d = 0; d < DIR_COUNT; d++) s_busIds[d] = art_findf("bus_%s", dn[d]);     /* M2 */
+    for (i = 0; i < 4; i++) s_fireIds[i] = art_findf("fire%d", i);                 /* M5 */
     lc_init();
     s_inited = 1;
     life_reset();
@@ -177,9 +181,37 @@ static void smoke_emit(int lot)
     s_npuffs++;
 }
 
+/* M5: thick smoke from burning lots: a puff from each burning tile's flames every ~300 ms (capped by the pool) */
+static void fire_smoke(int dms)
+{
+    const CivicFire *f;
+    int n = civic_fires(&f), i, j, z = g_cam.zoom;
+    s_fireT += dms;
+    if (!n || (s_fireSmokeT += dms) < 300) return;
+    s_fireSmokeT = 0;
+    for (i = 0; i < n; i++) {
+        int x0, y0, x1, y1, wx, wy;
+        Puff *p;
+        if (!world_lot(f[i].lot)) continue;
+        world_lot_rect(f[i].lot, &x0, &y0, &x1, &y1);
+        iso_tile_to_world(z, x1, y1, &wx, &wy);
+        for (j = 0; j < LIFE_MAX_SMOKE && s_puffs[j].used; j++) {}
+        if (j == LIFE_MAX_SMOKE) return;
+        p = &s_puffs[j];
+        p->used = 1; p->zoom = (u8)z; p->dtx = (u8)x1; p->dty = (u8)y1;
+        p->bx = wx + rng_range(&s_rng, -6, 6) / (1 + z);
+        p->by = wy + TILE_H(z) / 2 - (40 >> z);
+        p->age_ms = 0; p->life_ms = rng_range(&s_rng, 2600, 3400);
+        p->wind = (s16)rng_range(&s_rng, 110, 170);
+        p->phase = (s16)rng_below(&s_rng, 1024);
+        s_npuffs++;
+    }
+}
+
 static void smoke_update(int dms)
 {
     int i;
+    fire_smoke(dms);
     if (s_scanZoom != g_cam.zoom) {                     /* zoom change: puffs are in the old zoom's pixels */
         memset(s_puffs, 0, sizeof(s_puffs)); s_npuffs = 0;
     }
@@ -264,6 +296,30 @@ void life_draw(void)
                 if (z == ZOOM_64 && TER_IS_WATER(TER_TYPE(WT(b[i].x, b[i].y)))) wy--;
                 render_sprite(s_busIds[b[i].dir & 3], wx, wy, b[i].x, b[i].y, 0);
             }
+        }
+    }
+    {   /* M5: flames on burning lots: per footprint tile 2 offset copies of fire0..3, frame cycle ~130 ms, the
+           stage (fire.cpp) picks how many tiles of a big lot burn */
+        const CivicFire *f;
+        int nf = civic_fires(&f), k, tx, ty;
+        for (k = 0; k < nf; k++) {
+            int x0, y0, x1, y1;
+            if (!world_lot(f[k].lot)) continue;
+            world_lot_rect(f[k].lot, &x0, &y0, &x1, &y1);
+            for (ty = y0; ty <= y1; ty++)
+                for (tx = x0; tx <= x1; tx++) {
+                    int c, fr;
+                    u32 hh = hash_xy(tx, ty, 0xF1AE);
+                    if ((int)(hh % 4u) > f[k].stage + 1 && (tx != x1 || ty != y1)) continue;   /* small fires: front tile */
+                    iso_tile_to_world(z, tx, ty, &wx, &wy);
+                    wy += TILE_H(z) / 2;                    /* tile centre */
+                    if (wx < cx0 || wx >= cx1 || wy < cy0 || wy >= cy1 + 48) continue;
+                    for (c = 0; c < 2; c++) {
+                        int ox = (c ? 7 : -6) >> z, oy = (c ? 3 : -2) >> z;
+                        fr = (int)((s_fireT / 130 + (s32)(hh >> (8 + c * 4)) + c * 2) & 3);
+                        render_sprite(s_fireIds[fr], wx + ox, wy + oy, x1, y1, 0);
+                    }
+                }
         }
     }
     if (s_smokeOn) {

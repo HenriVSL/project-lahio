@@ -25,6 +25,9 @@
 #include "common.h"
 #include "save.h"
 #include "industry.h"
+#include "complex.h"
+#include "civic.h"
+#include "era.h"           /* M7 */
 #include "util.h"
 #include "world.h"
 #include "sim.h"
@@ -544,6 +547,9 @@ int save_game_to(SaveFile *sf, const SaveMeta *meta)
     net_save(sf);
     traffic_save(sf);
     industry_save(sf);                       /* M3: chunk INDU */
+    complex_save(sf);                        /* M6: chunk CPLX */
+    civic_save(sf);                          /* M5: chunk CIVC */
+    era_save(sf);                            /* M7: chunks ERA + TRAD */
     save_end_chunk(sf);                      /* in case a module left one open */
     end_off = sf->size;
     save_begin_chunk(sf, "END ", 1);
@@ -591,6 +597,9 @@ int load_game_from(SaveFile *sf, SaveMeta *meta_out)
     sim_load_ext(sf);                        /* optional chunks: missing = values from sim_load / reset */
     if (load_find_chunk(sf, "BUDG", NULL)) budget_load_ext(sf);
     industry_after_load(industry_load(sf));  /* M3: chunk INDU; missing = old save: kinds migrated, recomputed */
+    complex_after_load(complex_load(sf));    /* M6: chunk CPLX; missing = no complexes */
+    civic_load(sf);                          /* M5: chunk CIVC; missing = fresh (solved on schedule) */
+    era_load(sf);                            /* M7: chunks ERA + TRAD; missing = fresh for the save's date */
     if (!load_ok(sf)) {                      /* validated file whose optional chunk was malformed */
         set_err("error: an optional chunk (TRAF/NET/SIMX/BUDX) failed to load");
         world_new(MAP_DEF_W, MAP_DEF_H);

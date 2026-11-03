@@ -689,3 +689,23 @@ motorway; buses; railway station; police/crime, library, post & telephone (phone
 centre; district heating + sewage; fire risk → fires; **politics** (blocs, authority, decrees, letters, events,
 elections with margin, Eastern/Western meters, clearing trade + 1973 oil shock); eras + town status by decree; loans;
 newspaper; graphs; landmarks/money sinks; **plus 14.1-14.4**. The game stays a sandbox (no campaign).
+
+### 14.7 Scope for 1.0 (2026-11-03; `docs/SCOPE_REVIEW.md`; user: "a polished experience, not a decades-long project")
+Binding; wins over every earlier section.
+- **CUT:** pre-1963 old-markka ×100 display (keep the 1963 newspaper joke); crime field + overlay; Western hard-currency
+  reserve/licences; Western bank loan + Eastern project credit; clearing consumer/material import programmes; paper-mill
+  strike/merger/fire events; Valtion Metalli mood/gifts/ministry cards. Cut code is deleted, not hidden behind flags.
+- **SIMPLIFY:** police = plain capacity service; fires only outside coverage, spread ≤ 2-3 neighbours, obey "disasters off";
+  sewage = capacity number + lake tint in the water overlay; heat = heat plant source on the pipe network + flat fuel upkeep;
+  paper mill = stages, owner mood, placed gifts, company-town rule, 3 demand cards, 2 risk events; Valtion Metalli = unique
+  employer (jobs per decade, Eastern exports, halves in 1990); clearing trade = one 5-year agreement card + one balance meter +
+  oil shocks; Western trade = demand multiplier + devaluation events; loans = one "Issue a bond" button + emergency loan;
+  Letters inside the decrees tab; bus lines without per-line settings, undoable; ≤ 9 overlays; ≤ 5 checklist lines per tier;
+  farms frozen as is; motorway art fixed or motorway hidden.
+- **Rules:** all cards share one queue, **≤ 1 card per game year**; every money/demand term is named in the ledger or the
+  demand tooltip.
+- **DEFER past 1.0:** nuclear/peat plants, winter, floods, renovation/ageing housing, trams/metro, harbour, scenarios,
+  company-town start, larger maps. **Sound: no further work** (user plays muted).
+- **1.0 = one presidency 1955-1990** (~30 min at speed 3, ~2.5 h at speed 1) ending with the 1990 newsreel; sandbox continues.
+- **Feature freeze after M5-M7.** Then a user play-test, then polish (SCOPE_REVIEW section 3 checklist) and balance.
+  New ideas go to a post-1.0 list.

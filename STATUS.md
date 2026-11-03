@@ -37,7 +37,9 @@ Owner session: 86box-86. Started 2026-11-02.
 
 ## Phase 4: Milestone 2 (docs/TASKS_M2.md, DESIGN 14)
 - Done: F1 water pipes, F2 art (pipes/yards/UI), M4 art (all M2 buildings), M1 politics. 98/98 Mac tests.
-- Running: F3 UX fixes, M3 industry kinds + forestry/farms, M2 traffic congestion + buses + station.
-- Then Wave M2: M5 services & housing, M6 complexes, M7 trade & eras; Wave M3: balance, perf, polish.
+- Done also: F3 UX fixes, M3 industry kinds + forestry/farms, M2 traffic + buses + station, R1 rename to Project Lähiö.
+- Running: M5 services & housing (heat, sewage, fires), M6 paper mill + Valtion Metalli, M7 trade & eras.
+- Then M8 balance, M9 performance (incl. 1024 64-zoom art layout), M10 polish → user play-test.
 - Next user play-test: when Milestone 2 works as a whole.
 - R1 rename (2026-11-03): KAUPUNKI -> **Project Lähiö**; `dev/lahio`, `lahio.exe`, `LAHIO.INI` (migrates `KAUPUNKI.INI` once), new title screen logo. Saves unchanged (`KAUP`, `*.KAU`).
+- **Sound: no further work** (user plays on mute; existing module stays as is; add later only if clearly valuable).

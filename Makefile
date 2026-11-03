@@ -7,7 +7,8 @@ OBJS   = obj\main.obj obj\plat.obj obj\gfx.obj obj\snd.obj obj\config.obj obj\ut
          obj\art.obj obj\world.obj obj\defs.obj obj\mapgen.obj obj\iso.obj obj\render.obj \
          obj\sim.obj obj\net.obj obj\fields.obj obj\budget.obj obj\traffic.obj obj\tools.obj \
          obj\ui.obj obj\text.obj obj\save.obj obj\menu.obj obj\game.obj obj\life.obj obj\politics.obj obj\lifecar.obj \
-         obj\poltab.obj obj\ui_pol.obj obj\industry.obj obj\transit.obj obj\lifebus.obj
+         obj\poltab.obj obj\ui_pol.obj obj\industry.obj obj\transit.obj obj\lifebus.obj obj\civic.obj obj\fire.obj obj\complex.obj \
+         obj\trade.obj obj\era.obj
 HDRS   = src\*.h
 
 lahio.exe: obj $(OBJS)

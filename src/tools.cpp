@@ -25,6 +25,9 @@
 #include "mapgen.h"
 #include "politics.h"
 #include "transit.h"
+#include "complex.h"
+#include "civic.h"
+#include "era.h"           /* M7 */
 
 /* ------------------------------------------------------------------ state */
 static ToolPreview s_prev;
@@ -61,7 +64,7 @@ typedef struct {            /* the parts of a tile a tool changes */
     u8 ter;                 /* full terrain byte */
     u8 road;                /* class | TR_POWER_LINE (no mask) */
     u8 zone;                /* ZONE_* */
-    u8 tree;                /* TF_TREE bit */
+    u8 tree;                /* TF_TREE bit (M5: | TF_RUBBLE: the bulldozer clears ruins, undo restores them) */
     u8 aux;
     u8 pipe;                /* F1: TF_PIPE bit */
 } TState;
@@ -135,7 +138,7 @@ static void tstate_get(int x, int y, TState *s)
     s->ter = t->terrain;
     s->road = (u8)(t->road & (TR_CLASS_MASK | TR_POWER_LINE));
     s->zone = (u8)TILE_ZONE(t);
-    s->tree = (u8)(t->flags & TF_TREE);
+    s->tree = (u8)(t->flags & (TF_TREE | TF_RUBBLE));
     s->aux = t->aux;
     s->pipe = (u8)(t->flags & TF_PIPE);
 }
@@ -160,7 +163,7 @@ static void tstate_apply(int x, int y, const TState *to, const TState *from)
         world_set_terrain(x, y, to->ter & 15, to->ter >> 4);
     tstate_get(x, y, &c);
     if (c.tree != to->tree && (!from || c.tree == from->tree) && (!to->tree || !WT(x, y)->lot))
-        world_set_tile_flags(x, y, to->tree ? TF_TREE : 0, to->tree ? 0 : TF_TREE);
+        world_set_tile_flags(x, y, to->tree, (TF_TREE | TF_RUBBLE) & ~to->tree);
     if (c.zone != to->zone && (!from || c.zone == from->zone) && !WT(x, y)->lot)
         world_set_zone(x, y, to->zone);
     if (c.pipe != to->pipe && (!from || c.pipe == from->pipe))    /* F1: pipes may run under lots */
@@ -513,7 +516,7 @@ static void eval_bulldoze(int x, int y, TEval *e, int *lot_out)
         return;
     }
     if (TER_TYPE(t) == TER_FOREST) { e->state = PT_OK; e->cost = g_misc.clear_forest; e->timber = g_misc.timber_income; return; }
-    if (t->flags & TF_TREE) { e->state = PT_OK; e->cost = g_misc.bulldoze_tile; return; }
+    if (t->flags & (TF_TREE | TF_RUBBLE)) { e->state = PT_OK; e->cost = g_misc.bulldoze_tile; return; }   /* M5: ruins */
     e->state = PT_NOOP;
 }
 
@@ -893,6 +896,15 @@ int tools_apply_rect(int tool, int param, int x0, int y0, int x1, int y1)
 int tools_apply_build(int def, int x, int y, int rot)
 {
     int sr = s_rot, sm = s_rot_manual, n, id = 0;
+    if (def_building(def)->flags & BDF_MODULE) {      /* M6: "build pm_hall X Y" = the whole complex (north tile) */
+        Money c = 0;
+        int kind = complex_kind_of_def(def), r = complex_check_place(kind, x, y, &c);
+        s_last_tool = TOOL_BUILD;
+        if (r == PLACE_OK && !budget_can_afford(c)) r = REJ_NO_MONEY;
+        if (r != PLACE_OK || !complex_place(kind, x, y)) { s_last_reason = r != PLACE_OK ? r : REJ_NOTHING_TO_DO; return 0; }
+        s_last_cost = c; s_last_reason = 0;
+        return world_lot_at(x + (kind == CPX_PAPER ? 2 : 0), y);    /* the hall */
+    }
     if (rot >= 0) { s_rot = rot & 3; s_rot_manual = 1; } else s_rot_manual = 0;
     n = commit(TOOL_BUILD, def, x, y, x, y, 0, 1, 0);
     if (n) id = world_lot_at(s_prev.lot_x, s_prev.lot_y);
@@ -965,6 +977,13 @@ int tools_update(const ToolInput *in)
         Money c = 0;
         res = transit_tool_update(in, &s_prev, &s_last_x, &s_last_y, &c, &s_last_reason);
         if (res == TRES_COMMITTED || res == TRES_DENIED) { s_last_tool = TOOL_BUS_LINE; s_last_cost = c; }
+        if (res == TRES_COMMITTED) s_last_reason = 0;
+        return res;
+    }
+    if ((s_tool == TOOL_GIFT || (s_tool == TOOL_BUILD && (def_building(s_param)->flags & BDF_MODULE))) && !in->cancel) {
+        Money c = 0;                                   /* M6: complex / gift placement lives in complex.cpp */
+        res = complex_tool_update(in, &s_prev, s_tool, s_param, s_rot, &s_last_x, &s_last_y, &c, &s_last_reason);
+        if (res == TRES_COMMITTED || res == TRES_DENIED) { s_last_tool = s_tool; s_last_cost = c; }
         if (res == TRES_COMMITTED) s_last_reason = 0;
         return res;
     }
@@ -1080,8 +1099,7 @@ static s32 stat_value(const char *s, int *ok)
     if (str_ieq(s, "dairies")) return industry_kinds()->lots[IK_FOOD];
     if (str_ieq(s, "wood_pct")) return industry_wood()->pct;
     if (str_ieq(s, "wood_cut")) return industry_wood()->cut_tiles_total;
-    *ok = 0;
-    return 0;
+    return civic_stat_value(s, ok);                                              /* M5: heated, fires, apt3 ... */
 }
 
 static void dump_tools(FILE *f)
@@ -1199,6 +1217,7 @@ int tools_script_line(const char *line, int *wait_months, FILE *out)
             if (n >= 2 && str_ieq(t[1], "map")) world_dump(f, 0, 0, g_world.w - 1, g_world.h - 1);
             else if (n >= 2 && str_ieq(t[1], "tools")) dump_tools(f);
             else if (n >= 2 && str_ieq(t[1], "industry")) industry_dump(f);    /* M3 */
+            else if (n >= 2 && str_ieq(t[1], "civic")) civic_dump(f);          /* M5 */
             else sim_dump_report(f);
             fflush(f);
         }
@@ -1223,8 +1242,14 @@ int tools_script_line(const char *line, int *wait_months, FILE *out)
         return SCR_OK;
     }
 #undef XY
+    r = complex_script_line(n, t, s_org_x, s_org_y, out);         /* M6: complex place|gift|mood|dump */
+    if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "complex") : r;
     r = transit_script_line(n, t, s_org_x, s_org_y, out);         /* M2: busline ... */
     if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "busline") : r;
+    r = civic_script_line(n, t, s_org_x, s_org_y, out);            /* M5: fire X Y */
+    if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "fire") : r;
+    r = era_script_line(n, t, out);                                /* M7: trade ... / era dump / news ... */
+    if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "trade/era") : r;
     return SCR_UNKNOWN;
 }
 

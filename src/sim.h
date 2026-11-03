@@ -173,6 +173,7 @@ typedef struct {
     s32 a, b;                  /* type-specific: lot id, count, status, def ... */
 } SimEvent;
 int  sim_poll_event(SimEvent *e);             /* 1 = got one */
+void sim_queue_event(int type, int sev, int x, int y, s32 a, s32 b);   /* M5: other sim modules (fire.cpp) */
 
 /* ------------------------------------------------------------------ stat logging (debug from text) */
 int  sim_statlog_open(const char *path);      /* CSV; header row now, then one row per month end: date,
@@ -207,5 +208,7 @@ int  sim_save(struct SaveFile *sf);           /* chunk "SIM " incl. RNG, date, d
 int  sim_load(struct SaveFile *sf);
 int  sim_save_ext(struct SaveFile *sf);       /* T10: save: chunk "SIMX" (call after sim_save) */
 int  sim_load_ext(struct SaveFile *sf);       /* T10: save: 0 = no SIMX chunk */
+/* M7: raise the town status to ts now (rewards, SE_STATUS_UP, ceremony; era.cpp's town-rights decree) */
+void sim_grant_status(int ts);
 
 #endif

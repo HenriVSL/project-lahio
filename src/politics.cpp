@@ -6,6 +6,7 @@
    the city seed, saved), so the city simulation's own RNG stream is never touched. */
 #include "common.h"
 #include "politics.h"
+#include "civic.h"
 #include "industry.h"
 #include "sim.h"
 #include "world.h"
@@ -13,6 +14,7 @@
 #include "text.h"
 #include "save.h"
 #include "util.h"
+#include "era.h"           /* M7: town rights by decree */
 
 #define TIMED_MAX  24
 #define MSG_RING   16
@@ -47,6 +49,7 @@ static struct {
     s32   mods[PM_COUNT];
 } P;
 
+static PolEventHook s_ev_hook;              /* M6 (politics_set_event_hook) */
 static PolMsg s_msg[MSG_RING];
 static int s_msg_head, s_msg_n;
 
@@ -263,6 +266,7 @@ static void compute_blocs(void)
     if (pop >= 300) reason(BLOC_RURAL, PR_SERVICES, (sat - 70) / 6);
     if (apt_share > 30) reason(BLOC_RURAL, PR_CONCRETE, -(apt_share - 30) / 5);
     reason(BLOC_RURAL, PR_EAST, (east - 50) / 8);
+    reason(BLOC_RURAL, PR_POLLUTION, -IMIN(10, civic_lake_reason() / 6));   /* M5: sewage in the fishing lakes */
 
     /* Industrialists (Patruunat): business tax, power, export orders, roads, labour */
     reason(BLOC_INDUSTRIALISTS, PR_BASE, 50);
@@ -279,7 +283,7 @@ static void compute_blocs(void)
     reason(BLOC_INTELLIGENTSIA, PR_SERVICES, (sat_edu - 70) / 3);
     if (culture) reason(BLOC_INTELLIGENTSIA, PR_CULTURE, IMIN(12, 1 + culture * 4000 / IMAX(1000, pop)));
     reason(BLOC_INTELLIGENTSIA, PR_LAND_VALUE, (st->avg_land_value - 45) / 4);
-    reason(BLOC_INTELLIGENTSIA, PR_POLLUTION, -st->avg_pollution / 5);
+    reason(BLOC_INTELLIGENTSIA, PR_POLLUTION, -st->avg_pollution / 5 - IMIN(12, civic_lake_reason() / 4));   /* M5: lakes */
     if (apt_share > 40) reason(BLOC_INTELLIGENTSIA, PR_CONCRETE, -(apt_share - 40) / 4);
     reason(BLOC_INTELLIGENTSIA, PR_WEST, (west - 50) / 5);
     if (east > 75) reason(BLOC_INTELLIGENTSIA, PR_EAST, -(east - 75) / 3);
@@ -447,7 +451,7 @@ void politics_authority_add(int delta) { auth_add10(delta * 10); }
 void politics_status_ceremony(int ts)
 {
     if (!P.enabled) return;
-    auth_add10(20 + 10 * IMIN(ts, 3));     /* M7 replaces this with town rights by decree (DEC_TOWN_RIGHTS) */
+    auth_add10(20 + 10 * IMIN(ts, 3));     /* M7: called by era_status_granted for every grant (decree or automatic) */
 }
 
 /* ------------------------------------------------------------------ decrees */
@@ -462,7 +466,7 @@ int politics_decree_state(int dec)
     if (sim_date()->year < d->year_from) return DS_TOO_EARLY;
     if (dec == DEC_EMERGENCY && P.skip_from && P.skip_from + POL_TERM_YEARS == P.election_year) return DS_ALREADY;
     if (P.cooldown[dec] > 0) return DS_COOLDOWN;
-    if (P.decree_gap > 0) return DS_GAP;
+    if (P.decree_gap > 0 && dec != DEC_TOWN_RIGHTS) return DS_GAP;   /* M7: a petition, not policy: no gap */
     if (politics_authority() < d->cost) return DS_NO_AUTHORITY;
     if (!(d->flags & DF_ONESHOT) && politics_active_count() >= POL_SLOTS) return DS_NO_SLOT;
     return DS_OK;
@@ -484,11 +488,14 @@ int politics_sign(int dec)
     auth_add10(-d->cost * 10);
     apply_list(d->sign);
     if (!(d->flags & DF_ONESHOT)) { P.active[dec] = 1; P.active_months[dec] = 0; }
-    P.cooldown[dec] = POL_COOLDOWN;
-    P.decree_gap = POL_DECREE_GAP;
+    if (dec != DEC_TOWN_RIGHTS) {             /* M7: town rights start no cooldown and no decree gap */
+        P.cooldown[dec] = POL_COOLDOWN;
+        P.decree_gap = POL_DECREE_GAP;
+    }
     recompute_mods();
     push_msg(PMSG_DECREE_SIGNED, dec, 0);
     log_printf("politics: decree signed: %s (authority %d)", d->key, politics_authority());
+    if (dec == DEC_TOWN_RIGHTS) era_town_rights_signed();   /* M7: grants the status reached */
     return 1;
 }
 
@@ -559,7 +566,10 @@ static void resolve_event(int choice, int expired)
     recompute_mods();
     push_msg(expired ? PMSG_EVENT_EXPIRED : PMSG_CHOICE, ev, choice);
     log_printf("politics: event %s answered: %d%s", g_events[ev].key, choice, expired ? " (expired)" : "");
+    if (s_ev_hook) s_ev_hook(ev, choice);     /* M6: complex cards */
 }
+
+void politics_set_event_hook(PolEventHook fn) { s_ev_hook = fn; }
 
 int politics_choose(int choice)
 {

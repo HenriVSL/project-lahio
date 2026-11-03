@@ -694,7 +694,7 @@ ENTRIES = [
     ('farm_t3', (1, 1), 1, [_v(farm, 'f3', 3, 0, seed=5), _v(farm, 'f3', 3, 1, seed=6)], None),
     ('logging_camp', (1, 1), 1, [_v(logging_camp, 'lc', 0, seed=1), _v(logging_camp, 'lc', 1, seed=2)], None),
 ]
-KEY_ALIASES = []
+KEY_ALIASES = [('oil_plant', [('coal_plant', 0)])]     # M7: oil power plant reuses the coal plant art (TASKS_M2 M7)
 GROUPS = {'station': GRP_T, 'bus_stop': GRP_T, 'bus_depot': GRP_T,
           'farm_t1': GRP_R, 'farm_t2': GRP_R, 'farm_t3': GRP_R, 'logging_camp': GRP_R,
           'forest_cut*': GRP_R, 'forest_seed*': GRP_R, 'forest_young*': GRP_R, 'field_hay*': GRP_R,
