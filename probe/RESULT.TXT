@@ -1,0 +1,347 @@
+== sweep 800x600x16 fullscreen: K blits per frame + Flip ==
+  Flip only (K=0)                            8.28 ms/frame
+  BltFast 64x32 keyed (tile)               K= 3200:  41.62 ms/frame ( 24.0 fps) |   11.71 us/blit (slope)   13.01 (avg) |  174.9 Mpix/s
+  BltFast 64x32 opaque                     K= 3200:  38.56 ms/frame ( 25.9 fps) |   10.29 us/blit (slope)   12.05 (avg) |  198.9 Mpix/s
+  Blt 64x32 keyed (Blt not BltFast)        K= 3200:  44.59 ms/frame ( 22.4 fps) |   12.10 us/blit (slope)   13.94 (avg) |  169.2 Mpix/s
+  BltFast 32x16 keyed (zoomed-out tile)    K= 6400:  33.32 ms/frame ( 30.0 fps) |    4.85 us/blit (slope)    5.21 (avg) |  105.6 Mpix/s
+  BltFast 16x12 keyed (car)                K= 6400:  31.32 ms/frame ( 31.9 fps) |    4.81 us/blit (slope)    4.89 (avg) |   40.0 Mpix/s
+  BltFast 8xGH keyed (glyph)               K= 6400:  31.31 ms/frame ( 31.9 fps) |    4.85 us/blit (slope)    4.89 (avg) |   21.4 Mpix/s
+  BltFast 64x48 keyed (house)              K= 1600:  35.50 ms/frame ( 28.2 fps) |   17.82 us/blit (slope)   22.19 (avg) |  172.4 Mpix/s
+  BltFast 64x96 keyed                      K=  800:  34.63 ms/frame ( 28.9 fps) |   32.96 us/blit (slope)   43.29 (avg) |  186.4 Mpix/s
+  BltFast 64x160 keyed                     K=  400:  36.79 ms/frame ( 27.2 fps) |   89.41 us/blit (slope)   91.97 (avg) |  114.5 Mpix/s
+  BltFast 128x128 keyed                    K=  200:  32.53 ms/frame ( 30.7 fps) |  136.32 us/blit (slope)  162.65 (avg) |  120.2 Mpix/s
+  BltFast 256x128 opaque (chunk)           K=  100:  30.73 ms/frame ( 32.5 fps) |  238.20 us/blit (slope)  307.33 (avg) |  137.6 Mpix/s
+  BltFast 512x256 opaque (chunk)           K=   25:  30.49 ms/frame ( 32.8 fps) | 2541.01 us/blit (slope) 1219.69 (avg) |   51.6 Mpix/s
+  BltFast full screen opaque               K=   25:  94.47 ms/frame ( 10.6 fps) | 7872.29 us/blit (slope) 3778.70 (avg) |   61.0 Mpix/s
+  Blt stretch 64x32->32x16 keyed           K= 6400:  38.28 ms/frame ( 26.1 fps) |    5.64 us/blit (slope)    5.98 (avg) |   90.8 Mpix/s
+  Blt stretch 512x256->256x128 opaque      K=  200:  43.47 ms/frame ( 23.0 fps) |  188.35 us/blit (slope)  217.37 (avg) |  174.0 Mpix/s
+  Blt stretch 256x128->512x256 opaque      K=   50:  46.43 ms/frame ( 21.5 fps) |  811.77 us/blit (slope)  928.66 (avg) |  161.5 Mpix/s
+  ColorFill 8x8                            K= 6400:  28.15 ms/frame ( 35.5 fps) |    4.33 us/blit (slope)    4.40 (avg) |   14.8 Mpix/s
+  ColorFill 32x16                          K= 6400:  34.31 ms/frame ( 29.1 fps) |    4.52 us/blit (slope)    5.36 (avg) |  113.3 Mpix/s
+  ColorFill full screen                    K=   25:  85.00 ms/frame ( 11.8 fps) | 7083.45 us/blit (slope) 3400.06 (avg) |   67.8 Mpix/s
+  BltFast 64x32 keyed from SYSTEM memory   0.1 ms/blit (5 blits)
+  BltFast 64x32 opaque from SYSTEM memory  0.1 ms/blit (5 blits)
+== surf fullscreen 1024x768x16: vidmem total 13698 KB, free 12162 KB ==
+  vidmem  256x64   ok, used   32 KB (nominal  32 KB) | sysmem ok
+  vidmem  512x64   ok, used   64 KB (nominal  64 KB) | sysmem ok
+  vidmem  640x64   ok, used   80 KB (nominal  80 KB) | sysmem ok
+  vidmem  800x64   ok, used  100 KB (nominal 100 KB) | sysmem ok
+  vidmem 1024x64   ok, used  128 KB (nominal 128 KB) | sysmem ok
+  vidmem 1280x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 1600x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 2048x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem   64x1024 ok, used  128 KB
+  vidmem   64x2048 ok, used  256 KB
+  vidmem   64x4096 ok, used  512 KB
+  vidmem  512x1024 ok, used 1024 KB
+  vidmem  512x2048 ok, used 2048 KB
+  vidmem  640x2048 ok, used 2560 KB
+  vidmem 1024x2048 ok, used 4096 KB
+  fill VRAM with   64x64 : 1520 surfaces =  12160 KB nominal, free dropped  12160 KB, left 2 KB
+  fill VRAM with  256x128:  190 surfaces =  12160 KB nominal, free dropped  12160 KB, left 2 KB
+  fill VRAM with  512x256:   47 surfaces =  12032 KB nominal, free dropped  12032 KB, left 130 KB
+  fill VRAM with 1024x256:   23 surfaces =  11776 KB nominal, free dropped  11776 KB, left 386 KB
+== surf fullscreen 640x480x16: vidmem total 14634 KB, free 14034 KB ==
+  vidmem  256x64   ok, used   32 KB (nominal  32 KB) | sysmem ok
+  vidmem  512x64   ok, used   64 KB (nominal  64 KB) | sysmem ok
+  vidmem  640x64   ok, used   80 KB (nominal  80 KB) | sysmem ok
+  vidmem  800x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 1024x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 1280x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 1600x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 2048x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem   64x1024 ok, used  128 KB
+  vidmem   64x2048 ok, used  256 KB
+  vidmem   64x4096 ok, used  512 KB
+  vidmem  512x1024 ok, used 1024 KB
+  vidmem  512x2048 ok, used 2048 KB
+  vidmem  640x2048 ok, used 2560 KB
+  vidmem  640x2048 ok, used 2560 KB
+  fill VRAM with   64x64 : 1744 surfaces =  13952 KB nominal, free dropped  13952 KB, left 82 KB
+  fill VRAM with  256x128:  212 surfaces =  13568 KB nominal, free dropped  13568 KB, left 466 KB
+  fill VRAM with  512x256:   52 surfaces =  13312 KB nominal, free dropped  13312 KB, left 722 KB
+  fill VRAM with  640x256:   42 surfaces =  13440 KB nominal, free dropped  13440 KB, left 594 KB
+== surf windowed (desktop) 800x600x16: vidmem total 14246 KB, free 14246 KB ==
+  vidmem  256x64   ok, used   32 KB (nominal  32 KB) | sysmem ok
+  vidmem  512x64   ok, used   64 KB (nominal  64 KB) | sysmem ok
+  vidmem  640x64   ok, used   80 KB (nominal  80 KB) | sysmem ok
+  vidmem  800x64   ok, used  100 KB (nominal 100 KB) | sysmem ok
+  vidmem 1024x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 1280x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 1600x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 2048x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem   64x1024 ok, used  128 KB
+  vidmem   64x2048 ok, used  256 KB
+  vidmem   64x4096 ok, used  512 KB
+  vidmem  512x1024 ok, used 1024 KB
+  vidmem  512x2048 ok, used 2048 KB
+  vidmem  640x2048 ok, used 2560 KB
+  vidmem  800x2048 ok, used 3200 KB
+  fill VRAM with   64x64 : 1761 surfaces =  14088 KB nominal, free dropped  14088 KB, left 158 KB
+  fill VRAM with  256x128:  212 surfaces =  13568 KB nominal, free dropped  13568 KB, left 678 KB
+  fill VRAM with  512x256:   50 surfaces =  12800 KB nominal, free dropped  12800 KB, left 1446 KB
+  fill VRAM with  800x256:   34 surfaces =  13600 KB nominal, free dropped  13696 KB, left 550 KB
+iso res=640 tile=64 t=6                                      |   56.2 fps | draw   3.10 | pres 14.69 | idle  0.00 | frame  17.81 | worst   29.0 ms
+    blits/frame 591: ground 350.4 obj 171.4 veh 65.6 ui 4.0 | vehicles drawn 65.6
+    vidmem total 14634 KB, free after mode 14034 KB, after art 12993 KB, after pool 12993 KB; art load 99 ms; minimap rebuild 20.23 ms; 
+iso res=800 tile=64 t=6                                      |   56.4 fps | draw   4.51 | pres 13.23 | idle  0.00 | frame  17.75 | worst   28.0 ms
+    blits/frame 874: ground 530.9 obj 259.9 veh 78.9 ui 4.0 | vehicles drawn 78.9
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 88 ms; minimap rebuild 20.24 ms; 
+iso res=1024 tile=64 t=6                                     |   38.2 fps | draw   6.95 | pres 19.17 | idle  0.00 | frame  26.19 | worst   40.0 ms
+    blits/frame 1356: ground 847.4 obj 411.9 veh 92.8 ui 4.0 | vehicles drawn 92.8
+    vidmem total 13698 KB, free after mode 12162 KB, after art 11121 KB, after pool 11121 KB; art load 101 ms; minimap rebuild 20.24 ms; 
+iso res=800 tile=32 t=6                                      |   51.4 fps | draw  15.23 | pres  4.21 | idle  0.00 | frame  19.45 | worst   38.9 ms
+    blits/frame 3031: ground 1994.0 obj 939.1 veh 93.6 ui 4.0 | vehicles drawn 93.6
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 92 ms; minimap rebuild 20.25 ms; 
+iso res=1024 tile=32 t=6                                     |   31.3 fps | draw  24.17 | pres  7.75 | idle  0.00 | frame  31.97 | worst   39.1 ms
+    blits/frame 4838: ground 3223.5 obj 1523.8 veh 86.3 ui 4.0 | vehicles drawn 86.3
+    vidmem total 13698 KB, free after mode 12162 KB, after art 11121 KB, after pool 11121 KB; art load 97 ms; minimap rebuild 20.25 ms; 
+iso res=800 tile=32 zoom=stretch t=6                         |   47.6 fps | draw  20.07 | pres  0.92 | idle  0.00 | frame  21.00 | worst   30.1 ms
+    blits/frame 3033: ground 1994.0 obj 941.3 veh 93.7 ui 4.0 | vehicles drawn 93.7
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 90 ms; minimap rebuild 20.23 ms; 
+iso res=800 tile=64 win=1 t=6                                |   59.8 fps | draw  16.68 | pres  0.03 | idle  0.00 | frame  16.73 | worst  345.5 ms
+    blits/frame 872: ground 530.9 obj 256.1 veh 80.7 ui 4.0 | vehicles drawn 80.7
+    vidmem total 14246 KB, free after mode 14246 KB, after art 12230 KB, after pool 12230 KB; art load 92 ms; minimap rebuild 20.25 ms; 
+iso res=640 tile=64 win=1 t=6                                |   75.0 fps | draw  13.29 | pres  0.03 | idle  0.00 | frame  13.33 | worst  397.8 ms
+    blits/frame 591: ground 350.4 obj 172.0 veh 64.9 ui 4.1 | vehicles drawn 64.9
+    vidmem total 14246 KB, free after mode 14246 KB, after art 12605 KB, after pool 12605 KB; art load 90 ms; minimap rebuild 20.25 ms; 
+iso res=800 tile=64 mode=draw t=6                            |   51.4 fps | draw  19.44 | pres  0.01 | idle  0.00 | frame  19.46 | worst  432.2 ms
+    blits/frame 871: ground 530.9 obj 257.6 veh 78.6 ui 4.0 | vehicles drawn 78.6
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 89 ms; minimap rebuild 20.24 ms; 
+iso res=800 tile=64 bld=0 veh=0 t=6                          |   60.0 fps | draw   2.79 | pres 13.86 | idle  0.00 | frame  16.68 | worst   21.4 ms
+    blits/frame 535: ground 530.8 ui 4.0 | vehicles drawn 0.0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 91 ms; minimap rebuild 20.14 ms; 
+iso res=800 tile=64 cache=1 chunk=256 t=6                    |   59.5 fps | draw   1.98 | pres 14.80 | idle  0.00 | frame  16.80 | worst   28.6 ms
+    blits/frame 368: ground 0.2 obj 258.2 veh 79.6 ui 4.0 chunk 23.2 chunkrender 2.5 | vehicles drawn 79.6
+    chunk renders 22 in 6.0 s (3.7/s), avg 0.23 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 9593 KB; art load 90 ms; minimap rebuild 20.25 ms; pool 41/41 chunks 256x128 (2624 KB, visible max 30); 
+    chunk re-render (blitter-complete): 0.22 ms per 256x128 chunk, 40 blits
+iso res=800 tile=64 cache=1 chunk=512 t=6                    |   59.7 fps | draw   1.91 | pres 14.81 | idle  0.00 | frame  16.76 | worst   27.7 ms
+    blits/frame 352: ground 0.0 obj 258.2 veh 79.7 ui 4.0 chunk 8.5 chunkrender 2.0 | vehicles drawn 79.7
+    chunk renders 5 in 6.0 s (0.8/s), avg 0.76 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 7353 KB; art load 90 ms; minimap rebuild 20.24 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 0.75 ms per 512x256 chunk, 144 blits
+iso res=800 tile=64 cache=2 chunk=256 t=6                    |  119.9 fps | draw   0.64 | pres  7.67 | idle  0.00 | frame   8.34 | worst   13.9 ms
+    blits/frame 115: obj 0.2 veh 82.2 ui 5.0 chunk 23.1 chunkrender 4.4 | vehicles drawn 82.2
+    chunk renders 50 in 6.0 s (8.3/s), avg 0.39 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 9593 KB; art load 90 ms; minimap rebuild 20.25 ms; pool 41/41 chunks 256x128 (2624 KB, visible max 30); 
+    chunk re-render (blitter-complete): 0.40 ms per 256x128 chunk, 67 blits
+iso res=800 tile=64 cache=2 chunk=512 t=6                    |  118.8 fps | draw   0.54 | pres  7.84 | idle  0.00 | frame   8.42 | worst   18.1 ms
+    blits/frame 100: obj 0.0 veh 82.1 ui 5.0 chunk 8.3 chunkrender 4.5 | vehicles drawn 82.1
+    chunk renders 15 in 6.0 s (2.5/s), avg 1.16 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 7353 KB; art load 93 ms; minimap rebuild 20.24 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.20 ms per 512x256 chunk, 225 blits
+iso res=800 tile=64 cache=2 chunk=512 occl=1 t=6             |  118.6 fps | draw   1.90 | pres  6.50 | idle  0.00 | frame   8.43 | worst   18.0 ms
+    blits/frame 254: obj 0.0 veh 82.1 occl 154.2 ui 5.0 chunk 8.3 chunkrender 4.6 | vehicles drawn 82.1
+    chunk renders 15 in 6.0 s (2.5/s), avg 1.17 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 7353 KB; art load 92 ms; minimap rebuild 20.25 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.21 ms per 512x256 chunk, 225 blits
+iso res=800 tile=64 cache=2 chunk=512 scroll=0 t=6           |  119.8 fps | draw   0.58 | pres  7.75 | idle  0.00 | frame   8.35 | worst   13.1 ms
+    blits/frame 104: veh 91.1 ui 5.0 chunk 8.0 | vehicles drawn 91.1
+    chunk renders 0 in 6.0 s (0.0/s), avg 0.00 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 7353 KB; art load 92 ms; minimap rebuild 20.24 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.16 ms per 512x256 chunk, 217 blits
+iso res=800 tile=64 cache=2 chunk=512 win=1 t=6              |  168.0 fps | draw   5.88 | pres  0.06 | idle  0.00 | frame   5.95 | worst 1018.3 ms
+    blits/frame 99: obj 0.0 veh 81.8 ui 4.7 chunk 8.3 chunkrender 4.3 | vehicles drawn 81.8
+    chunk renders 20 in 6.0 s (3.3/s), avg 10.70 ms each, misses 0
+    vidmem total 14246 KB, free after mode 14246 KB, after art 12230 KB, after pool 7366 KB; art load 89 ms; minimap rebuild 20.87 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 14.22 ms per 512x256 chunk, 225 blits
+iso res=800 tile=32 cache=2 chunk=512 t=6                    |  119.1 fps | draw   0.66 | pres  7.71 | idle  0.00 | frame   8.39 | worst   20.0 ms
+    blits/frame 123: obj 0.0 veh 94.1 ui 5.0 chunk 8.0 chunkrender 15.9 | vehicles drawn 94.1
+    chunk renders 15 in 6.0 s (2.5/s), avg 3.89 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 7353 KB; art load 93 ms; minimap rebuild 20.24 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 4.10 ms per 512x256 chunk, 800 blits
+iso res=800 tile=32 cache=2 chunk=256 t=6                    |  119.6 fps | draw   0.75 | pres  7.58 | idle  0.00 | frame   8.36 | worst   14.0 ms
+    blits/frame 138: obj 0.2 veh 94.2 ui 5.0 chunk 22.9 chunkrender 15.6 | vehicles drawn 94.2
+    chunk renders 52 in 6.0 s (8.7/s), avg 1.16 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 9593 KB; art load 92 ms; minimap rebuild 20.24 ms; pool 41/41 chunks 256x128 (2624 KB, visible max 30); 
+    chunk re-render (blitter-complete): 1.19 ms per 256x128 chunk, 224 blits
+iso res=800 tile=32 zoom=stretch cache=2 chunk=512 t=6       |  117.6 fps | draw   0.93 | pres  7.55 | idle  0.00 | frame   8.50 | worst   24.0 ms
+    blits/frame 136: obj 0.2 veh 94.0 ui 5.0 chunk 22.9 chunkrender 14.2 | vehicles drawn 94.0
+    chunk renders 46 in 6.0 s (7.7/s), avg 1.18 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 1721 KB; art load 86 ms; minimap rebuild 20.24 ms; pool 41/41 chunks 512x256 (10496 KB, visible max 30); 
+    chunk re-render (blitter-complete): 1.20 ms per 512x256 chunk, 224 blits
+iso res=1024 tile=64 cache=2 chunk=512 t=6                   |  118.7 fps | draw   0.64 | pres  7.77 | idle  0.00 | frame   8.43 | worst   21.1 ms
+    blits/frame 118: obj 0.1 veh 94.3 ui 5.0 chunk 11.9 chunkrender 6.4 | vehicles drawn 94.3
+    chunk renders 21 in 6.0 s (3.5/s), avg 1.17 ms each, misses 0
+    vidmem total 13698 KB, free after mode 12162 KB, after art 11121 KB, after pool 6257 KB; art load 94 ms; minimap rebuild 20.24 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.18 ms per 512x256 chunk, 220 blits
+iso res=1024 tile=32 cache=2 chunk=512 t=6                   |  118.4 fps | draw   0.69 | pres  7.74 | idle  0.00 | frame   8.45 | worst   28.7 ms
+    blits/frame 126: obj 0.1 veh 86.4 ui 5.0 chunk 11.9 chunkrender 22.8 | vehicles drawn 86.4
+    chunk renders 21 in 6.0 s (3.5/s), avg 3.94 ms each, misses 0
+    vidmem total 13698 KB, free after mode 12162 KB, after art 11121 KB, after pool 6257 KB; art load 98 ms; minimap rebuild 20.23 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 4.17 ms per 512x256 chunk, 817 blits
+iso res=640 tile=64 cache=2 chunk=512 t=6                    |  119.5 fps | draw   0.45 | pres  7.88 | idle  0.00 | frame   8.37 | worst   17.0 ms
+    blits/frame 79: obj 0.0 veh 64.3 ui 5.0 chunk 6.4 chunkrender 3.7 | vehicles drawn 64.3
+    chunk renders 12 in 6.0 s (2.0/s), avg 1.18 ms each, misses 0
+    vidmem total 14634 KB, free after mode 14034 KB, after art 12993 KB, after pool 9153 KB; art load 92 ms; minimap rebuild 20.23 ms; pool 15/15 chunks 512x256 (3840 KB, visible max 9); 
+    chunk re-render (blitter-complete): 1.17 ms per 512x256 chunk, 217 blits
+iso res=800 tile=64 ovl=tint t=6                             |   59.8 fps | draw   4.51 | pres 12.18 | idle  0.00 | frame  16.72 | worst   28.3 ms
+    blits/frame 872: ground 530.8 obj 258.0 veh 79.7 ui 4.0 | vehicles drawn 79.7
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 95 ms; minimap rebuild 20.26 ms; 
+iso res=800 tile=64 ovl=checker t=6                          |   45.7 fps | draw   6.09 | pres 15.77 | idle  0.00 | frame  21.87 | worst   38.4 ms
+    blits/frame 1188: ground 530.8 ovl 311.3 obj 262.0 veh 80.0 ui 4.0 | vehicles drawn 80.0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 91 ms; minimap rebuild 20.22 ms; 
+iso res=800 tile=64 ovl=fill t=6                             |   57.0 fps | draw   6.06 | pres 11.44 | idle  0.00 | frame  17.55 | worst   34.4 ms
+    blits/frame 1149: ground 530.9 ovl 276.3 obj 258.8 veh 79.0 ui 4.0 | vehicles drawn 79.0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 89 ms; minimap rebuild 20.24 ms; 
+iso res=800 tile=64 ovl=fill3 t=6                            |   52.9 fps | draw   9.28 | pres  9.62 | idle  0.00 | frame  18.91 | worst   40.3 ms
+    blits/frame 1701: ground 530.9 ovl 827.3 obj 259.6 veh 79.1 ui 4.0 | vehicles drawn 79.1
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 93 ms; minimap rebuild 20.25 ms; 
+iso res=800 tile=64 cache=2 ovl=checker t=6                  |  118.3 fps | draw   0.57 | pres  7.86 | idle  0.00 | frame   8.45 | worst   25.4 ms
+    blits/frame 101: obj 0.0 veh 81.7 ui 5.0 chunk 8.3 chunkrender 6.1 | vehicles drawn 81.7
+    chunk renders 12 in 6.0 s (2.0/s), avg 1.87 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 7353 KB; art load 93 ms; minimap rebuild 20.25 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.91 ms per 512x256 chunk, 369 blits
+iso res=800 tile=64 ui=1 t=6                                 |   59.8 fps | draw   4.88 | pres 11.80 | idle  0.00 | frame  16.73 | worst   25.2 ms
+    blits/frame 922: ground 421.7 obj 205.8 veh 70.2 ui 224.5 | vehicles drawn 70.2
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 91 ms; minimap rebuild 20.24 ms; 
+iso res=800 tile=64 ui=2 t=6                                 |   59.9 fps | draw   3.68 | pres 13.01 | idle  0.00 | frame  16.70 | worst   23.7 ms
+    blits/frame 707: ground 421.6 obj 205.7 veh 70.3 ui 2.0 uicompose 7.5 | vehicles drawn 70.3
+    ui compose 1.22 ms each (12 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 12010 KB; art load 95 ms; minimap rebuild 20.24 ms; 
+iso res=800 tile=64 cache=2 ui=1 t=6                         |  118.7 fps | draw   1.70 | pres  6.71 | idle  0.00 | frame   8.42 | worst   20.0 ms
+    blits/frame 312: obj 0.0 veh 71.8 ui 229.2 chunk 7.3 chunkrender 3.7 | vehicles drawn 71.8
+    chunk renders 12 in 6.0 s (2.0/s), avg 1.20 ms each, misses 0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 7353 KB; art load 94 ms; minimap rebuild 20.24 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.20 ms per 512x256 chunk, 225 blits
+iso res=800 tile=64 cache=2 ui=2 t=6                         |  118.8 fps | draw   0.52 | pres  7.88 | idle  0.00 | frame   8.42 | worst   19.1 ms
+    blits/frame 92: obj 0.0 veh 71.7 ui 2.0 chunk 7.3 chunkrender 3.7 uicompose 7.7 | vehicles drawn 71.7
+    chunk renders 12 in 6.0 s (2.0/s), avg 1.18 ms each, misses 0
+    ui compose 1.25 ms each (24 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 7146 KB; art load 88 ms; minimap rebuild 20.24 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.21 ms per 512x256 chunk, 225 blits
+iso res=800 tile=64 cache=2 ui=2 work=8 t=6                  |  113.5 fps | draw   8.55 | pres  0.25 | idle  0.00 | frame   8.81 | worst   21.6 ms
+    blits/frame 92: obj 0.0 veh 71.2 ui 2.0 chunk 7.3 chunkrender 3.9 uicompose 7.7 | vehicles drawn 71.2
+    chunk renders 12 in 6.0 s (2.0/s), avg 1.19 ms each, misses 0
+    ui compose 1.24 ms each (23 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 7146 KB; art load 96 ms; minimap rebuild 20.23 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.21 ms per 512x256 chunk, 225 blits
+iso res=800 tile=64 cache=2 ui=2 work=12 t=6                 |   79.5 fps | draw  12.54 | pres  0.03 | idle  0.00 | frame  12.57 | worst   19.6 ms
+    blits/frame 92: obj 0.0 veh 70.7 ui 2.0 chunk 7.4 chunkrender 4.6 uicompose 7.6 | vehicles drawn 70.7
+    chunk renders 10 in 6.0 s (1.7/s), avg 1.18 ms each, misses 0
+    ui compose 1.23 ms each (16 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 7146 KB; art load 92 ms; minimap rebuild 20.23 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.17 ms per 512x256 chunk, 217 blits
+iso res=800 tile=64 work=10 t=6                              |   59.5 fps | draw  14.53 | pres  2.27 | idle  0.00 | frame  16.81 | worst   24.4 ms
+    blits/frame 873: ground 530.8 obj 258.1 veh 79.6 ui 4.0 | vehicles drawn 79.6
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 95 ms; minimap rebuild 20.26 ms; 
+iso res=800 tile=64 cache=2 ui=2 occl=1 cap=30 t=6           |   30.0 fps | draw   1.70 | pres  1.39 | idle 30.22 | frame  33.33 | worst   33.3 ms
+    blits/frame 232: obj 0.0 veh 69.4 occl 142.8 ui 2.0 chunk 7.1 chunkrender 3.6 uicompose 7.3 | vehicles drawn 69.4
+    chunk renders 3 in 6.0 s (0.5/s), avg 1.17 ms each, misses 0
+    ui compose 1.19 ms each (6 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 7146 KB; art load 91 ms; minimap rebuild 20.23 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.16 ms per 512x256 chunk, 217 blits
+iso res=800 tile=64 cache=2 ui=2 occl=1 cap=60 t=6           |   60.0 fps | draw   1.67 | pres  1.56 | idle 13.43 | frame  16.67 | worst   16.7 ms
+    blits/frame 225: obj 0.0 veh 70.2 occl 133.0 ui 2.0 chunk 7.4 chunkrender 4.8 uicompose 7.5 | vehicles drawn 70.2
+    chunk renders 8 in 6.0 s (1.3/s), avg 1.18 ms each, misses 0
+    ui compose 1.22 ms each (12 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 7146 KB; art load 91 ms; minimap rebuild 20.23 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.16 ms per 512x256 chunk, 217 blits
+== sim (CPU, no rendering) ==
+  grid 128x128 (16384 tiles, 22% road, 73% conductive):
+    BFS distance map, 64 sources over roads    0.852 ms  (reached 3638)
+    flood fill power connectivity, 4 plants    2.423 ms  (reached 11914)
+    box blur 3x3 separable (byte map)          4.988 ms
+    box blur 5x5 separable                     5.034 ms
+    box blur 3x3 naive 9-tap                   1.724 ms
+    per-tile update (8-byte tile, ~25 ops)     3.290 ms  (200.8 ns/tile)
+    full tick (BFS+flood+blur3+update)        11.484 ms
+  grid 256x256 (65536 tiles, 22% road, 73% conductive):
+    BFS distance map, 64 sources over roads    3.430 ms  (reached 14675)
+    flood fill power connectivity, 4 plants    9.647 ms  (reached 47412)
+    box blur 3x3 separable (byte map)         19.797 ms
+    box blur 5x5 separable                    19.853 ms
+    box blur 3x3 naive 9-tap                   6.977 ms
+    per-tile update (8-byte tile, ~25 ops)    13.710 ms  (209.2 ns/tile)
+    full tick (BFS+flood+blur3+update)        46.170 ms
+  picking (64x32 mouse-map lookup): 0.077 us/pick; float formula 1.228 us/pick; mismatches 0 of 1000000 (checksums 381043659/381043659)
+  memory: phys 130508 KB total, 7816 KB free; page file free 1943424 KB; virtual free 2080256 KB; load 57%
+    allocated+touched   8 MB: last 8 MB took    88.9 ms (90 MB/s)
+    allocated+touched  16 MB: last 8 MB took   109.2 ms (73 MB/s)
+    allocated+touched  24 MB: last 8 MB took    91.3 ms (88 MB/s)
+    allocated+touched  32 MB: last 8 MB took    92.0 ms (87 MB/s)
+    allocated+touched  40 MB: last 8 MB took    91.8 ms (87 MB/s)
+    allocated+touched  48 MB: last 8 MB took    91.8 ms (87 MB/s)
+    allocated+touched  56 MB: last 8 MB took    93.9 ms (85 MB/s)
+    allocated+touched  64 MB: last 8 MB took    97.6 ms (82 MB/s)
+    allocated+touched  72 MB: last 8 MB took   110.7 ms (72 MB/s)
+    allocated+touched  80 MB: last 8 MB took   220.0 ms (36 MB/s)
+    allocated+touched  88 MB: last 8 MB took   320.0 ms (25 MB/s)
+    allocated+touched  96 MB: last 8 MB took   320.2 ms (25 MB/s)
+    re-touch all 96 MB: 446.1 ms
+iso res=800 tile=64 cache=2 ui=2 occl=1 cap=60 t=6           |   60.0 fps | draw   1.67 | pres  1.37 | idle 13.61 | frame  16.67 | worst   16.7 ms
+    blits/frame 225: obj 0.0 veh 70.2 occl 133.0 ui 2.0 chunk 7.4 chunkrender 4.8 uicompose 7.5 | vehicles drawn 70.2
+    chunk renders 8 in 6.0 s (1.3/s), avg 1.19 ms each, misses 0
+    ui compose 1.22 ms each (12 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 7146 KB; art load 96 ms; minimap rebuild 20.25 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 1.17 ms per 512x256 chunk, 217 blits
+iso res=800 tile=32 cache=2 ui=2 cap=60 t=6                  |   60.0 fps | draw   0.65 | pres  2.12 | idle 13.89 | frame  16.67 | worst   16.7 ms
+    blits/frame 120: obj 0.0 veh 84.7 ui 2.0 chunk 7.4 chunkrender 18.0 uicompose 7.5 | vehicles drawn 84.7
+    chunk renders 8 in 6.0 s (1.3/s), avg 4.15 ms each, misses 0
+    ui compose 1.23 ms each (12 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 7146 KB; art load 93 ms; minimap rebuild 20.26 ms; pool 19/19 chunks 512x256 (4864 KB, visible max 12); 
+    chunk re-render (blitter-complete): 4.15 ms per 512x256 chunk, 810 blits
+iso res=800 tile=32 zoom=stretch ui=2 cap=60 t=6             |   34.7 fps | draw  16.03 | pres  1.06 | idle 11.71 | frame  28.80 | worst   35.7 ms
+    blits/frame 2407: ground 1567.8 obj 744.2 veh 85.4 ui 2.0 uicompose 7.5 | vehicles drawn 85.4
+    ui compose 1.21 ms each (7 times)
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12010 KB, after pool 12010 KB; art load 112 ms; minimap rebuild 20.28 ms; 
+iso res=800 tile=64 ovl=tint cap=60 t=6                      |   25.7 fps | draw   4.83 | pres 18.72 | idle 15.41 | frame  38.99 | worst   87.7 ms
+    blits/frame 884: ground 531.0 obj 268.8 veh 80.5 ui 4.0 | vehicles drawn 80.5
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 89 ms; minimap rebuild 20.37 ms; 
+iso res=800 tile=64 ovl=checker cap=60 t=6                   |   22.2 fps | draw   6.60 | pres 20.68 | idle 17.78 | frame  45.08 | worst   81.0 ms
+    blits/frame 1263: ground 531.0 ovl 378.1 obj 270.8 veh 79.5 ui 4.0 | vehicles drawn 79.5
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 138 ms; minimap rebuild 20.44 ms; 
+iso res=800 tile=64 ovl=fill cap=60 t=6                      |   49.9 fps | draw   6.77 | pres  7.88 | idle  5.19 | frame  20.03 | worst   97.0 ms
+    blits/frame 1152: ground 530.8 ovl 277.6 obj 259.6 veh 79.5 ui 4.0 | vehicles drawn 79.5
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 98 ms; minimap rebuild 20.25 ms; 
+iso res=800 tile=64 ovl=fill3 cap=60 t=6                     |   46.1 fps | draw   9.50 | pres  6.95 | idle  5.23 | frame  21.69 | worst   52.3 ms
+    blits/frame 1747: ground 531.0 ovl 869.2 obj 262.9 veh 80.2 ui 4.0 | vehicles drawn 80.2
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 91 ms; minimap rebuild 20.26 ms; 
+iso res=800 tile=64 ovl=fill cap=60 t=6                      |   40.2 fps | draw   6.21 | pres 10.12 | idle  8.54 | frame  24.88 | worst   40.3 ms
+    blits/frame 1175: ground 530.9 ovl 297.7 obj 264.2 veh 78.7 ui 4.0 | vehicles drawn 78.7
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 96 ms; minimap rebuild 20.27 ms; 
+iso res=800 tile=64 ovl=tint bld=0 veh=0 scroll=0 cap=60 t=6 |   60.0 fps | draw   2.75 | pres  2.51 | idle 11.39 | frame  16.67 | worst   16.7 ms
+    blits/frame 530: ground 526.0 ui 4.0 | vehicles drawn 0.0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 96 ms; minimap rebuild 20.13 ms; 
+iso res=800 tile=64 ovl=checker bld=0 veh=0 scroll=0 cap=60 t=6 |   57.0 fps | draw   5.02 | pres  8.15 | idle  4.37 | frame  17.54 | worst   39.7 ms
+    blits/frame 994: ground 526.0 ovl 464.0 ui 4.0 | vehicles drawn 0.0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 91 ms; minimap rebuild 20.14 ms; 
+iso res=800 tile=64 ovl=fill3 bld=0 veh=0 scroll=0 cap=60 t=6 |   35.0 fps | draw  13.27 | pres  3.01 | idle 12.03 | frame  28.55 | worst  101.0 ms
+    blits/frame 1820: ground 526.0 ovl 1290.0 ui 4.0 | vehicles drawn 0.0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 94 ms; minimap rebuild 20.12 ms; 
+iso res=800 tile=64 ovl=fill bld=0 veh=0 scroll=0 cap=60 t=14 |   52.5 fps | draw   5.59 | pres  3.77 | idle  9.66 | frame  19.03 | worst   80.3 ms
+    blits/frame 960: ground 526.0 ovl 430.0 ui 4.0 | vehicles drawn 0.0
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 160 ms; minimap rebuild 21.50 ms; 
+== sim (CPU, no rendering) ==
+  grid 128x128 (16384 tiles, 22% road, 73% conductive):
+    BFS distance map, 64 sources over roads    0.851 ms  (reached 3638)
+    flood fill power connectivity, 4 plants    2.424 ms  (reached 11914)
+    box blur 3x3 separable (byte map)          1.259 ms
+    box blur 5x5 separable                     1.285 ms
+    box blur 3x3 naive 9-tap                   1.745 ms
+    per-tile update (8-byte tile, ~25 ops)     3.291 ms  (200.9 ns/tile)
+    full tick (BFS+flood+blur3+update)         7.691 ms
+  grid 256x256 (65536 tiles, 22% road, 73% conductive):
+    BFS distance map, 64 sources over roads    3.429 ms  (reached 14675)
+    flood fill power connectivity, 4 plants    9.657 ms  (reached 47412)
+    box blur 3x3 separable (byte map)          4.930 ms
+    box blur 5x5 separable                     4.961 ms
+    box blur 3x3 naive 9-tap                   6.983 ms
+    per-tile update (8-byte tile, ~25 ops)    13.713 ms  (209.2 ns/tile)
+    full tick (BFS+flood+blur3+update)        31.473 ms
+  picking (64x32 mouse-map lookup): 0.077 us/pick; float formula 1.223 us/pick; mismatches 0 of 1000000 (checksums 381043659/381043659)
+  memory: phys 130508 KB total, 7812 KB free; page file free 1942476 KB; virtual free 2080256 KB; load 59%
+    allocated+touched   8 MB: last 8 MB took    87.9 ms (91 MB/s)
+    allocated+touched  16 MB: last 8 MB took    91.7 ms (87 MB/s)
+    allocated+touched  24 MB: last 8 MB took    91.6 ms (87 MB/s)
+    allocated+touched  32 MB: last 8 MB took    91.7 ms (87 MB/s)
+    allocated+touched  40 MB: last 8 MB took   167.6 ms (48 MB/s)
+    allocated+touched  48 MB: last 8 MB took   197.3 ms (41 MB/s)
+    allocated+touched  56 MB: last 8 MB took   197.1 ms (41 MB/s)
+    allocated+touched  64 MB: last 8 MB took   155.8 ms (51 MB/s)
+    allocated+touched  72 MB: last 8 MB took    93.6 ms (86 MB/s)
+    allocated+touched  80 MB: last 8 MB took    92.5 ms (87 MB/s)
+    allocated+touched  88 MB: last 8 MB took   256.3 ms (31 MB/s)
+    allocated+touched  96 MB: last 8 MB took   261.4 ms (31 MB/s)
+    re-touch all 96 MB: 512.2 ms

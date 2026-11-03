@@ -1,0 +1,11 @@
+# f3_zoomswap.txt - F3: zoom residency swaps at 1024x768 (lahio.exe -res 1024 -seed 7 -script ...).
+zoom 1
+wait 0
+zoom 0
+wait 0
+zoom 1
+wait 0
+zoom 0
+wait 0
+log zoom swaps done
+quit

@@ -1,0 +1,42 @@
+# tests/Makefile.mac - Project Lahio (working title KAUPUNKI) headless tests on the Mac (clang++, C++98). Owner: T00.
+#   make -f tests/Makefile.mac              build + run all tests (from the project root)
+#   make -f tests/Makefile.mac T=sim        run only tests whose name contains "sim"
+#   make -f tests/Makefile.mac clean
+# Compiles the PORTABLE modules from src/ plus every tests/*.cpp. New test file? Just add
+# tests/test_<area>.cpp (picked up by the wildcard). New portable module? Add it to PORTABLE.
+# Tests write logs/CSV/dumps into tests/out/ (debug from text).
+ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+BUILD    := $(ROOT)/tests/build
+CXX      := clang++
+CXXFLAGS := -std=c++98 -Wall -O1 -g -I$(ROOT)/src -I$(ROOT)/tests -DKAUP_TESTS
+PORTABLE := util world defs sim net fields budget traffic mapgen save text tools iso politics lifecar poltab industry transit lifebus
+SRC_OBJS := $(patsubst %,$(BUILD)/src_%.o,$(PORTABLE))
+TEST_SRC := $(wildcard $(ROOT)/tests/*.cpp)
+TEST_OBJS:= $(patsubst $(ROOT)/tests/%.cpp,$(BUILD)/test_%.o,$(TEST_SRC))
+HDRS     := $(wildcard $(ROOT)/src/*.h) $(wildcard $(ROOT)/tests/*.h)
+BIN      := $(BUILD)/lahio_tests
+
+.PHONY: run build clean
+run: $(BIN)
+	@mkdir -p $(ROOT)/tests/out
+	@cd $(ROOT)/tests && $(BIN) $(T)
+
+build: $(BIN)
+
+$(BIN): $(SRC_OBJS) $(TEST_OBJS)
+	@echo "link $(notdir $@)"
+	@$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(BUILD)/src_%.o: $(ROOT)/src/%.cpp $(HDRS) | $(BUILD)
+	@echo "cc   src/$(notdir $<)"
+	@$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(BUILD)/test_%.o: $(ROOT)/tests/%.cpp $(HDRS) | $(BUILD)
+	@echo "cc   tests/$(notdir $<)"
+	@$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(BUILD):
+	@mkdir -p $(BUILD)
+
+clean:
+	rm -rf $(BUILD)

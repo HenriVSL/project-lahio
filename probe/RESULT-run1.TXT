@@ -1,0 +1,71 @@
+== info ==
+  RAM: 130508 KB total, 4136 KB free
+  desktop: 800x600
+  vidmem total 14246 KB free 14246 KB
+  HAL: BLT=1 STRETCH=1 (stretchX caps 0x02A95400) COLORFILL=1 CKEY_SRCBLT=1 CANBLTSYSMEM=1
+  HAL FX: ARITHSTRETCHY=0 STRETCHX=1 SHRINKX=1 STRETCHXN=0 SHRINKXN=0
+  display modes: 320x200x8@0 320x240x8@0 400x300x8@0 512x384x8@0 640x400x8@0 640x480x8@0 720x480x8@0 720x576x8@0 800x600x8@0 960x720x8@0 1024x768x8@0 1152x864x8@0 1280x960x8@0 1280x1024x8@0 1600x1024x8@0 1600x1200x8@0 1792x1344x8@0 1856x1392x8@0 1920x1080x8@0 1920x1200x8@0 1920x1440x8@0 2046x1536x8@0 320x200x16@0 320x240x16@0 400x300x16@0 512x384x16@0 640x400x16@0 640x480x16@0 720x480x16@0 720x576x16@0 800x600x16@0 960x720x16@0 1024x768x16@0 1152x864x16@0 1280x960x16@0 1280x1024x16@0 1600x1024x16@0 1600x1200x16@0 1792x1344x16@0 1856x1392x16@0 1920x1080x16@0 1920x1200x16@0 1920x1440x16@0 2046x1536x16@0 640x480x24@0 720x480x24@0 720x576x24@0 800x600x24@0 1024x768x24@0 1152x864x24@0 1280x1024x24@0 1600x1024x24@0 1600x1200x24@0 1920x1080x24@0 1920x1200x24@0 1920x1440x24@0 2046x1536x24@0 640x480x32@0 720x480x32@0 720x576x32@0 800x600x32@0 1024x768x32@0 1152x864x32@0 1280x1024x32@0 1600x1024x32@0 1600x1200x32@0 1792x1344x32@0 1856x1392x32@0 1920x1080x32@0 1920x1200x32@0 1920x1440x32@0
+== surf fullscreen 800x600x16: vidmem total 14246 KB, free 13258 KB ==
+  vidmem  256x64   ok, used   32 KB (nominal  32 KB) | sysmem ok
+  vidmem  512x64   ok, used   64 KB (nominal  64 KB) | sysmem ok
+  vidmem  640x64   ok, used   80 KB (nominal  80 KB) | sysmem ok
+  vidmem  800x64   ok, used  100 KB (nominal 100 KB) | sysmem ok
+  vidmem 1024x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 1280x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 1600x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem 2048x64   FAIL hr=0x80070057                     | sysmem ok
+  vidmem   64x1024 ok, used  128 KB
+  vidmem   64x2048 ok, used  256 KB
+  vidmem   64x4096 ok, used  512 KB
+  vidmem  512x1024 ok, used 1024 KB
+  vidmem  512x2048 ok, used 2048 KB
+  vidmem  640x2048 ok, used 2560 KB
+  vidmem  800x2048 ok, used 3200 KB
+  fill VRAM with   64x64 : 1644 surfaces =  13152 KB nominal, free dropped  13152 KB, left 106 KB
+  fill VRAM with  256x128:  200 surfaces =  12800 KB nominal, free dropped  12800 KB, left 458 KB
+  fill VRAM with  512x256:   48 surfaces =  12288 KB nominal, free dropped  12288 KB, left 970 KB
+  fill VRAM with  800x256:   32 surfaces =  12800 KB nominal, free dropped  12864 KB, left 394 KB
+iso res=800 tile=64 t=4                                      |   42.7 fps | draw   4.54 | pres 18.89 | idle  0.00 | frame  23.44 | worst   29.0 ms
+    blits/frame 881: ground 530.7 obj 266.8 veh 79.9 ui 4.0 | vehicles drawn 79.9
+    vidmem total 14246 KB, free after mode 13258 KB, after art 12217 KB, after pool 12217 KB; art load 1389 ms; minimap rebuild 20.22 ms; 
+== sweep 800x600x16 fullscreen (into back buffer, no flip; blitter-complete) ==
+  BltFast 64x32 keyed (tile)                   8.70 us/blit    235.4 Mpix/s  (57500 blits)
+  BltFast 64x32 opaque                        14.42 us/blit    142.1 Mpix/s  (34700 blits)
+  Blt 64x32 keyed (Blt not BltFast)           20.46 us/blit    100.1 Mpix/s  (24500 blits)
+  BltFast 32x16 keyed (zoomed-out tile)       16.68 us/blit     30.7 Mpix/s  (31100 blits)
+  BltFast 16x12 keyed (car)                    5.02 us/blit     38.3 Mpix/s  (99700 blits)
+  BltFast 8xGH keyed (glyph)                   5.02 us/blit     20.7 Mpix/s  (99650 blits)
+  BltFast 64x48 keyed (house)                 11.67 us/blit    263.2 Mpix/s  (42950 blits)
+  BltFast 64x96 keyed                         23.33 us/blit    263.4 Mpix/s  (21450 blits)
+  BltFast 64x160 keyed                        37.33 us/blit    274.3 Mpix/s  (13400 blits)
+  BltFast 128x128 keyed                       55.82 us/blit    293.5 Mpix/s  (9000 blits)
+  BltFast 256x128 opaque (chunk)              57.51 us/blit    569.7 Mpix/s  (8700 blits)
+  BltFast 512x256 opaque (chunk)              90.84 us/blit   1442.9 Mpix/s  (5550 blits)
+  BltFast full screen opaque                 101.25 us/blit   4740.8 Mpix/s  (5000 blits)
+  Blt stretch 64x32->32x16 keyed           13428.94 us/blit      0.0 Mpix/s  (1700 blits)
+  Blt stretch 512x256->256x128 opaque        237.16 us/blit    138.2 Mpix/s  (5900 blits)
+  Blt stretch 256x128->512x256 opaque         28.03 us/blit   4676.4 Mpix/s  (19300 blits)
+  ColorFill 8x8                              656.62 us/blit      0.1 Mpix/s  (800 blits)
+  ColorFill 32x16                          92677.52 us/blit      0.0 Mpix/s  (150 blits)
+  ColorFill full screen                       23.15 us/blit  20730.2 Mpix/s  (26400 blits)
+== sweep 640x480x16 fullscreen (into back buffer, no flip; blitter-complete) ==
+  BltFast 64x32 keyed (tile)                  10.94 us/blit    187.2 Mpix/s  (45800 blits)
+  BltFast 64x32 opaque                        15.46 us/blit    132.5 Mpix/s  (32350 blits)
+  Blt 64x32 keyed (Blt not BltFast)           18.07 us/blit    113.3 Mpix/s  (27700 blits)
+  BltFast 32x16 keyed (zoomed-out tile)        8.84 us/blit     57.9 Mpix/s  (56550 blits)
+  BltFast 16x12 keyed (car)                    5.04 us/blit     38.1 Mpix/s  (99200 blits)
+  BltFast 8xGH keyed (glyph)                   5.04 us/blit     20.6 Mpix/s  (99200 blits)
+  BltFast 64x48 keyed (house)                 13.24 us/blit    232.1 Mpix/s  (37800 blits)
+  BltFast 64x96 keyed                         26.39 us/blit    232.8 Mpix/s  (18950 blits)
+  BltFast 64x160 keyed                        45.60 us/blit    224.6 Mpix/s  (11000 blits)
+  BltFast 128x128 keyed                       57.36 us/blit    285.6 Mpix/s  (8750 blits)
+  BltFast 256x128 opaque (chunk)              24.42 us/blit   1342.1 Mpix/s  (20500 blits)
+  BltFast 512x256 opaque (chunk)             246.30 us/blit    532.2 Mpix/s  (2050 blits)
+  BltFast full screen opaque                 241.19 us/blit   1273.7 Mpix/s  (2100 blits)
+  Blt stretch 64x32->32x16 keyed             269.38 us/blit      1.9 Mpix/s  (1900 blits)
+  Blt stretch 512x256->256x128 opaque        229.24 us/blit    142.9 Mpix/s  (2200 blits)
+  Blt stretch 256x128->512x256 opaque        236.52 us/blit    554.2 Mpix/s  (2150 blits)
+  ColorFill 8x8                            15154.89 us/blit      0.0 Mpix/s  (750 blits)
+  ColorFill 32x16                              4.55 us/blit    112.4 Mpix/s  (109800 blits)
+  ColorFill full screen                       21.45 us/blit  14323.4 Mpix/s  (26450 blits)
+  BltFast 64x32 keyed from SYSTEM memory   1153119.73 us/blit      0.0 Mpix/s  (50 blits)

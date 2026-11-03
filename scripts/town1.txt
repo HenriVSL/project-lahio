@@ -1,0 +1,133 @@
+# town1.txt - T08 scripted play session: a town from scratch on the Lakeland map, seed 7, 5 years.
+#   VM:  lahio.exe -seed 7 -preset lakeland -script scripts\town1.txt [-fast]  (writes town1.csv,
+#        town1_report.txt, town1_map.txt next to the exe)
+#   Mac: tests/test_tools.cpp tools_script_session_town1 runs the same file headless.
+# Map: national road enters at 127,70 and turns south at the town site 102,70; lake shore west at x=73.
+# Like a player: service sites are reserved before the zones around them; later builds bulldoze first.
+# F1 (pipes): pipes under every second housing street; end pop 4,698, money 9,608 (was 4,803 / 887 with mains in roads).
+# T12 economy (docs/BALANCE.md): pop 1955-59 = 1,053 / 2,245 / 3,387 / 4,180 / 4,803, end money 887 mk: this
+#   session over-builds services early (2 clinics, 2 fire stations, 4 saunas for ~2,000) and runs near zero.
+statlog town1.csv
+log === year 0 (1955): founding
+townhall
+# west residential grid: streets y = 73 79 85 91, x = 74 83 93
+road 73 73 101 73 street
+road 74 79 101 79 street
+road 74 85 101 85 street
+road 74 91 101 91 street
+road 74 73 74 91 street
+road 83 73 83 95 street
+road 93 73 93 95 street
+# east: industry streets
+road 103 82 116 82 street
+road 103 88 116 88 street
+road 103 95 116 95 street
+road 103 98 116 98 gravel
+road 110 82 110 98 street
+# power: coal plant south of the industry, trunk on the national road, lines along the streets
+build coal_plant 107 99
+power 102 98 106 98
+power 102 74 102 98
+power 74 73 102 73
+power 74 79 102 79
+power 74 85 102 85
+power 74 91 102 91
+# water: pumping station on the west lake shore + wells
+# F1: pipes under every second housing street (buildings and zoned land carry water through the blocks;
+#     industry needs no water in M1), a short pipe from the pumping station into the zone; the station needs
+#     power (a line on the street tile beside it)
+pipe 73 73 75 73
+pipe 74 79 101 79
+pipe 74 85 101 85
+power 73 73 73 73
+build pump 73 72
+build well 75 92
+build well 85 92
+# service sites first
+build school 84 80
+build sauna 75 80
+build fire_station 94 80
+build clinic 94 86
+build sauna 84 86
+# zones
+zone 75 71 98 95 houses
+zone 99 71 101 95 commercial
+zone 103 71 112 80 commercial
+zone 103 83 116 100 industry
+speed 3
+wait 12
+dump tools
+expect pop > 300
+dump report town1_report.txt
+log === year 1 (1956): north expansion, second plant
+# F3: 1x1 industrial yards now fill the gaps of the industry zone: clear the plant site first
+bulldoze 113 99 114 100
+# M3: industry kinds fill the zone differently; clear the plant site first (like the later years)
+bulldoze 113 99 114 100
+build coal_plant 113 99
+power 109 98 112 98
+road 74 67 101 67 street
+road 74 61 101 61 street
+road 74 55 101 55 street
+road 83 55 83 73 street
+road 93 55 93 73 street
+road 74 55 74 73 street
+power 74 67 101 67
+power 74 61 101 61
+power 74 55 101 55
+power 83 68 83 72
+pipe 74 61 101 61
+build school 94 62
+build sauna 84 62
+build sauna 94 56
+build clinic 84 56
+build fire_station 76 62
+build well 76 68
+build well 86 68
+build well 77 56
+zone 75 52 101 72 houses
+wait 12
+expect pop > 900
+dump report town1_report.txt
+log === year 2 (1957): apartments, more services
+bulldoze 75 86 76 86
+build sauna 76 86
+bulldoze 75 74 76 75
+build school 75 74
+zone 94 52 101 66 apartments
+road 117 82 117 98 street
+zone 111 83 116 100 industry
+wait 12
+expect pop > 1500
+dump report town1_report.txt
+log === year 3 (1958): services
+# T12: the year-2 well moved here (the T12 economy left too little cash at the end of 1957)
+bulldoze 96 92 96 92
+build well 96 92
+bulldoze 95 74 95 74
+build sauna 95 74
+bulldoze 104 90 104 90
+build fire_station 104 90
+bulldoze 76 80 76 80
+build clinic 76 80
+bulldoze 98 56 98 56
+build well 98 56
+bulldoze 86 74 86 74
+build sauna 86 74
+wait 12
+expect pop > 2000
+dump report town1_report.txt
+log === year 4 (1959): third plant
+bulldoze 104 99 105 100
+build coal_plant 104 99
+bulldoze 89 62 90 63
+build school 89 62
+bulldoze 89 80 89 80
+build sauna 89 80
+wait 12
+expect pop > 3000
+expect money > 0
+dump report town1_report.txt
+dump tools
+dump map town1_map.txt
+log === done

@@ -1,0 +1,11 @@
+# resolution / zoom, full redraw, fullscreen
+iso res=640 tile=64 t=6
+iso res=800 tile=64 t=6
+iso res=1024 tile=64 t=6
+iso res=800 tile=32 t=6
+iso res=1024 tile=32 t=6
+iso res=800 tile=32 zoom=stretch t=6
+iso res=800 tile=64 win=1 t=6
+iso res=640 tile=64 win=1 t=6
+iso res=800 tile=64 mode=draw t=6
+iso res=800 tile=64 bld=0 veh=0 t=6

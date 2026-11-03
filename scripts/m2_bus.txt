@@ -1,0 +1,16 @@
+# M2 check (VM): BENCH20K + a bus depot and two bus lines, then the traffic overlay. Use with
+#   lahio.exe -load BENCH20K.KAU -script scripts\m2_bus.txt -log
+bulldoze 37 54 38 55
+build bus_depot 37 54
+busline 36 53 50 53 64 53 78 53 92 53
+busline add 1 106 53
+busline 36 60 57 60 78 60 99 60
+speed 3
+wait 3
+overlay 5
+cam 70 57
+wait 1
+shot m2_traffic.bmp
+wait 1
+dump report m2_bus_report.txt
+quit

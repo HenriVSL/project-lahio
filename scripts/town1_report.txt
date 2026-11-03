@@ -1,0 +1,106 @@
+=== Kaupunki, 1956-01 (step 769) status Church village era Reconstruction
+population 1077 (houses 1077, apartments 0), homes 1119 (vacant 42), homeless 0
+jobs 580 (com 32 lots, ind 9 lots), workers 538, unemployed 0, jobs filled 92%
+migration: pull 92, immigrated 83 this month, emigrated to Sweden 0 (total 0)
+lots: houses T1/T2/T3 155/109/0, apartments T1 0, commercial T1/T2 32/0, industry T1/T2 9/0, building 0, abandoned 0
+power 311/400 (short lots 0), water 319/620 (short lots 0)
+service Fire protection: load 1077 / capacity 1500
+service Education: load 215 / capacity 400
+service Health care: load 1077 / capacity 2000
+service Public sauna: load 1077 / capacity 1200
+averages (residents): land value 50, pollution 1, happiness 63, fire risk 34, commute 4
+demand R: bar 13, smoothed 45, target 101 = open_jobs +68 migration +92 attract -17 vacant -42
+demand C: bar 5, smoothed 3, target 4 = spending +140 com_cap -136
+demand I: bar -8, smoothed 3, target 23 = clearing +41 western +20 local_need +322 ind_cap -360
+money 10660 mk, loan 0, last month net +83: bl0 +243 bl1 +119 bl2 +28 bl3 +147 bl5 -30 bl6 -50 bl7 -40 bl8 -30 bl12 -163 bl13 -14 bl14 -107 bl15 -20
+problem 1: req 9, 103 lots, 618 residents (near 77,76)
+problem 2: req 6, 40 lots, 120 residents (near 98,78)
+problem 3: req 8, 7 lots, 42 residents (near 75,81)
+problem 4: req 7, 1 lots, 6 residents (near 75,72)
+problem 5: req 12, 29 lots, 0 residents (near 109,73)
+problem 6: req 1, 10 lots, 0 residents (near 111,90)
+=== Kaupunki, 1957-01 (step 1537) status Church village era Reconstruction
+population 2124 (houses 2124, apartments 0), homes 2181 (vacant 57), homeless 29
+jobs 1172 (com 62 lots, ind 19 lots), workers 1062, unemployed 0, jobs filled 90%
+migration: pull 105, immigrated 34 this month, emigrated to Sweden 10 (total 14)
+lots: houses T1/T2/T3 533/97/0, apartments T1 0, commercial T1/T2 62/0, industry T1/T2 19/0, building 0, abandoned 0
+power 753/800 (short lots 341), water 747/1070 (short lots 0)
+service Fire protection: load 2124 / capacity 3000
+service Education: load 424 / capacity 800
+service Health care: load 2124 / capacity 4000
+service Public sauna: load 2124 / capacity 2400
+averages (residents): land value 51, pollution 1, happiness 64, fire risk 38, commute 4
+demand R: bar 6, smoothed 36, target 90 = open_jobs +60 migration +105 attract -18 vacant -57
+demand C: bar 3, smoothed 1, target -2 = spending +254 com_cap -256
+demand I: bar 3, smoothed -6, target -30 = clearing +62 western +31 local_need +637 ind_cap -760
+money 2021 mk, loan 0, last month net +127: bl0 +488 bl1 +238 bl2 +57 bl3 +94 bl5 -60 bl6 -100 bl7 -80 bl8 -60 bl12 -201 bl13 -24 bl14 -205 bl15 -20
+problem 1: req 1, 345 lots, 1008 residents (near 114,91)
+problem 2: req 9, 97 lots, 582 residents (near 88,76)
+problem 3: req 6, 53 lots, 210 residents (near 91,76)
+problem 4: req 8, 2 lots, 12 residents (near 75,81)
+problem 5: req 5, 1 lots, 3 residents (near 75,54)
+problem 6: req 12, 59 lots, 0 residents (near 109,73)
+problem 7: req 2, 1 lots, 0 residents (near 78,63)
+=== Kaupunki, 1958-01 (step 2305) status Church village era Reconstruction
+population 2833 (houses 2709, apartments 124), homes 2884 (vacant 51), homeless 1
+jobs 1475 (com 83 lots, ind 24 lots), workers 1416, unemployed 0, jobs filled 96%
+migration: pull 113, immigrated 93 this month, emigrated to Sweden 1 (total 83)
+lots: houses T1/T2/T3 705/99/0, apartments T1 2, commercial T1/T2 83/0, industry T1/T2 24/0, building 0, abandoned 0
+power 1065/800 (short lots 257), water 996/1220 (short lots 0)
+service Fire protection: load 2833 / capacity 3000
+service Education: load 566 / capacity 1200
+service Health care: load 2833 / capacity 4000
+service Public sauna: load 2833 / capacity 3000
+averages (residents): land value 51, pollution 0, happiness 63, fire risk 44, commute 4
+demand R: bar 5, smoothed 16, target 4 = migration +113 attract -21 vacant -51 emigration -37
+demand C: bar 3, smoothed 1, target -1 = spending +339 com_cap -340
+demand I: bar 0, smoothed 1, target 3 = clearing +76 western +38 local_need +849 ind_cap -960
+money 2084 mk, loan 0, last month net +264: bl0 +648 bl1 +305 bl2 +76 bl3 +59 bl5 -60 bl6 -150 bl7 -80 bl8 -75 bl12 -205 bl13 -23 bl14 -211 bl15 -20
+problem 1: req 1, 259 lots, 750 residents (near 107,86)
+problem 2: req 6, 180 lots, 642 residents (near 96,84)
+problem 3: req 9, 99 lots, 594 residents (near 85,89)
+problem 4: req 8, 2 lots, 12 residents (near 82,89)
+problem 5: req 5, 1 lots, 3 residents (near 98,90)
+problem 6: req 12, 75 lots, 0 residents (near 109,73)
+=== Kaupunki, 1959-01 (step 3073) status Market town era Reconstruction
+population 3661 (houses 3486, apartments 175), homes 3682 (vacant 21), homeless 16
+jobs 1834 (com 111 lots, ind 29 lots), workers 1830, unemployed 0, jobs filled 99%
+migration: pull 123, immigrated 50 this month, emigrated to Sweden 6 (total 124)
+lots: houses T1/T2/T3 435/367/0, apartments T1 2, commercial T1/T2 110/1, industry T1/T2 29/0, building 0, abandoned 0
+power 1151/800 (short lots 338), water 1050/1370 (short lots 0)
+service Fire protection: load 3661 / capacity 4500
+service Education: load 732 / capacity 1200
+service Health care: load 3661 / capacity 6000
+service Public sauna: load 3661 / capacity 4200
+averages (residents): land value 52, pollution 1, happiness 63, fire risk 62, commute 3
+demand R: bar 11, smoothed 51, target 39 = migration +123 attract -23 vacant -21 emigration -40
+demand C: bar 8, smoothed 5, target 1 = spending +475 com_cap -474
+demand I: bar 35, smoothed 58, target 77 = clearing +93 western +46 local_need +1098 ind_cap -1160
+money 8830 mk, loan 0, last month net +409: bl0 +845 bl1 +385 bl2 +94 bl3 +17 bl5 -90 bl6 -150 bl7 -120 bl8 -105 bl12 -206 bl13 -24 bl14 -217 bl15 -20
+problem 1: req 9, 352 lots, 2112 residents (near 98,69)
+problem 2: req 1, 330 lots, 978 residents (near 107,86)
+problem 3: req 8, 22 lots, 132 residents (near 75,86)
+problem 4: req 6, 34 lots, 102 residents (near 98,94)
+problem 5: req 5, 1 lots, 3 residents (near 98,90)
+problem 6: req 12, 103 lots, 0 residents (near 100,94)
+=== Kaupunki, 1960-01 (step 3841) status Market town era Structural change
+population 4752 (houses 4587, apartments 175), homes 4762 (vacant 0), homeless -1
+jobs 2344 (com 113 lots, ind 27 lots), workers 2381, unemployed 37, jobs filled 100%
+migration: pull 137, immigrated 81 this month, emigrated to Sweden 10 (total 196)
+lots: houses T1/T2/T3 65/732/0, apartments T1 2, commercial T1/T2 105/8, industry T1/T2 19/8, building 0, abandoned 0
+power 1199/1200 (short lots 0), water 1074/1370 (short lots 0)
+service Fire protection: load 4762 / capacity 4500
+service Education: load 952 / capacity 1600
+service Health care: load 4762 / capacity 6000
+service Public sauna: load 4762 / capacity 4800
+averages (residents): land value 52, pollution 1, happiness 63, fire risk 66, commute 3
+demand R: bar 10, smoothed 65, target 74 = migration +137 attract -26 emigration -37
+demand C: bar 35, smoothed 60, target 83 = spending +619 com_cap -536
+demand I: bar 38, smoothed 63, target 40 = clearing +115 western +57 local_need +1428 ind_cap -1560
+money 10317 mk, loan 0, last month net +679: bl0 +1093 bl1 +532 bl2 +130 bl5 -90 bl6 -200 bl7 -120 bl8 -120 bl12 -206 bl13 -23 bl14 -297 bl15 -20
+problem 1: req 9, 727 lots, 4353 residents (near 79,94)
+problem 2: req 8, 206 lots, 1235 residents (near 77,90)
+problem 3: req 6, 102 lots, 483 residents (near 97,89)
+problem 4: req 5, 1 lots, 3 residents (near 98,90)
+problem 5: req 12, 105 lots, 0 residents (near 100,94)
+problem 6: req 1, 2 lots, 0 residents (near 107,86)

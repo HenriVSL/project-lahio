@@ -1,0 +1,27 @@
+# pol_shots.txt - M1 politics panel screenshots (layout check at 800x600 and 640x480).
+#   VM: lahio.exe -load AUTO1.KAU -script scripts\pol_shots.txt [-res 640]   (writes polshot_*.bmp)
+pol enable
+speed 3
+wait 3
+pol auth 30
+pol sign rent
+pol letter embassy
+wait 1
+polpanel 0
+shot polshot_overview.bmp
+wait 1
+polpanel 11
+shot polshot_decrees.bmp
+wait 1
+polpanel 42
+shot polshot_letters.bmp
+wait 1
+pol event statue
+polpanel 3
+shot polshot_event.bmp
+wait 1
+pol election
+polpanel 4
+shot polshot_election.bmp
+wait 1
+quit

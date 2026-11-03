@@ -1,0 +1,19 @@
+# M2 check (VM): BENCH20K + bus depot + two lines, then a bottleneck: the y=53 street between x 64 and 77
+# becomes a gravel road (capacity 300). Traffic overlay with buildings, camera on the bottleneck.
+#   lahio.exe -load BENCH20K.KAU -script scripts\m2_jam.txt -log
+bulldoze 37 54 38 55
+build bus_depot 37 54
+busline 36 53 50 53 64 53 78 53 92 53
+busline add 1 106 53
+busline 36 60 57 60 78 60 99 60
+bulldoze 64 53 77 53
+road 64 53 77 53 gravel
+busline delete 1
+busline 36 53 50 53 64 53 78 53 92 53
+speed 3
+wait 4
+overlay 105
+cam 70 54
+wait 1
+shot m2_jam.bmp
+quit

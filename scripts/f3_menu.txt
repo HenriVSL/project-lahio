@@ -1,0 +1,3 @@
+# f3_menu.txt - F3: the windowed pause menu (VRAM stipple fallback).
+#   lahio.exe -window -seed 7 -script scripts\f3_menu.txt -shot 6 f3_menu.bmp -exitafter 8 -log
+menu

@@ -1,0 +1,241 @@
+# bal_planner_c3.txt - T12 balance bot run, recorded by tests/test_balance.cpp (docs/BALANCE.md).
+#   VM: lahio.exe -seed 3 -preset Coast -script scripts\bal_planner_c3.txt -fast   (same city as the Mac run)
+statlog bal_planner_c3.csv
+townhall
+road 68 40 96 40 street straight
+road 68 47 96 47 street straight
+road 68 54 96 54 street straight
+road 68 61 96 61 street straight
+road 68 40 68 61 street straight
+road 82 40 82 61 street straight
+road 96 40 96 61 street straight
+pipe 68 47 96 47
+pipe 68 54 96 54
+power 68 40 96 40
+power 68 47 96 47
+power 68 54 96 54
+power 68 61 96 61
+power 68 40 68 61
+build school 69 48
+build sauna 83 41
+build well 95 41
+build well 95 55
+zone 69 41 95 60 houses
+zone 83 58 95 60 commercial
+road 68 5 124 5 street straight
+power 68 5 124 5
+road 68 12 124 12 street straight
+power 68 12 124 12
+road 68 5 68 12 street straight
+road 82 5 82 12 street straight
+road 96 5 96 12 street straight
+road 110 5 110 12 street straight
+road 124 5 124 12 street straight
+power 68 5 68 12
+zone 81 6 123 11 industry
+zone 69 8 80 11 industry
+build coal_plant 69 6
+power 68 19 68 40
+speed 3
+wait 1
+road 68 12 124 12 street straight
+power 68 12 124 12
+road 68 19 124 19 street straight
+power 68 19 124 19
+road 68 12 68 19 street straight
+road 82 12 82 19 street straight
+road 96 12 96 19 street straight
+road 110 12 110 19 street straight
+road 124 12 124 19 street straight
+power 68 12 68 19
+zone 81 13 123 18 industry
+zone 69 15 80 18 industry
+wait 3
+bulldoze 83 48 83 48
+build clinic 83 48
+wait 9
+build fire_station 69 55
+wait 5
+bulldoze 69 46 69 46
+build well 69 46
+wait 2
+bulldoze 95 48 95 48
+build sauna 95 48
+wait 3
+bulldoze 83 55 84 56
+build school 83 55
+zone 83 55 95 57 commercial
+wait 2
+build coal_plant 71 6
+wait 1
+bulldoze 81 53 81 53
+build well 81 53
+road 96 40 124 40 street straight
+road 96 47 124 47 street straight
+road 96 54 124 54 street straight
+road 96 61 124 61 street straight
+road 96 40 96 61 street straight
+road 110 40 110 61 street straight
+road 124 40 124 61 street straight
+pipe 96 47 124 47
+pipe 96 54 124 54
+power 96 40 124 40
+power 96 47 124 47
+power 96 54 124 54
+power 96 61 124 61
+power 96 40 96 61
+build school 97 48
+build sauna 111 41
+build well 123 41
+build well 123 55
+zone 97 41 123 60 houses
+zone 111 58 123 60 commercial
+wait 6
+bulldoze 111 48 111 48
+build clinic 111 48
+wait 7
+build fire_station 97 55
+bulldoze 97 41 97 41
+build water_tower 97 41
+wait 1
+build coal_plant 73 6
+wait 6
+bulldoze 111 55 112 56
+build school 111 55
+wait 3
+zone 111 55 123 57 commercial
+wait 1
+bulldoze 69 43 69 43
+build well 69 43
+wait 1
+bulldoze 69 58 69 58
+build sauna 69 58
+road 68 19 96 19 street straight
+road 68 26 96 26 street straight
+road 68 33 96 33 street straight
+road 68 40 96 40 street straight
+road 68 19 68 40 street straight
+road 82 19 82 40 street straight
+road 96 19 96 40 street straight
+pipe 68 26 96 26
+pipe 68 33 96 33
+power 68 19 96 19
+power 68 26 96 26
+power 68 33 96 33
+power 68 40 96 40
+power 68 19 68 40
+build school 69 27
+build sauna 83 20
+build well 95 20
+build well 95 34
+zone 69 20 95 39 houses
+zone 83 37 95 39 commercial
+wait 3
+build coal_plant 75 6
+wait 7
+bulldoze 95 44 95 44
+build well 95 44
+bulldoze 83 27 83 27
+build clinic 83 27
+bulldoze 69 34 69 34
+build fire_station 69 34
+wait 1
+bulldoze 81 48 81 48
+build well 81 48
+wait 1
+bulldoze 97 46 97 46
+build well 97 46
+wait 1
+bulldoze 109 53 109 53
+build well 109 53
+road 96 19 124 19 street straight
+road 96 26 124 26 street straight
+road 96 33 124 33 street straight
+road 96 40 124 40 street straight
+road 96 19 96 40 street straight
+road 110 19 110 40 street straight
+road 124 19 124 40 street straight
+pipe 96 26 124 26
+pipe 96 33 124 33
+power 96 19 124 19
+power 96 26 124 26
+power 96 33 124 33
+power 96 40 124 40
+power 96 19 96 40
+build school 97 27
+build sauna 111 20
+build well 123 20
+build well 123 34
+zone 97 20 123 39 houses
+zone 111 37 123 39 commercial
+wait 2
+build coal_plant 77 6
+wait 4
+bulldoze 97 43 97 43
+build well 97 43
+wait 1
+bulldoze 123 44 123 44
+build well 123 44
+wait 1
+bulldoze 109 48 109 48
+build well 109 48
+zone 83 34 95 36 commercial
+wait 1
+bulldoze 69 25 69 25
+build well 69 25
+zone 111 34 123 36 commercial
+wait 2
+bulldoze 81 32 81 32
+build well 81 32
+wait 3
+bulldoze 123 48 123 48
+build sauna 123 48
+wait 1
+bulldoze 111 27 111 27
+build clinic 111 27
+wait 1
+bulldoze 97 34 97 34
+build fire_station 97 34
+wait 1
+bulldoze 69 22 69 22
+build well 69 22
+wait 2
+bulldoze 111 34 112 35
+build school 111 34
+wait 3
+build coal_plant 79 6
+build well 95 23
+wait 3
+bulldoze 97 58 97 58
+build sauna 97 58
+wait 3
+build coal_plant 69 13
+bulldoze 81 27 81 27
+build well 81 27
+wait 4
+build coal_plant 71 13
+wait 3
+bulldoze 97 25 97 25
+build well 97 25
+wait 15
+bulldoze 109 32 109 32
+build well 109 32
+wait 5
+build coal_plant 73 13
+wait 19
+bulldoze 95 27 95 27
+build sauna 95 27
+wait 21
+bulldoze 81 41 81 41
+build park 81 41
+wait 1
+bulldoze 109 41 109 41
+build park 109 41
+wait 1
+bulldoze 81 20 81 20
+build park 81 20
+wait 1
+bulldoze 109 20 109 20
+build park 109 20
+wait 78
+dump report bal_planner_c3_report.txt

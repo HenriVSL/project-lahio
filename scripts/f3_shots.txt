@@ -1,0 +1,81 @@
+# f3_shots.txt - F3 visual checks in the VM (DEBUG FROM TEXT first: the log has the numbers).
+#   lahio.exe -seed 7 -preset lakeland -script scripts\f3_shots.txt -log
+# First year of town1 (roads, zones, power, water), then: zone view, hover label on the town hall,
+# water overlay (watered lots blue, wet ground faint blue), 32 zoom (zoom keys), pause menu.
+# Map: national road enters at 127,70 and turns south at the town site 102,70; lake shore west at x=73.
+# Like a player: service sites are reserved before the zones around them; later builds bulldoze first.
+log === year 0 (1955): founding
+townhall
+# west residential grid: streets y = 73 79 85 91, x = 74 83 93
+road 73 73 101 73 street
+road 74 79 101 79 street
+road 74 85 101 85 street
+road 74 91 101 91 street
+road 74 73 74 91 street
+road 83 73 83 95 street
+road 93 73 93 95 street
+# east: industry streets
+road 103 82 116 82 street
+road 103 88 116 88 street
+road 103 95 116 95 street
+road 103 98 116 98 gravel
+road 110 82 110 98 street
+# power: coal plant south of the industry, trunk on the national road, lines along the streets
+build coal_plant 107 99
+power 102 98 106 98
+power 102 74 102 98
+power 74 73 102 73
+power 74 79 102 79
+power 74 85 102 85
+power 74 91 102 91
+# water: pumping station on the west lake shore + wells
+# F1: pipes under every second housing street (buildings and zoned land carry water through the blocks;
+#     industry needs no water in M1), a short pipe from the pumping station into the zone; the station needs
+#     power (a line on the street tile beside it)
+pipe 73 73 75 73
+pipe 74 79 101 79
+pipe 74 85 101 85
+power 73 73 73 73
+build pump 73 72
+build well 75 92
+build well 85 92
+# service sites first
+build school 84 80
+build sauna 75 80
+build fire_station 94 80
+build clinic 94 86
+build sauna 84 86
+# zones
+zone 75 71 98 95 houses
+zone 99 71 101 95 commercial
+zone 103 71 112 80 commercial
+zone 103 83 116 100 industry
+speed 3
+wait 14
+speed 0
+cam 103 76
+zoneview 1
+wait 0
+mouse 300 200
+shot f3_zone.bmp
+wait 0
+mouse 478 222
+speed 1
+wait 1
+speed 0
+shot f3_hover.bmp
+wait 0
+zoneview 0
+overlay 2
+wait 0
+shot f3_water.bmp
+wait 0
+overlay 0
+zoom 1
+mouse 699 8
+speed 1
+wait 1
+shot f3_zoom32.bmp
+wait 0
+log f3 shots done
+quit

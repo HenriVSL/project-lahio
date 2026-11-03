@@ -1,0 +1,14 @@
+# chunk caches
+iso res=800 tile=64 cache=1 chunk=256 t=6
+iso res=800 tile=64 cache=1 chunk=512 t=6
+iso res=800 tile=64 cache=2 chunk=256 t=6
+iso res=800 tile=64 cache=2 chunk=512 t=6
+iso res=800 tile=64 cache=2 chunk=512 occl=1 t=6
+iso res=800 tile=64 cache=2 chunk=512 scroll=0 t=6
+iso res=800 tile=64 cache=2 chunk=512 win=1 t=6
+iso res=800 tile=32 cache=2 chunk=512 t=6
+iso res=800 tile=32 cache=2 chunk=256 t=6
+iso res=800 tile=32 zoom=stretch cache=2 chunk=512 t=6
+iso res=1024 tile=64 cache=2 chunk=512 t=6
+iso res=1024 tile=32 cache=2 chunk=512 t=6
+iso res=640 tile=64 cache=2 chunk=512 t=6

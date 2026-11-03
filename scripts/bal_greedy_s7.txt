@@ -1,0 +1,111 @@
+# bal_greedy_s7.txt - T12 balance bot run, recorded by tests/test_balance.cpp (docs/BALANCE.md).
+#   VM: lahio.exe -seed 7 -preset Lakeland -script scripts\bal_greedy_s7.txt -fast   (same city as the Mac run)
+statlog bal_greedy_s7.csv
+townhall
+road 73 73 101 73 street straight
+road 73 80 101 80 street straight
+road 73 87 101 87 street straight
+road 73 94 101 94 street straight
+road 73 73 73 94 street straight
+road 87 73 87 94 street straight
+road 101 73 101 94 street straight
+pipe 73 80 101 80
+pipe 73 87 101 87
+power 73 73 101 73
+power 73 80 101 80
+power 73 87 101 87
+power 73 94 101 94
+power 73 73 73 94
+build well 100 74
+build well 100 88
+zone 74 74 100 93 houses
+zone 88 91 100 93 commercial
+road 103 74 127 74 street straight
+power 103 74 127 74
+road 103 81 127 81 street straight
+power 103 81 127 81
+road 103 74 103 81 street straight
+road 117 74 117 81 street straight
+road 127 74 127 81 street straight
+power 103 74 103 81
+zone 116 75 126 80 industry
+zone 104 77 115 80 industry
+build coal_plant 104 75
+power 103 76 101 76
+speed 3
+wait 1
+road 103 81 127 81 street straight
+power 103 81 127 81
+road 103 88 127 88 street straight
+power 103 88 127 88
+road 103 95 127 95 street straight
+power 103 95 127 95
+road 103 81 103 95 street straight
+road 117 81 117 95 street straight
+road 127 81 127 95 street straight
+power 103 81 103 95
+zone 116 82 126 87 industry
+zone 104 84 115 87 industry
+zone 116 89 126 94 industry
+zone 104 91 115 94 industry
+wait 22
+road 73 52 101 52 street straight
+road 73 59 101 59 street straight
+road 73 66 101 66 street straight
+road 73 73 101 73 street straight
+road 73 52 73 73 street straight
+road 87 52 87 73 street straight
+road 101 52 101 73 street straight
+pipe 73 59 101 59
+pipe 73 66 101 66
+power 73 52 101 52
+power 73 59 101 59
+power 73 66 101 66
+power 73 73 101 73
+power 73 52 73 73
+build well 100 53
+build well 100 67
+zone 74 53 100 72 houses
+zone 88 70 100 72 commercial
+wait 42
+road 46 31 74 31 street straight
+road 46 38 74 38 street straight
+road 46 45 74 45 street straight
+road 46 52 74 52 street straight
+road 46 31 46 52 street straight
+road 60 31 60 52 street straight
+road 74 31 74 52 street straight
+pipe 46 38 74 38
+pipe 46 45 74 45
+power 46 31 74 31
+power 46 38 74 38
+power 46 45 74 45
+power 46 52 74 52
+power 46 31 46 52
+build well 73 32
+build well 73 46
+zone 47 32 73 51 houses
+zone 61 49 73 51 commercial
+wait 33
+road 74 31 102 31 street straight
+road 74 38 102 38 street straight
+road 74 45 102 45 street straight
+road 74 52 102 52 street straight
+road 74 31 74 52 street straight
+road 88 31 88 52 street straight
+road 102 31 102 52 street straight
+pipe 74 38 102 38
+pipe 74 45 102 45
+power 74 31 102 31
+power 74 38 102 38
+power 74 45 102 45
+power 74 52 102 52
+power 74 31 74 52
+build well 101 32
+build well 101 46
+zone 75 32 101 51 houses
+zone 89 49 101 51 commercial
+wait 29
+build coal_plant 106 75
+wait 113
+dump report bal_greedy_s7_report.txt

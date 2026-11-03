@@ -1,0 +1,11 @@
+# M2 check (VM): traffic overlay over BENCH20K's busiest streets (north edge, x 30-51 y 4) with a bus line there.
+bulldoze 37 54 38 55
+build bus_depot 37 54
+busline 9 4 30 4 51 4 72 4 93 4
+speed 3
+wait 3
+overlay 5
+cam 42 8
+wait 1
+shot m2_busy.bmp
+quit

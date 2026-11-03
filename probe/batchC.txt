@@ -1,0 +1,16 @@
+# overlays, UI, CPU overlap
+iso res=800 tile=64 ovl=tint t=6
+iso res=800 tile=64 ovl=checker t=6
+iso res=800 tile=64 ovl=fill t=6
+iso res=800 tile=64 ovl=fill3 t=6
+iso res=800 tile=64 cache=2 ovl=checker t=6
+iso res=800 tile=64 ui=1 t=6
+iso res=800 tile=64 ui=2 t=6
+iso res=800 tile=64 cache=2 ui=1 t=6
+iso res=800 tile=64 cache=2 ui=2 t=6
+iso res=800 tile=64 cache=2 ui=2 work=8 t=6
+iso res=800 tile=64 cache=2 ui=2 work=12 t=6
+iso res=800 tile=64 work=10 t=6
+iso res=800 tile=64 cache=2 ui=2 occl=1 cap=30 t=6
+iso res=800 tile=64 cache=2 ui=2 occl=1 cap=60 t=6
+sim
