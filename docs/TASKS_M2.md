@@ -119,3 +119,19 @@ coal-plant art (alias); peat/nuclear only if art exists, else later. Save, tests
 ## M8-M10
 Written by the orchestrator after M5-M7 (balance with all systems, performance incl. 1024 64-zoom art layout, polish +
 end-to-end VM runs, then the user play-test).
+
+## Polish wave (after user play-test 2, 2026-11-04) — inputs: docs/PLAYTEST.md session 2 (items 1-11), SCOPE_REVIEW 3
+Reference save from the user's play-test: `PT2_1992.KAU` (Mustakangas, 1992, Town, 12,933 pop).
+- **PL1 Guidance & information (H+):** newspaper as advisor (items 8, 10: Cabinet box, special editions, hindsight,
+  1990 verdict, clickable lines), progression visibility (item 1: next status + progress, decree-waiting §, unlock tooltips
+  with population/year), milestone hint chain + one-page Guide panel (item 2), power top-bar field + plant query + Services
+  key (items 3, 5, 6), heating purpose explained (item 4). Keep the dry humour (item 11).
+- **PL2 Gameplay fixes & balance (H+):** apartment T2 gate (item 7a), railway on every map + road fallback for Valtion
+  Metalli/station (item 9), human-pacing check (item 7c), dense towns too rich, agreement auto-sign near elections,
+  company-town reachability, debt traps.
+- **PL4 Performance & art layout (H+):** 1024x768 64-zoom art (sheet layout), water graph 7.3 ms, traffic graph 12 ms,
+  phase 9 15 ms spikes, VRAM headroom at 800.
+- **PL3 Bugs & UX (H), after PL1:** hover labels over the newspaper, windowed pause menu black panels, heat overlay noise
+  on empty zoned land, title "Milestone 1" text → version, motorway art/hide, undo gaps (bus lines, gifts) if cheap,
+  remaining items from HANDOFF "Open".
+Then: final verification on VM B, commit, morning report for the user.

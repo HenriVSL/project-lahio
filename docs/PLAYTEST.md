@@ -42,3 +42,60 @@ All orchestrator recommendations accepted:
 - "Lay pipes with new roads" **default ON** (manual pipes still possible; option can be switched off).
 - 1.0 = one presidency 1955-1990, ~30 min at speed 3 ("a sweet spot for retro play").
 - **Next user play-test: after M5-M7 land, before the M8-M10 polish/balance pass.** Sound: no further work.
+
+## Session 2 (user, 2026-11-04, VM B, pre-polish Milestone 2 build e4ef5ac)
+1. **Progression requirements are invisible**: "what do I need to progress to church village? I cannot know in game what it
+   requires. Maybe the newspaper should mention it?" Rule: Church village 500 / Market town 3,000 / Town 10,000 / Regional
+   centre 40,000 / City 100,000 residents; with politics on, eligibility → the "Town rights" decree must be signed (2 authority).
+   → Polish: population tooltip "Next: Church village at 500 (you have 412)" + progress bar; ticker + newspaper line when
+   eligible ("Town rights await your signature, President"); greyed tools say the status AND its population; the decree
+   should be easy to find (§ marker on the Approval field when it's waiting).
+2. **Systems are undiscoverable**: the user didn't know politics existed (the President's desk) nor whether heating was
+   implemented. → Polish: (a) a short "what's next" guide: the hint chain continues past the first minutes with milestone
+   hints (status reached → what unlocked, e.g. "Market town! Water towers, the element factory (1962) and district heating
+   are now available"; "Click Approval to open the President's desk"); (b) the status ceremony page lists unlocks and the
+   NEXT goal; (c) fly-out tooltips for locked items: "Unlocks at Market town (3,000 residents) and 1960"; (d) a one-page
+   in-game "Guide/Help" panel (F1?) listing the progression ladder and what each system is for.
+3. **Power capacity not visible**: "where do I see the capacity for electricity?" Today only the Services panel row
+   "Power used / supplied", the plant query "Power output", and the power overlay. → Polish: a top-bar Power field +
+   tooltip like Water ("Power 1,180 / 1,500 (79%)"), click toggles the power overlay; ticker warning before a shortage.
+4. **District heating's purpose unclear**: "what is the advantage of district heating?" Its only effect is gating
+   Apartments T3. → Polish option 1 (preferred): explain it everywhere (T3 checklist, heat plant tooltip/fly-out text
+   "lets apartment blocks grow to tier 3", unlock hint). Option 2 if it still feels like busywork: drop the heat plant and
+   gate T3 on element factory + water-tower pressure. Decide with the user after the session.
+5. **Power plant query lacks load/spare**: right-click on a plant shows only "Power output: N units", not how much is
+   used or left. → Polish: plant query like the water source query: "Power 1,180 / 1,500 used (79%), 320 spare,
+   serves N buildings", network total if several plants, brownout state; hover highlight of the plant's network.
+6. **Services panel unreachable** (bug): no mini key or menu opens PANEL_SERVICES; only clicking a power/water/service
+   shortage ticker line does. → Polish: a Services mini key (or open it from the top-bar Power/Water fields), and list it
+   in the guide.
+7. **Slow town** (user: 1971, ~2,750 pop (typo'd 1,750 first: the town is growing, not shrinking); autosave Jan 1971 "Mustakangas": 2,445, Church village). Diagnosis
+   from the save (tests/test_zdump.cpp, KAUP_DUMPSAVE=...): power 543/500 short (7 lots), R target −49 (279 vacant homes),
+   C demand +60 (unserved), I −40 (oversupplied), school 489/500, 30 apartment T1 lots (1,746 residents) blocked by
+   REQ_WATER_TOWER + REQ_ELEMENTS, money −174/month, emigrated 860. → Design issues: (a) **apartment T2 gated behind Market
+   town** (water tower + element factory) while a T1-apartment town struggles to reach 3,000 → lower the gates (water tower
+   at Church village; element factory at Church village 1960s or T2 without elements) or make T1 apartments self-sufficient;
+   (b) **the game doesn't tell the player the top actions**: a clear "Advisor" line/box: "Power short: build a plant",
+   "Shops wanted: zone commercial", "School full" (top problems exist, but aren't surfaced plainly); (c) pacing: 2,750 in 1971 is far slower than the
+   planner bot (3,000 by ~1958); find what the human did differently (zone mix, power, unaware of politics/decrees).
+8. **User's idea, adopted: the newspaper is the advisor** ("to not make it too obvious, force the player to read it:
+   'Government advises the President to do X', even though no one dared to advise Kekkonen ;)").
+   → Polish design: January paper gets an "Editorial / From the Cabinet" box with the 1-3 most important problems as
+   period-voice lines generated from sim_top_problems/checklist/demand/budget/status (power short, shops wanted, school
+   full, money falling, town rights within reach or awaiting signature, apartment upgrades blocked by water tower/elements,
+   heat needed for T3); rate-limited "special edition" for urgent issues (≤ 1 per game year); every advice line clickable
+   (jump to place/panel); the President plaque quips ("Nobody advises me. But I read the papers.").
+   Tone: deferential, deadpan ("Cabinet sources respectfully observe... Naturally the President is already aware.").
+9. **Valtion Metalli / railway station impossible on rail-less maps** ("how can I build Valtion Metalli when there are no
+   railways?"). Players can't build rail; mapgen adds a railway only on some maps. → Polish: (1) every new map gets a
+   railway (mapgen option on by default, along the national road or another edge); (2) Valtion Metalli also accepts main-road
+   access when no rail exists (old saves, rail-less maps); (3) locked/invalid placement tooltip states exactly what's missing.
+   A player rail tool is post-1.0. **User confirmed: without a railway on the map it must work with roads.**
+10. User got into debt without building the element factory ("you live and learn"). **Idea adopted: newspaper hindsight**
+    ("at some point the paper should say 'the President should have done this'"). → Polish: occasional January "In
+    hindsight" item on the past year's biggest missed opportunity (no element factory while apartments were blocked, power
+    short for months, school overloaded, debt into the oil shock, town rights left unsigned), and a 1990 newsreel "What the
+    history books will say" verdict with 2-3 such lines. Gentle, deadpan; detection from history data (era history,
+    sim history, problem streaks).
+11. **Positive: the humour works** ("I like the humor in the game so far. Good job. Dry finnish humor"). Keep the tone
+    (THEME 6.1: affectionate, deadpan, about the system) in all new text: newspaper advice, hindsight, guide, hints.
