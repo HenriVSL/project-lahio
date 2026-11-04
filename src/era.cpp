@@ -14,6 +14,8 @@
 #include "text.h"
 #include "save.h"
 #include "util.h"
+#include "advice.h"     /* PL1: the Cabinet, hindsight, the verdict */
+#include "net.h"
 
 #define MSG_RING 16
 
@@ -147,7 +149,7 @@ int era_msg_text(char *buf, int size, const EraMsg *m, int *severity)
         break;
     case EM_RIGHTS_PETITION:
         sev = SEV_POLITICAL;
-        str_printf(buf, size, "The council petitions for %s rights. The decree waits on the President's desk.", text_status_name((int)m->a));
+        str_printf(buf, size, "Town rights await your signature, President: the council petitions for %s rights (\xa7 on Approval).", text_status_name((int)m->a));
         break;
     case EM_SAUNA_NIGHT:
         sev = SEV_POLITICAL;
@@ -159,6 +161,20 @@ int era_msg_text(char *buf, int size, const EraMsg *m, int *severity)
         break;
     case EM_LANDMARK:
         str_printf(buf, size, "%s opens. The town has something to show its visitors.", def_building((int)m->a)->name);
+        break;
+    case EM_POWER_NEAR:      /* PL1: before a shortage (PLAYTEST 2 item 3) */
+        sev = SEV_WARN;
+        str_printf(buf, size, "The power works run at %d%% of capacity. The engineer suggests a new plant before the lights do it for him.", (int)m->a);
+        break;
+    case EM_RIGHTS_NEAR:     /* PL1: progression visible (item 1) */
+        text_fmt_int(a, sizeof(a), g_statuses[ICLAMP((int)m->a, 0, TS_COUNT - 1)].population);
+        str_printf(buf, size, "%s rights are within reach: %s residents will do it. The council is measuring the town hall for a bigger flag.",
+                   text_status_name((int)m->a), a);
+        break;
+    case EM_RIGHTS_REMIND:
+        sev = SEV_POLITICAL;
+        str_printf(buf, size, "The council reminds the President, respectfully, that the %s rights decree has waited %d months (\xa7 on Approval).",
+                   text_status_name((int)m->a), (int)m->b);
         break;
     default:
         return 0;
@@ -385,6 +401,7 @@ void era_reset(void)
     E.last_card_m = -POL_EVENT_MIN;
     E.last_kind = NEWS_NONE;
     trade_reset();
+    advice_reset();                          /* PL1 */
     push_year(sim_date()->year);
 }
 
@@ -420,10 +437,23 @@ void era_month(void)
     if (!trade_agreement()->offer) E.card = 0;
     fire_events(nm);
     hist_push();
+    {   /* PL1: hindsight tallies, ticker warnings before trouble, a special edition for an urgent problem */
+        int v = 0;
+        advice_month();
+        if (advice_power_near_due(&v)) era_push_msg(EM_POWER_NEAR, v, 0);
+        if (advice_rights_near_due(&v)) era_push_msg(EM_RIGHTS_NEAR, v, st->population);
+        if (advice_rights_waiting() && advice_rights_wait_months() >= 6 && advice_rights_wait_months() % 6 == 0)
+            era_push_msg(EM_RIGHTS_REMIND, era_status_eligible(), advice_rights_wait_months());
+        if (nm % 12 != 0 && !(E.pending & ~(1u << NEWS_SPECIAL))) {
+            Advice main;
+            if (advice_special_due(&main)) { era_news_build_special(&E.news[NEWS_SPECIAL], main.kind); E.pending |= 1u << NEWS_SPECIAL; }
+        }
+    }
     if (nm % 12 == 0) {                       /* New Year: the yearly row and the January paper */
         push_year(nm / 12);
         era_news_build_year(&E.news[NEWS_YEAR]);
         E.pending |= 1u << NEWS_YEAR;
+        advice_year_end();                    /* PL1: the year's tallies were used by the paper's hindsight */
         if (nm == TRADE_END_YEAR * 12 && !E.newsreel_done) {
             E.newsreel_done = 1;
             era_news_build_newsreel(&E.news[NEWS_NEWSREEL]);
@@ -437,9 +467,9 @@ void era_month(void)
 /* ------------------------------------------------------------------ newspaper */
 const NewsIssue *era_news(void)
 {
-    static const int order[3] = { NEWS_CEREMONY, NEWS_YEAR, NEWS_NEWSREEL };
+    static const int order[4] = { NEWS_CEREMONY, NEWS_SPECIAL, NEWS_YEAR, NEWS_NEWSREEL };
     int i;
-    for (i = 0; i < 3; i++) if (E.pending & (1u << order[i])) return &E.news[order[i]];
+    for (i = 0; i < 4; i++) if (E.pending & (1u << order[i])) return &E.news[order[i]];
     return E.last_kind ? &E.news[E.last_kind] : NULL;
 }
 int era_news_pending(void)
@@ -720,6 +750,25 @@ static void filler(NewsIssue *n)
     str_copy(n->filler, ft[k], sizeof(n->filler));
 }
 
+/* PL1: "From the Cabinet": the 1-3 most important problems as the Cabinet's deferential lines (advice.h) */
+static void cabinet(NewsIssue *n)
+{
+    Advice v[NEWS_CAB];
+    int k, na = advice_collect(v, NEWS_CAB);
+    n->ncab = 0;
+    for (k = 0; k < na; k++) {
+        str_copy(n->cab[k], v[k].text, sizeof(n->cab[k]));
+        n->cab_kind[k] = v[k].kind; n->cab_go[k] = v[k].go; n->cab_x[k] = v[k].x; n->cab_y[k] = v[k].y;
+        n->ncab++;
+    }
+    if (!n->ncab) {
+        str_copy(n->cab[0], "The Cabinet has nothing to report this year, and reports it respectfully. The President's "
+                            "wisdom, it notes, speaks for itself.", sizeof(n->cab[0]));
+        n->cab_go[0] = AGO_NONE; n->cab_x[0] = n->cab_y[0] = -1;
+        n->ncab = 1;
+    }
+}
+
 void era_news_build_year(NewsIssue *n)
 {
     const EraYear *now, *prev;
@@ -775,28 +824,67 @@ void era_news_build_year(NewsIssue *n)
         put(n, k, NT_QUIET, h, d, b);
     }
     filler(n);
+    cabinet(n);                                 /* PL1 */
+    advice_hindsight(n->hind_head, sizeof(n->hind_head), n->hind, sizeof(n->hind));
+}
+
+/* PL1: special edition (urgent: in the dark, dry taps, an empty treasury); the Cabinet's column below */
+void era_news_build_special(NewsIssue *n, int adv_kind)
+{
+    char h[64], d[96], b[240], a1[32];
+    const CityStats *st = sim_stats();
+    const NetStats *pw = net_stats(NET_POWER);
+    int pct = pw->supply > 0 ? (int)((s64)pw->demand * 100 / pw->supply) : 0;
+    issue_init(n, NEWS_SPECIAL);
+    switch (adv_kind) {
+    case ADV_WATER_SHORT:
+        text_fmt_int(a1, sizeof(a1), st->water_short_lots);
+        str_printf(h, sizeof(h), "TAPS RUN DRY IN %s", town());
+        str_printf(d, sizeof(d), "%s buildings fetch water in buckets", a1);
+        str_printf(b, sizeof(b), "The fire brigade lent its buckets and the dairy its churns. The waterworks engineer says the pumps "
+                                 "give everything they have, and then some. The Cabinet's view is printed below.");
+        put(n, 0, NT_WATER, h, d, b);
+        break;
+    case ADV_MONEY_DEBT:
+        money_str(a1, sizeof(a1), g_budget.money < 0 ? -g_budget.money : g_budget.loan, n->year);
+        str_printf(h, sizeof(h), "TREASURY EMPTY");
+        str_printf(d, sizeof(d), g_budget.money < 0 ? "The town is %s in the red" : "An emergency loan of %s", a1);
+        str_printf(b, sizeof(b), "The town treasurer was seen counting the petty cash twice. The bank manager, reached at his summer "
+                                 "cottage, said he is in no hurry, yet. The Cabinet's view is printed below.");
+        put(n, 0, NT_MONEY_DOWN, h, d, b);
+        break;
+    default:
+        text_fmt_int(a1, sizeof(a1), st->power_short_lots);
+        str_printf(h, sizeof(h), "LIGHTS OUT IN %s", town());
+        str_printf(d, sizeof(d), "%s buildings in the dark; the power works at %d%%", a1, pct);
+        str_printf(b, sizeof(b), "Candles sold out at the co-op by noon. The power works' engineer, reached by telephone in the dark, "
+                                 "said the plants give everything they have. The Cabinet's view is printed below.");
+        put(n, 0, NT_POWER, h, d, b);
+        break;
+    }
+    put(n, 1, NT_QUIET, "THE PRESIDENT'S VIEW", "\"Nobody advises me. But I read the papers.\"",
+        "Asked about the Cabinet's column, the President said he had already seen to it, and asked for the paper back.");
+    text_fmt_int(a1, sizeof(a1), st->population);
+    str_printf(d, sizeof(d), "%s residents, %s", a1, text_status_name(st->town_status));
+    str_printf(b, sizeof(b), "The council met in emergency session and agreed that something should be done. It will meet again to "
+                             "agree what.");
+    put(n, 2, NT_QUIET, "FROM THE COUNCIL", d, b);
+    filler(n);
+    cabinet(n);
 }
 
 void era_news_build_ceremony(NewsIssue *n, int ts)
 {
-    char h[64], d[96], b[240], m[32], list[160];
-    int i, nl = 0, y = sim_date()->year;
+    char h[64], d[96], b[240], m[32], list[200], nx[64];
+    int nl, y = sim_date()->year;
     issue_init(n, NEWS_CEREMONY);
     n->status = ts;
-    list[0] = 0;
-    for (i = 1; i < B_COUNT && nl < 4; i++) {
-        const BuildingDef *bd = def_building(i);
-        if (bd->status_req != ts || !bd->variants || bd->cat == BCAT_ZONE || bd->era_year > y) continue;
-        if (!strncmp(bd->key, "pm_", 3) || !strncmp(bd->key, "vm_", 3)) continue;    /* M6 complex pieces */
-        if (nl) str_printf(list + strlen(list), (int)sizeof(list) - (int)strlen(list), ", ");
-        str_printf(list + strlen(list), (int)sizeof(list) - (int)strlen(list), "%s", bd->name);
-        nl++;
-    }
-    for (i = 1; i < ROAD_CLASS_COUNT && nl < 5; i++) {
-        if (g_roads[i].status_req != ts || g_roads[i].era_year > y) continue;
-        if (nl) str_printf(list + strlen(list), (int)sizeof(list) - (int)strlen(list), ", ");
-        str_printf(list + strlen(list), (int)sizeof(list) - (int)strlen(list), "%s", g_roads[i].name);
-        nl++;
+    nl = advice_status_unlocks(ts, list, sizeof(list));     /* PL1: everything the status brings (future years in brackets) */
+    nx[0] = 0;
+    if (ts + 1 < TS_COUNT) {                                /* PL1 (PLAYTEST 2 item 2b): and the next goal */
+        char a1[32];
+        text_fmt_int(a1, sizeof(a1), g_statuses[ts + 1].population);
+        str_printf(nx, sizeof(nx), " Next goal: %s at %s residents.", text_status_name(ts + 1), a1);
     }
     money_str(m, sizeof(m), g_statuses[ts].reward, y);
     str_printf(h, sizeof(h), "%s IS NOW A %s", town(), text_status_name(ts));
@@ -806,8 +894,8 @@ void era_news_build_ceremony(NewsIssue *n, int ts)
     put(n, 0, NT_STATUS, h, d, b);
     str_printf(h, sizeof(h), "WHAT THE NEW RIGHTS BRING");
     str_printf(d, sizeof(d), nl ? "New plans approved" : "Prestige, and a new letterhead");
-    if (nl) str_printf(b, sizeof(b), "With the new rights the town may build: %s.", list);
-    else str_printf(b, sizeof(b), "No new buildings this time; the council orders new letterhead and a larger flag.");
+    if (nl) str_printf(b, sizeof(b), "With the new rights the town may build: %s.%s", list, nx);
+    else str_printf(b, sizeof(b), "No new buildings this time; the council orders new letterhead and a larger flag.%s", nx);
     put(n, 1, NT_STATUS, h, d, b);
     str_printf(h, sizeof(h), "THE PEOPLE SPEAK");
     str_printf(d, sizeof(d), "\"About time,\" says the shopkeeper");
@@ -842,7 +930,11 @@ int era_newsreel_lines(char lines[][96], int max)
     if (max <= 0) return 0;
     text_fmt_int(a1, sizeof(a1), E.nyears ? E.years[0].pop : 0); text_fmt_int(a2, sizeof(a2), st->population);
     text_fmt_int(a3, sizeof(a3), E.peak_pop);
-    if (n < max) str_printf(lines[n++], 96, "Population: %s in %d, %s now (peak %s in %d).", a1, y0, a2, a3, E.peak_year ? E.peak_year : y);
+    if (n < max) {   /* PL3: the first yearly row is taken at the founding (0 residents): say so, not "0 in 1955" */
+        if (E.nyears && E.years[0].pop <= 0)
+            str_printf(lines[n++], 96, "Population: founded on bare land in %d, %s now (peak %s in %d).", y0, a2, a3, E.peak_year ? E.peak_year : y);
+        else str_printf(lines[n++], 96, "Population: %s in %d, %s now (peak %s in %d).", a1, y0, a2, a3, E.peak_year ? E.peak_year : y);
+    }
     if (n < max) {
         if (st->town_status > 0 && E.status_year_granted[st->town_status])
             str_printf(lines[n++], 96, "Status: %s, granted in %d.", text_status_name(st->town_status), E.status_year_granted[st->town_status]);
@@ -909,6 +1001,7 @@ void era_news_build_newsreel(NewsIssue *n)
     str_printf(n->body[2], sizeof(n->body[2]), "%s %s The President, asked about the future, said he intends to keep an eye on it.",
                nl > 7 ? lines[7] : "", nl > 8 ? lines[8] : "");
     filler(n);
+    n->nverdict = advice_verdict(n->verdict, 3);    /* PL1: "What the history books will say" */
 }
 
 /* ------------------------------------------------------------------ scripts */
@@ -926,6 +1019,9 @@ static void print_issue(FILE *out, const NewsIssue *n)
     fprintf(out, "news: MAAKUNNAN SANOMAT no. %d, %s %d (kind %d)\n", n->issue_no, text_month_name(n->month), n->year, n->kind);
     for (k = 0; k < NEWS_HEADS; k++) if (n->head[k][0]) fprintf(out, "news:   [%d] %s / %s / %s\n", n->topic[k], n->head[k], n->deck[k], n->body[k]);
     fprintf(out, "news:   filler %s: %s\n", n->filler_head, n->filler);
+    for (k = 0; k < n->ncab; k++) fprintf(out, "news:   cabinet %d (kind %d, go %d at %d,%d): %s\n", k + 1, n->cab_kind[k], n->cab_go[k], n->cab_x[k], n->cab_y[k], n->cab[k]);
+    if (n->hind[0]) fprintf(out, "news:   %s: %s\n", n->hind_head, n->hind);
+    for (k = 0; k < n->nverdict; k++) fprintf(out, "news:   verdict %d: %s\n", k + 1, n->verdict[k]);
 }
 
 int era_script_line(int n, char **t, FILE *out)
@@ -947,11 +1043,13 @@ int era_script_line(int n, char **t, FILE *out)
         if (n >= 2 && str_ieq(t[1], "sauna")) return era_sauna_invite() ? SCR_OK : SCR_ERROR;
         return SCR_ERROR;
     }
+    if (str_ieq(t[0], "advice")) { advice_dump(out); return SCR_OK; }    /* PL1 */
     if (str_ieq(t[0], "news")) {
         /* scripts (screenshots): the asked-for issue is the only one waiting */
         if (n >= 2 && str_ieq(t[1], "seen")) { era_news_seen(); return SCR_OK; }
         E.pending = 0;
         if (n >= 2 && str_ieq(t[1], "newsreel")) era_news_request_newsreel();
+        else if (n >= 2 && str_ieq(t[1], "special")) { era_news_build_special(&E.news[NEWS_SPECIAL], n >= 3 ? atoi(t[2]) : ADV_POWER_SHORT); E.pending |= 1u << NEWS_SPECIAL; }
         else if (n >= 2 && str_ieq(t[1], "ceremony")) { era_news_build_ceremony(&E.news[NEWS_CEREMONY], sim_stats()->town_status); E.pending |= 1u << NEWS_CEREMONY; }
         else { era_news_build_year(&E.news[NEWS_YEAR]); E.pending |= 1u << NEWS_YEAR; }
         print_issue(out, era_news());
@@ -988,16 +1086,31 @@ static void save_issue(struct SaveFile *sf, const NewsIssue *n)
     save_s32(sf, n->kind); save_s32(sf, n->year); save_s32(sf, n->month); save_s32(sf, n->issue_no); save_s32(sf, n->status);
     for (k = 0; k < NEWS_HEADS; k++) { save_str(sf, n->head[k]); save_str(sf, n->deck[k]); save_str(sf, n->body[k]); save_s32(sf, n->topic[k]); }
     save_str(sf, n->filler_head); save_str(sf, n->filler);
+    save_s32(sf, n->ncab);                     /* PL1: ERA v2 */
+    for (k = 0; k < NEWS_CAB; k++) { save_str(sf, n->cab[k]); save_u8(sf, n->cab_kind[k]); save_u8(sf, n->cab_go[k]); save_s32(sf, n->cab_x[k]); save_s32(sf, n->cab_y[k]); }
+    save_str(sf, n->hind_head); save_str(sf, n->hind);
+    save_s32(sf, n->nverdict);
+    for (k = 0; k < 3; k++) save_str(sf, n->verdict[k]);
 }
-static void load_issue(struct SaveFile *sf, NewsIssue *n)
+static void load_issue(struct SaveFile *sf, NewsIssue *n, int ver)
 {
     int k;
+    memset(n, 0, sizeof(*n));
     n->kind = load_s32(sf); n->year = load_s32(sf); n->month = load_s32(sf); n->issue_no = load_s32(sf); n->status = load_s32(sf);
     for (k = 0; k < NEWS_HEADS; k++) {
         load_str(sf, n->head[k], sizeof(n->head[k])); load_str(sf, n->deck[k], sizeof(n->deck[k]));
         load_str(sf, n->body[k], sizeof(n->body[k])); n->topic[k] = load_s32(sf);
     }
     load_str(sf, n->filler_head, sizeof(n->filler_head)); load_str(sf, n->filler, sizeof(n->filler));
+    if (ver < 2) return;                       /* PL1 fields */
+    n->ncab = ICLAMP(load_s32(sf), 0, NEWS_CAB);
+    for (k = 0; k < NEWS_CAB; k++) {
+        load_str(sf, n->cab[k], sizeof(n->cab[k])); n->cab_kind[k] = (u8)load_u8(sf); n->cab_go[k] = (u8)load_u8(sf);
+        n->cab_x[k] = (s16)load_s32(sf); n->cab_y[k] = (s16)load_s32(sf);
+    }
+    load_str(sf, n->hind_head, sizeof(n->hind_head)); load_str(sf, n->hind, sizeof(n->hind));
+    n->nverdict = ICLAMP(load_s32(sf), 0, 3);
+    for (k = 0; k < 3; k++) load_str(sf, n->verdict[k], sizeof(n->verdict[k]));
 }
 
 #define YEAR_FIELDS 25
@@ -1016,7 +1129,7 @@ int era_save(struct SaveFile *sf)
 {
     int i, k;
     s32 v[YEAR_FIELDS];
-    save_begin_chunk(sf, "ERA ", 1);
+    save_begin_chunk(sf, "ERA ", 2);   /* PL1: v2 = NewsIssue Cabinet/hindsight/verdict fields */
     save_s32(sf, E.granted); save_s32(sf, E.eligible); save_s32(sf, E.petitioned);
     save_s32(sf, NLM); for (i = 0; i < NLM; i++) save_s32(sf, E.lm_count[i]);
     save_s32(sf, E.sauna_uses); save_s32(sf, E.sauna_year); save_s32(sf, E.card); save_s32(sf, E.prev_pending); save_s32(sf, E.last_card_m);
@@ -1034,6 +1147,7 @@ int era_save(struct SaveFile *sf)
     save_s32(sf, E.peak_pop); save_s32(sf, E.peak_year);
     save_s32(sf, TS_COUNT); for (i = 0; i < TS_COUNT; i++) save_s32(sf, E.status_year_granted[i]);
     save_end_chunk(sf);
+    advice_save(sf);                           /* PL1: chunk "ADVC" */
     return trade_save(sf);
 }
 
@@ -1063,7 +1177,7 @@ int era_load(struct SaveFile *sf)
             if (E.nyears < ERA_YEARS) year_fields(&E.years[E.nyears++], v, 1);
         }
         n = load_s32(sf);
-        for (i = 0; i < n; i++) { NewsIssue tmp; load_issue(sf, &tmp); if (i < NEWS_KIND_COUNT) E.news[i] = tmp; }
+        for (i = 0; i < n; i++) { NewsIssue tmp; load_issue(sf, &tmp, ver); if (i < NEWS_KIND_COUNT) E.news[i] = tmp; }
         E.pending = load_u32(sf); E.last_kind = load_s32(sf); E.issue_no = load_s32(sf); E.newsreel_done = load_s32(sf);
         E.peak_pop = load_s32(sf); E.peak_year = load_s32(sf);
         n = load_s32(sf); for (i = 0; i < n; i++) { s32 x = load_s32(sf); if (i < TS_COUNT) E.status_year_granted[i] = x; }
@@ -1072,6 +1186,7 @@ int era_load(struct SaveFile *sf)
         /* old save: era state from the city */
         E.granted = E.eligible = sim_stats()->town_status;
     }
+    advice_load(sf);                           /* PL1 (missing: fresh) */
     if (!trade_load(sf)) {
         /* old save without TRAD: fresh trade state for the save's date (era_reset ran trade_reset at the start year) */
         trade_reset();

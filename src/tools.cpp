@@ -59,7 +59,9 @@ static u8 s_new_tile[MAP_MAX_W * MAP_MAX_H / 8];
 #define NEW_SET(x, y) (s_new_tile[TILE_IDX(x, y) >> 3] |= (u8)(1 << (TILE_IDX(x, y) & 7)))
 
 /* ------------------------------------------------------------------ undo log */
-enum { OP_TILE, OP_LOT_PLACE, OP_LOT_REMOVE };
+enum { OP_TILE, OP_LOT_PLACE, OP_LOT_REMOVE,
+       OP_BUS,                 /* PL3: a bus line edit: x = line, id = snapshot slot, gen = its generation */
+       OP_GIFT };              /* PL3: a patron's gift placed (lot = the gift lot) */
 typedef struct {            /* the parts of a tile a tool changes */
     u8 ter;                 /* full terrain byte */
     u8 road;                /* class | TR_POWER_LINE (no mask) */
@@ -72,6 +74,7 @@ typedef struct {
     u8  kind, x, y, pad;
     TState t0, t1;          /* OP_TILE: before / after */
     u16 id;                 /* lot ops: slot at record time */
+    u16 gen;                /* PL3: OP_BUS snapshot generation */
     Lot lot;                /* OP_LOT_PLACE: after; OP_LOT_REMOVE: before */
 } Op;
 typedef struct {
@@ -241,6 +244,41 @@ static void lot_restore(const Lot *saved)
     l->happy = saved->happy; l->spare = saved->spare;
 }
 
+/* ---- PL3: bus line edits and gift placements in the undo log. A bus command keeps before/after snapshots of the
+   lines it changed in a small ring (an op whose slot was reused since is skipped); a gift command records the
+   footprint's tile changes + OP_GIFT (complex.cpp takes the gift back into its queue / places it again). */
+#define BUS_SNAPS 32
+typedef struct { u16 gen; BusLine before, after; } BusSnap;
+static BusSnap s_bsnap[BUS_SNAPS];
+static int s_bsnap_next;
+static u16 s_bsnap_gen;
+static BusLine s_bus_before[BUS_MAX_LINES];
+
+static int bus_same(const BusLine *a, const BusLine *b)
+{
+    if (a->used != b->used) return 0;
+    if (!a->used) return 1;
+    return a->nstops == b->nstops && a->npath == b->npath && !memcmp(a->sx, b->sx, a->nstops) && !memcmp(a->sy, b->sy, a->nstops);
+}
+
+static void bus_apply(const Op *o, int redo)
+{
+    const BusSnap *b = &s_bsnap[o->id % BUS_SNAPS];
+    const BusLine *from, *to;
+    if (b->gen != o->gen) { log_printf("tools: undo: bus line %d snapshot gone", o->x + 1); return; }
+    from = redo ? &b->before : &b->after; to = redo ? &b->after : &b->before;
+    if (!bus_same(transit_line(o->x), from)) { log_printf("tools: undo: bus line %d changed meanwhile", o->x + 1); return; }
+    transit_set_line(o->x, to);
+}
+
+static void gift_apply(const Op *o, int redo)
+{
+    int id = lot_matching(&o->lot);
+    if (!redo) { if (id && !complex_gift_undo(id)) log_printf("tools: undo: gift at %d,%d cannot be taken back", o->lot.x, o->lot.y); return; }
+    if (!id && complex_gift_def(0) == o->lot.def && !complex_place_gift(o->lot.x, o->lot.y, o->lot.rot))
+        log_printf("tools: redo: gift at %d,%d cannot be placed again", o->lot.x, o->lot.y);
+}
+
 static void op_undo(const Op *o)
 {
     int id;
@@ -248,6 +286,8 @@ static void op_undo(const Op *o)
     case OP_TILE: tstate_apply(o->x, o->y, &o->t0, &o->t1); break;
     case OP_LOT_PLACE: id = lot_matching(&o->lot); if (id) world_lot_remove(id); break;
     case OP_LOT_REMOVE: if (!lot_matching(&o->lot)) lot_restore(&o->lot); break;
+    case OP_BUS: bus_apply(o, 0); break;
+    case OP_GIFT: gift_apply(o, 0); break;
     }
 }
 
@@ -258,7 +298,73 @@ static void op_redo(const Op *o)
     case OP_TILE: tstate_apply(o->x, o->y, &o->t1, &o->t0); break;
     case OP_LOT_PLACE: if (!lot_matching(&o->lot)) lot_restore(&o->lot); break;
     case OP_LOT_REMOVE: id = lot_matching(&o->lot); if (id) world_lot_remove(id); break;
+    case OP_BUS: bus_apply(o, 1); break;
+    case OP_GIFT: gift_apply(o, 1); break;
     }
+}
+
+/* a command whose world/transit changes are already done (the money too: `spent` is only logged for the refund) */
+static void rec_done(int tool, Money spent)
+{
+    int n0 = s_ncmds;
+    s_rec_con = 0; s_rec_timber = 0;
+    rec_end(tool);
+    if (s_ncmds > n0) s_cmds[s_ncmds - 1].con = spent;
+}
+
+static void bus_record(Money spent)
+{
+    int k;
+    rec_begin();
+    for (k = 0; k < BUS_MAX_LINES; k++) {
+        const BusLine *now = transit_line(k);
+        BusSnap *b;
+        Op *o;
+        if (bus_same(&s_bus_before[k], now)) continue;
+        o = rec_op();
+        if (!o) break;
+        b = &s_bsnap[s_bsnap_next]; s_bsnap_next = (s_bsnap_next + 1) % BUS_SNAPS;
+        if (++s_bsnap_gen == 0) s_bsnap_gen = 1;
+        b->gen = s_bsnap_gen; b->before = s_bus_before[k]; b->after = *now;
+        memset(o, 0, sizeof(*o));
+        o->kind = OP_BUS; o->x = (u8)k; o->id = (u16)(b - s_bsnap); o->gen = b->gen;
+    }
+    rec_done(TOOL_BUS_LINE, spent);
+}
+
+#define GIFT_SNAP 4                 /* tiles around the cursor saved before a gift click (footprints <= 4x4) */
+static TState s_gift_ts[(2 * GIFT_SNAP + 1) * (2 * GIFT_SNAP + 1)];
+static int s_gift_cx, s_gift_cy;
+
+static void gift_snap(int cx, int cy)
+{
+    int x, y, k = 0;
+    s_gift_cx = cx; s_gift_cy = cy;
+    for (y = cy - GIFT_SNAP; y <= cy + GIFT_SNAP; y++)
+        for (x = cx - GIFT_SNAP; x <= cx + GIFT_SNAP; x++, k++) if (world_in(x, y)) tstate_get(x, y, &s_gift_ts[k]);
+}
+
+static void gift_record(int lot)
+{
+    const Lot *l = world_lot(lot);
+    int x, y, k = 0;
+    TState now;
+    Op *o;
+    if (!l) return;
+    rec_begin();
+    for (y = s_gift_cy - GIFT_SNAP; y <= s_gift_cy + GIFT_SNAP; y++)
+        for (x = s_gift_cx - GIFT_SNAP; x <= s_gift_cx + GIFT_SNAP; x++, k++) {
+            if (!world_in(x, y)) continue;
+            tstate_get(x, y, &now);
+            if (!memcmp(&now, &s_gift_ts[k], sizeof(now)) || !(o = rec_op())) continue;
+            memset(o, 0, sizeof(*o));
+            o->kind = OP_TILE; o->x = (u8)x; o->y = (u8)y; o->t0 = s_gift_ts[k]; o->t1 = now;
+        }
+    if ((o = rec_op()) != NULL) {
+        memset(o, 0, sizeof(*o));
+        o->kind = OP_GIFT; o->x = l->x; o->y = l->y; o->id = (u16)lot; o->lot = *l;
+    }
+    rec_done(TOOL_GIFT, 0);
 }
 
 int tools_undo(void)
@@ -696,7 +802,8 @@ static void plan(int tool, int param, int ax, int ay, int bx, int by, int shift,
         p->lot_def = param; p->lot_x = x0; p->lot_y = y0; p->lot_w = w; p->lot_h = h;
         p->x0 = x0; p->y0 = y0; p->x1 = x0 + w - 1; p->y1 = y0 + h - 1;
         r = world_lot_check(param, x0, y0, rot);
-        if (param == B_STATION && r == PLACE_OK && !transit_station_ok(x0, y0, rot)) r = REJ_NEEDS_RAIL;   /* M2 */
+        if (param == B_STATION && r == PLACE_OK && !transit_station_ok(x0, y0, rot))
+            r = complex_map_has_rail() ? REJ_NEEDS_RAIL : REJ_NO_RAILWAY;   /* M2; PL2: say when the map has no track at all */
         p->cost = d->cost;
         for (y = y0; y < y0 + h; y++)
             for (x = x0; x < x0 + w; x++) {
@@ -974,17 +1081,21 @@ int tools_update(const ToolInput *in)
     int rect = s_tool == TOOL_ZONE || s_tool == TOOL_DEZONE || s_tool == TOOL_BULLDOZE;
     if (in->on_map) { tx = ICLAMP(tx, 0, g_world.w - 1); ty = ICLAMP(ty, 0, g_world.h - 1); }
     if (s_tool == TOOL_BUS_LINE && (!in->cancel || transit_tool_editing())) {    /* M2: transit.cpp owns it */
-        Money c = 0;
+        Money c = 0, m0 = g_budget.money;
+        int k;
+        if (in->pressed) for (k = 0; k < BUS_MAX_LINES; k++) s_bus_before[k] = *transit_line(k);   /* PL3: undo */
         res = transit_tool_update(in, &s_prev, &s_last_x, &s_last_y, &c, &s_last_reason);
         if (res == TRES_COMMITTED || res == TRES_DENIED) { s_last_tool = TOOL_BUS_LINE; s_last_cost = c; }
-        if (res == TRES_COMMITTED) s_last_reason = 0;
+        if (res == TRES_COMMITTED) { s_last_reason = 0; if (in->pressed) bus_record(m0 - g_budget.money); }
         return res;
     }
     if ((s_tool == TOOL_GIFT || (s_tool == TOOL_BUILD && (def_building(s_param)->flags & BDF_MODULE))) && !in->cancel) {
         Money c = 0;                                   /* M6: complex / gift placement lives in complex.cpp */
+        int gift = s_tool == TOOL_GIFT && in->pressed && in->on_map;
+        if (gift) gift_snap(tx, ty);                   /* PL3: gifts are undoable (complexes are not: preview says so) */
         res = complex_tool_update(in, &s_prev, s_tool, s_param, s_rot, &s_last_x, &s_last_y, &c, &s_last_reason);
         if (res == TRES_COMMITTED || res == TRES_DENIED) { s_last_tool = s_tool; s_last_cost = c; }
-        if (res == TRES_COMMITTED) s_last_reason = 0;
+        if (res == TRES_COMMITTED) { s_last_reason = 0; if (gift) gift_record(world_lot_at(s_last_x, s_last_y)); }
         return res;
     }
     if (in->cancel) {

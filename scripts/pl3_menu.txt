@@ -1,0 +1,23 @@
+# pl3_menu.txt - PL3: the windowed pause menu (top bar + side panel must not be black).
+#   lahio.exe -window -load PT2_1990.KAU -script scripts\pl3_menu.txt -shot 8 pl3_win_menu.bmp -exitafter 10 -log
+cam 59 96
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+menu

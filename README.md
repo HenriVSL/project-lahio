@@ -11,8 +11,9 @@ Classic grid building (roads, zones, power, water pipes, services, budget) desig
 builders: every number is explained, effects are previewed before you build, undo works within the month, and the
 simulation is aggregate and deterministic, with cosmetic traffic and smoke on top.
 
-Status: **Milestone 1 complete** (playable vertical slice). **Milestone 2 in progress** (politics, industry kinds,
-forestry and farms, traffic congestion and buses, element-built apartment blocks, clearing trade, eras).
+Status: **Version 0.9** (feature-complete pre-release: one presidency 1955-1990 with politics, industry kinds,
+forestry and farms, traffic congestion and buses, element-built apartment blocks, clearing trade and eras; polish and
+balance pass in progress toward 1.0).
 
 ## System requirements
 

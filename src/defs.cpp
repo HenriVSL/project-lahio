@@ -63,7 +63,7 @@ const BuildingDef g_bdefs[B_COUNT] = {
     PB("nuclear_plant", "Nuclear power plant",BCAT_POWER,   3, 3, SVC_NONE, 0, TS_CITY, 1977,                      30000, 400, 3000, 80, 0, 8,   0, -10, 6, 0),
     PB("pump", "Pumping station",             BCAT_WATER,   1, 1, SVC_NONE, BDF_NEEDS_SHORE, TS_VILLAGE, 1955,       600,  20,  500,  3, 4, 0,   0,  0, 0, 1),
     PB("well", "Groundwater well",            BCAT_WATER,   1, 1, SVC_NONE, BDF_NO_ROTATE, TS_VILLAGE, 1955,         250,   6,  150,  1, 2, 0,   0,  0, 0, 1),
-    PB("water_tower", "Water tower",          BCAT_WATER,   1, 1, SVC_NONE, BDF_NO_ROTATE, TS_MARKET_TOWN, 1955,    1200,  10,  200,  1, 1, 0,   0,  5, 4, 2),   /* F1: 200-unit source (was +30%) */
+    PB("water_tower", "Water tower",          BCAT_WATER,   1, 1, SVC_NONE, BDF_NO_ROTATE, TS_CHURCH_VILLAGE, 1955, 1200,  10,  200,  1, 1, 0,   0,  5, 4, 2),   /* F1: 200-unit source (was +30%); PL2: Church village (was Market town): apartments T2 need its pressure */
     PB("fire_station", "Fire station",        BCAT_SERVICE, 1, 1, SVC_FIRE, 0, TS_VILLAGE, 1955,                     500,  50, 2500,  8, 2, 2,   0,  2, 3, 1),
     PB("school", "School",                    BCAT_SERVICE, 2, 2, SVC_SCHOOL, 0, TS_VILLAGE, 1955,                  1000, 100,  500, 15, 4, 4,   0,  5, 4, 1),
     PB("clinic", "Health clinic",             BCAT_SERVICE, 1, 1, SVC_HEALTH, 0, TS_VILLAGE, 1955,                   700,  70, 2500, 10, 3, 3,   0,  3, 3, 1),
@@ -76,7 +76,7 @@ const BuildingDef g_bdefs[B_COUNT] = {
     PB("sports_field", "Sports field",        BCAT_PARK,    2, 2, SVC_NONE, BDF_NO_CONDUCT, TS_CHURCH_VILLAGE, 1960, 400,   5,    0,  1, 0, 0,   0, 15, 5, 0),
     PB("ice_rink", "Ice rink",                BCAT_PARK,    2, 2, SVC_NONE, BDF_NO_CONDUCT, TS_TOWN, 1965,          1500,  20,    0,  2, 2, 1,   0, 15, 5, 0),
     PB("church", "Church",                    BCAT_SPECIAL, 2, 2, SVC_NONE, 0, TS_CHURCH_VILLAGE, 1955,             2500,  10,    0,  2, 1, 1,   0, 15, 6, 0),
-    PB("element_factory", "Element factory",  BCAT_SPECIAL, 3, 3, SVC_NONE, BDF_SMOKE, TS_MARKET_TOWN, 1962,       5000, 100,  300, 120, 30, 10, 200, -10, 5, 1),   /* M5: cap = elements/month (civic.h); P1: Market town 1962, 5,000 mk (was Town 1960, 8,000: towns below 10,000 never got T2 flats) */
+    PB("element_factory", "Element factory",  BCAT_SPECIAL, 3, 3, SVC_NONE, BDF_SMOKE, TS_CHURCH_VILLAGE, 1960,    5000, 100,  300, 120, 30, 10, 200, -10, 5, 1),   /* M5: cap = elements/month (civic.h); P1: Market town 1962, 5,000 mk (was Town 1960, 8,000: towns below 10,000 never got T2 flats); PL2: Church village 1960 */
     PB("station", "Railway station",          BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_UNIQUE, TS_MARKET_TOWN, 1955,       3000,  30,    0, 10, 3, 2,   0,  8, 5, 1),   /* M2: back to the rail (transit.h) */
     /* M3 industry kinds (docs/research/INDUSTRY.md 5.1; art keys ART.md 3.1, several are aliases of the
        M1 tier art). The kind is industry_def_kind() (industry.cpp), chosen per new lot by site + kind demand.
@@ -200,6 +200,10 @@ static const TierReq s_req_house[3][8] = {
    1955-59 wooden towns keep their pace. */
 static const int s_nreq_house[3] = { 1, 5, 8 };
 static const TierReq s_req_house3_lv = { REQ_LAND_VALUE, 40 };
+/* PL2 (PLAYTEST 2 item 7a): the tier-2 block's two new needs, the water tower's pressure and precast elements, both come
+   at Church village now (the element factory from 1960; was Market town 1962), so a town of tier-1 blocks can grow
+   towards the 3,000 of Market town instead of waiting for it (the play-test town sat at 2,445 in 1971 with 30 blocks
+   held back by REQ_WATER_TOWER + REQ_ELEMENTS). The factory's monthly pool stays the lahio's growth engine (and cap). */
 static const TierReq s_req_apt[3][8] = {
     { { REQ_ROAD, 3 }, { REQ_POWER, 0 }, { REQ_WATER, 0 } },
     { { REQ_ROAD, 3 }, { REQ_POWER, 0 }, { REQ_WATER, 0 }, { REQ_WATER_TOWER, 0 }, { REQ_ELEMENTS, 0 },

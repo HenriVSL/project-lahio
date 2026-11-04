@@ -122,7 +122,8 @@ static void graphs_panel(int x, int y, int w, int h)
         text_fmt_int(a, sizeof(a), r0->pop); text_fmt_int(b, sizeof(b), sim_stats()->population);
         {
             char line[96];
-            str_printf(line, sizeof(line), "Since %d: %s " GLYPH_ARROW_UP " %s residents", r0->year, a, b);
+            if (r0->pop <= 0) str_printf(line, sizeof(line), "Founded in %d: %s residents now", r0->year, b);   /* PL3 */
+            else str_printf(line, sizeof(line), "Since %d: %s " GLYPH_ARROW_UP " %s residents", r0->year, a, b);
             uix_text_fit(x + 8, y + h - 18, line, FONT_BODY_GREY, w - 110);
         }
     }

@@ -190,24 +190,44 @@ static int road_links(int a, int b)   /* do classes a and b connect visually/log
     return 1;
 }
 
-static void road_mask_update(int x, int y)
+/* PL3: the motorway rule of traffic_link_ok (DESIGN 4.1): a motorway links to other roads only at its ends
+   (<= 1 motorway neighbour) and at crossings (a car road continues on the far side of the motorway tile). The
+   mask (art + cosmetic cars) used to join every street touching a motorway's side, which traffic ignores. */
+static int road_cls_at(int x, int y) { return world_in(x, y) ? TILE_ROAD(WT(x, y)) : ROAD_NONE; }
+static int mway_side_ok(int mx, int my, int to_dir)   /* (mx, my) = motorway tile, to_dir = towards the other road */
+{
+    int d, n = 0, o = DIR_OPPOSITE(to_dir), oc;
+    for (d = 0; d < DIR_COUNT; d++) if (road_cls_at(mx + g_dir_dx[d], my + g_dir_dy[d]) == ROAD_MOTORWAY) n++;
+    if (n <= 1) return 1;
+    oc = road_cls_at(mx + g_dir_dx[o], my + g_dir_dy[o]);
+    return oc != ROAD_NONE && oc != ROAD_MOTORWAY && oc != ROAD_RAIL;
+}
+
+static int road_mask_update(int x, int y)   /* PL3: 1 = the mask changed */
 {
     Tile *t;
     int d, cls, m = 0;
-    if (!world_in(x, y)) return;
+    u8 old;
+    if (!world_in(x, y)) return 0;
     t = WT(x, y);
+    old = t->road;
     cls = TILE_ROAD(t);
     if (cls) {
         for (d = 0; d < DIR_COUNT; d++) {
-            int nx = x + g_dir_dx[d], ny = y + g_dir_dy[d];
+            int nx = x + g_dir_dx[d], ny = y + g_dir_dy[d], nc;
             if (!world_in(nx, ny)) {
                 if (t->flags & TF_EDGE_LINK) m |= 1 << d;    /* road continues off the map */
                 continue;
             }
-            if (road_links(cls, TILE_ROAD(WT(nx, ny)))) m |= 1 << d;
+            nc = TILE_ROAD(WT(nx, ny));
+            if (!road_links(cls, nc)) continue;
+            if ((cls == ROAD_MOTORWAY) != (nc == ROAD_MOTORWAY) &&
+                !(cls == ROAD_MOTORWAY ? mway_side_ok(x, y, d) : mway_side_ok(nx, ny, DIR_OPPOSITE(d)))) continue;
+            m |= 1 << d;
         }
     }
     t->road = (u8)((t->road & (TR_CLASS_MASK | TR_POWER_LINE)) | (m << TR_MASK_SHIFT));
+    return t->road != old;
 }
 
 /* ------------------------------------------------------------------ setters */
@@ -246,7 +266,13 @@ void world_set_road(int x, int y, int cls)
     t->road = (u8)((t->road & ~TR_CLASS_MASK) | cls);
     road_mask_update(x, y);
     for (d = 0; d < DIR_COUNT; d++) road_mask_update(x + g_dir_dx[d], y + g_dir_dy[d]);
-    world_notify(x - 1, y - 1, x + 1, y + 1, WCHG_ROAD | WCHG_FLAGS | (cls ? WCHG_TERRAIN : 0));
+    {   /* PL3: motorway joins depend on tiles 2 away (the motorway's neighbours / far side) */
+        static const s8 r2[8][2] = { { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } };
+        int wide = 0;
+        for (d = 0; d < 8; d++)
+            if (road_mask_update(x + r2[d][0], y + r2[d][1]) && (d < 4)) wide = 1;
+        world_notify(x - 1 - wide, y - 1 - wide, x + 1 + wide, y + 1 + wide, WCHG_ROAD | WCHG_FLAGS | (cls ? WCHG_TERRAIN : 0));
+    }
 }
 
 void world_set_power_line(int x, int y, int on)

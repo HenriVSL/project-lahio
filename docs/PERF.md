@@ -111,3 +111,64 @@ coverage 3.5, traffic 5.4, demand 3.0-3.2 ms.
 - VRAM: the X41's shared memory may report a different free amount; the renderer picks per-zoom residency
   automatically when the pool doesn't fit. Zoom swap now costs ~0.1 s at minimum spec.
 - Saves go to the exe directory; on a local disk the autosave thread finishes much faster than over SMB.
+
+## 7. PL4 (polish wave, 2026-11-04): art pages, VRAM, sim spikes
+
+Benches: VM B, `-bench 45 -speed 3 -fps 60 -log` (fixed 60 fps policy: in auto mode a load hitch can drop the run
+to 30 fps for the rest of it), BENCH20K `-cam 55 55` unless noted. "Before" = exe built at the start of PL4 from the
+then-current sources; "after" = PL4 art + CPU changes (plus PL1/PL2 work in progress). The Mac host was busier
+during the "before" runs (load avg ~5), which explains part of the present-stall difference.
+
+| Run | avg fps before -> after | 1 s min | missed frames | max interval ms | VRAM free KB | chunk pool |
+|---|---|---|---|---|---|---|
+| 640 z64 | 59.39 -> 59.89 | 49.3 -> 59.5 | 42 -> 10 | 40.3 -> 25.0 | 1,428 -> **3,253** | 30/30 |
+| 640 z32 | 59.34 -> 59.85 | 46.0 -> 59.5 | 31 -> 14 | 108 -> 25.0 | 8,623 -> 9,026 | 30/30 |
+| 800 z64 | 58.32 -> 59.86 | 52.1 -> 59.0 | 109 -> 10 | 46.8 -> 25.1 | 493 -> **2,062** | 31/35 -> **35/35** |
+| 800 z32 | 59.83 -> 59.86 | 56.6 -> 59.0 | 24 -> 9 | 31.2 -> 33.5 | 7,688 -> 7,835 | 31 -> 35 |
+| 1024 z64 | **not available** -> 59.88 | - -> 59.0 | - -> 12 | - -> 25.1 | - -> **522** | - -> 41/48 |
+| 1024 z32 | 54.92 -> 59.83 | 42.0 -> 58.5 | 383 -> 15 | 42.7 -> 33.2 | 5,443 -> 6,295 | 48 -> 41 (sized for z64) |
+| PT2_1992 800 z64 | 59.80 -> 59.79 | 58.5 -> 59.0 | 15 -> 17 | 34.8 -> 27.3 | 493 -> 2,062 | 31 -> 35 |
+| PT2_1992 1024 z64 | not available -> 59.87 | - -> 59.1 | - -> 13 | - -> 25.2 | - -> 522 | 41/48 |
+
+Sim phases (P2 ms, avg / max over the run; BENCH20K 800 z64; PT2_1992 in brackets):
+
+| Phase | Before | After |
+|---|---|---|
+| 9 (net + heat/sewage) | 9.35 / 15.5 [6.6 / 9.2] | **4.7 / 15.4** [3.6 / 9.5] |
+| 10 (pollution; + the moved traffic slice) | 2.6 / 3.9 | 3.8 / 5.9 |
+| 11 (land value) | 6.8 / 8.2 [4.4 / 5.1] | **5.0 / 6.5** [1.9 / 2.5] |
+| 0 (month-end books) | 2.6 / 13.3 | 2.7 / 7.4-9.8 |
+| 1 (growth band; traffic pass start) | 3.9 / 9.8 | 3.9 / 8.8 (16.1 once: first step after loading) |
+| 13 (coverage) / 15 (demand) | 4.7 / 7.1, 5.6 / 7.4 | 4.7 / 7.0, 5.6 / 8.7 (unchanged code) |
+
+Art residency (DESIGN 14.5, one zoom resident): 64-zoom world 9,520 -> **7,691 KB**, 32-zoom 2,326 -> 1,918 KB, UI 655 KB.
+1024 zoom swap: 41 ms out / 140 ms in (set_zoom incl. 31 page uploads) + 56 / 14 ms flush render. Art load at start
+~900 ms (was ~975). Chunk render cost +2-3% (piece loop): z64 prefetch 0.568 -> 0.582 ms, z32 1.47 -> 1.51 ms.
+
+### What changed
+- **VRAM heap geometry** (`tools/vramprobe`, results `r640/r800/r1024a.txt`): the Voodoo3 driver gives DirectDraw a
+  linear heap plus two screen-sized rectangular heaps (1024x768: 9,088 KB linear + 2 x 1,536 KB). The 640x2048
+  sheets could only use the linear heap, so the 4th 64-zoom sheet failed at 1024 with 4,477 KB "free".
+- **Art pipeline** (`art/gen_art.py`, ART.md 8): world art is now trimmed *pieces* (columns on the half-tile grid, cut
+  only where render.cpp already splits lot strips unless a cut saves > 600 px) on 512x256 *pages* (31 + 8).
+  `--repack` re-packs the cache in 15 s. Verified pixel-exact (2,320 sprites, both zooms, same box/anchor/hotspot);
+  a 800x600 screenshot of BENCH20K is identical old vs new in the world view.
+- **art.cpp/art.h**: ArtPiece/ArtPSpr/ArtPieceSet, runtime pieces for every sprite, `art_blit_part`, `art_pixels`
+  assembles multi-piece sprites, `art_opaque` per piece; up to 64 sheets. **render.cpp**: strips and the occlusion fix
+  blit through `art_blit_part`; ghost copies are freed before a residency swap (no hole between pages).
+- **Sim (results bit-identical, Mac harness `KAUP_PL4PERF=1 make -f tests/Makefile.mac T=pl4perf`, 36 months with
+  edits + save round trips on BENCH20K and PT2_1992)**: traffic sweep slice of phase 9 moved to phase 10
+  (`traffic_slice_phase`, only when the slice cannot touch the world); union-find clusters and road-tile list in the
+  traffic graph rebuild; civic lake update only on terrain flips, heat/sewage BFS passability on demand with stamps,
+  heat apply limited to a box; power flood conductivity on demand + bits box; land value `lv_sum` (same terms/order).
+
+### Left (over ~6 ms per step on the P2)
+- Phase 9 **max** ~15 ms in a growing 20k town: when growth or an edit changes the conduction graph, the water BFS
+  (7.4 ms) or the full power flood (5.7 ms, alternate cycles) runs together with the heat/sewage solves. Splitting it
+  needs either an incremental flood (risk: history-dependent brownout order) or moving civic_step to phase 10, which
+  changes results when the player edits between the two steps (not done: identical results were required).
+- Phase 0 (books + traffic graph rebuild), phase 1 (traffic pass start after a rebuild), 13 (coverage), 15 (demand):
+  7-9 ms peaks. They read the world at fixed phases; moving work needs a road/world snapshot.
+- Frames: every frame over 20 ms in the after-runs is either a present stall (work 2-6 ms) or one of the sim peaks
+  above (25 ms = one extra blank). 1024 z64 has only ~520 KB VRAM left (pool 41/48): fine, but new 64-zoom art now
+  costs pool chunks at 1024 first (each 64 KB of art = one chunk).

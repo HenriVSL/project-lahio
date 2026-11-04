@@ -1,0 +1,6 @@
+# pl1_shots_extra640.txt - PL1: the Power field tooltip at 640x480: lahio.exe -res 640 -load PT2_1992.KAU -script scripts\pl1_shots_extra640.txt
+mouse 322 8
+wait 1
+shot pl1_640_power.bmp
+wait 1
+quit

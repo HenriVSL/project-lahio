@@ -1,0 +1,16 @@
+# pl1_shots_extra.txt - PL1: the plant query in a brownout + the Water fly-out (heat plant purpose), 800x600:
+#   lahio.exe -load PT2_1990.KAU -script scripts\pl1_shots_extra.txt
+mouse 200 450
+cam 59 96
+query 59 96
+wait 1
+shot pl1_800_plant.bmp
+wait 1
+panel 0
+flyout 5
+mouse 600 171
+wait 1
+shot pl1_800_flyout_heat.bmp
+wait 1
+flyout -1
+quit

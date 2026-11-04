@@ -36,6 +36,7 @@
 #include "politics.h"
 #include "ui_pol.h"       /* M1 */
 #include "ui_m7.h"        /* M7 */
+#include "advice.h"     /* PL1: status unlock lines, guide */
 #include "era.h"
 #include "trade.h"
 #include "tools.h"
@@ -58,6 +59,7 @@ static int  s_ready;                    /* art/ui/render up (not headless) */
 static int  s_play_direct;              /* command line asked for a game straight away */
 static char s_script[PATH_LEN];
 static int  s_politics_cmd;          /* M1: -politics (direct starts; the New Game menu has its own toggle) */
+static int  s_rail_cmd = -1;         /* PL2: -rail / -norail (default: railway on, off for -script replays of Mac runs) */
 static int  s_ovl, s_ovl_param, s_show_buildings;
 static int  s_speed_before_pause = SPEED_2;
 static int  s_road_cls = ROAD_STREET;
@@ -76,7 +78,8 @@ static double s_hint_t;                             /* seconds until the next hi
 static int    s_hover_lot, s_hover_mx = -1, s_hover_my = -1, s_hover_cx, s_hover_cy, s_hover_moved;
 static double s_hover_t, s_hover_pick_t;            /* when the cursor came onto s_hover_lot / last pick */
 static int    s_src_sel;                            /* water source chosen by a query click (water overlay param) */
-enum { HINT_QUERY = 1, HINT_ZONEV = 2, HINT_PIPE = 4, HINT_ZOOM = 8, HINT_OVERLAY = 16, HINT_SPEED = 32 };
+enum { HINT_QUERY = 1, HINT_ZONEV = 2, HINT_PIPE = 4, HINT_ZOOM = 8, HINT_OVERLAY = 16, HINT_SPEED = 32,
+       HINT_GUIDE = 64, HINT_DESK = 128, HINT_NEWS = 256 /* PL1 */ };
 
 /* art ids for the preview */
 static int s_id_road[ROAD_CLASS_COUNT][16], s_id_bridge[ROAD_CLASS_COUNT][2], s_id_power[16];
@@ -101,6 +104,7 @@ static void   autosave_finish(int wait);   /* T13 */
 static void   enter_menu(int which);       /* F3: script "menu" */
 static void   news_show(int newsreel);     /* M7 */
 static void   news_closed(void);
+static void   guide_show(void);           /* PL1 */
 
 /* ================================================================== command line extras */
 static void parse_cmdline(void)
@@ -123,6 +127,8 @@ static void parse_cmdline(void)
         if (str_ieq(a, "script") && i + 1 < n) { str_copy(s_script, tok[++i], PATH_LEN); s_play_direct = 1; }
         else if (str_ieq(a, "seed") || str_ieq(a, "preset") || str_ieq(a, "play") || str_ieq(a, "bench")) s_play_direct = 1;
         else if (str_ieq(a, "politics")) s_politics_cmd = 1;      /* M1: direct starts with politics on */
+        else if (str_ieq(a, "rail")) s_rail_cmd = 1;              /* PL2 */
+        else if (str_ieq(a, "norail")) s_rail_cmd = 0;
     }
     if (g_cfg.load_path[0]) s_play_direct = 1;
 }
@@ -142,6 +148,9 @@ void game_default_params(NewGameParams *p)
     text_town_name(&r, p->sim.town, NAME_LEN);
     p->sim.disasters = g_cfg.disasters;
     if (s_politics_cmd) p->sim.politics = 1;   /* M1 */
+    /* PL2 (PLAYTEST 2 item 9): every new map gets the railway (New Game checkbox on); -script runs keep the Mac tests'
+       mapgen default (off) so recorded bot scripts replay the same map, unless -rail is given */
+    p->map.railway = s_rail_cmd >= 0 ? s_rail_cmd : !s_script[0];
 }
 
 static void set_overlay(int ovl, int param)
@@ -178,11 +187,14 @@ static void set_zone_view(int on)
 #define HINT_GAP   35.0
 static const struct { int bit; const char *text; } s_hints[] = {
     { HINT_QUERY,   "Right-click any building to see what it needs." },
+    { HINT_GUIDE,   "F4 (or the Guide key) opens the President's Handbook: the town ladder, what each system is for, the keys." },   /* PL1 */
+    { HINT_DESK,    "Click Approval on the top bar to open the President's desk: decrees, letters, and the town-rights decree." },
     { HINT_ZONEV,   "Press V to show zone borders, whatever tool you hold." },
     { HINT_PIPE,    "W lays water pipes (Ctrl+drag removes them). Buildings and zoned land pass water on." },
     { HINT_ZOOM,    "+ and - zoom in and out; Z toggles the zoom." },
     { HINT_OVERLAY, "Number keys show overlays: 1 power, 2 water. Tab shows the buildings in an overlay." },
     { HINT_SPEED,   "Space pauses the town; F1-F3 set the speed." },
+    { HINT_NEWS,    "Maakunnan Sanomat arrives each January. Its Cabinet column is worth reading, the President's pride permitting." },
 };
 
 static void hints_start(void)
@@ -197,10 +209,12 @@ static void hints_start(void)
 
 static void hints_tick(double dt)
 {
+    if (ui_panel() == PANEL_POLITICS) hint_learnt(HINT_DESK);      /* PL1 */
     if (!s_hint_on) return;
     s_hint_t -= dt;
     if (s_hint_t > 0) return;
-    while (s_hint_next < COUNTOF(s_hints) && (s_hint_done & s_hints[s_hint_next].bit)) s_hint_next++;
+    while (s_hint_next < COUNTOF(s_hints) && ((s_hint_done & s_hints[s_hint_next].bit) ||
+           (s_hints[s_hint_next].bit == HINT_DESK && !politics_enabled()))) s_hint_next++;     /* PL1: the desk only with politics */
     if (s_hint_next >= COUNTOF(s_hints)) { s_hint_on = 0; return; }
     ui_ticker_hint(s_hints[s_hint_next].text);
     log_printf("game: hint %d: %s", s_hint_next, s_hints[s_hint_next].text);
@@ -438,6 +452,10 @@ static int script_game_cmd(const char *line)
         return 1;
     }
     if (str_ieq(cmd, "menu")) { if (s_ready) enter_menu(GS_PAUSEMENU); return 1; }
+    /* PL1 (screenshots): guide [1 open | 0 close], panel N (PANEL_*, 0 closes), flyout K (tool key, -1 closes) */
+    if (str_ieq(cmd, "guide")) { if (s_ready) { if (n >= 2 && !a) { uiguide_close(); news_closed(); } else guide_show(); } return 1; }
+    if (str_ieq(cmd, "panel") && n >= 2) { if (s_ready) { if (a > 0) ui_open_panel(a); else ui_close_panel(); } return 1; }
+    if (str_ieq(cmd, "flyout") && n >= 2) { if (s_ready) ui_open_flyout(a); return 1; }
     return 0;
 }
 
@@ -664,9 +682,18 @@ static void news_closed(void)
 {
     if (s_news_speed >= 0) { sim_set_speed(s_news_speed); s_news_speed = -1; }
 }
+/* PL1: the Guide pauses the game like the newspaper */
+static void guide_show(void)
+{
+    if (uiguide_active() || uinews_active()) return;
+    uiguide_open();
+    hint_learnt(HINT_GUIDE);
+    if (s_news_speed < 0) { s_news_speed = sim_speed(); sim_set_speed(SPEED_PAUSE); }
+    snd_play(SND_PAPER, 60);
+}
 static void news_tick(void)
 {
-    if (!era_news_pending() || uinews_active()) return;
+    if (!era_news_pending() || uinews_active() || uiguide_active()) return;
     if (!g_cfg.newspaper || s_scr_n || g_cfg.bench) { uinews_to_ticker(); return; }
     if (tools_dragging()) return;
     news_show(0);
@@ -699,6 +726,7 @@ static void exec_cmd(const UiCmd *c)
         else if (c->a == M7A_NEWS_LAST) { if (era_news()) news_show(0); }
         else if (c->a == M7A_NEWSREEL) news_show(1);
         else if (c->a == M7A_CARD) ui_open_panel(PANEL_POLITICS);
+        else if (c->a == M7A_GUIDE) guide_show();                                     /* PL1 */
         break;
     case UC_POLITICS:     /* M1: player actions between sim steps (like tool commits) */
         if (c->a == POLA_SIGN) { if (politics_sign(c->b)) snd_play(SND_STAMP, 80); else snd_play(SND_DENY, 60); }
@@ -797,7 +825,9 @@ static void hotkeys(const InputState *in)
     if (key_hit('V')) { set_zone_view(!s_zone_view); snd_play(SND_CLICK, 50); }        /* F3: zone view */
     if (key_hit('G')) { if (ui_panel() == PANEL_GRAPHS) ui_close_panel(); else ui_open_panel(PANEL_GRAPHS); }   /* M7 */
     if (key_hit('T')) { if (ui_panel() == PANEL_TRADE) ui_close_panel(); else ui_open_panel(PANEL_TRADE); }
-    if (key_hit('N') && era_news()) news_show(0);
+    if (key_hit('N') && era_news()) { news_show(0); hint_learnt(HINT_NEWS); }
+    if (key_hit(VK_F4)) guide_show();                                                  /* PL1: the Guide */
+    if (key_hit('E')) { if (ui_panel() == PANEL_SERVICES) ui_close_panel(); else ui_open_panel(PANEL_SERVICES); }   /* PL1: Services */
     if (key_hit(VK_HOME)) center_on_town_hall();
     if (key_hit('J')) ui_ticker_jump();
 }
@@ -956,7 +986,10 @@ static void drain_events(void)
         char buf[200];
         int sev;
         while (era_poll_msg(&em))
-            if (era_msg_text(buf, sizeof(buf), &em, &sev)) uix_ticker(sev, buf, era_msg_panel(&em) ? PANEL_TRADE : PANEL_NONE);
+            if (era_msg_text(buf, sizeof(buf), &em, &sev))     /* PL1: rights -> the desk / population, power -> services */
+                uix_ticker(sev, buf, (em.type == EM_RIGHTS_PETITION || em.type == EM_RIGHTS_REMIND) ? (politics_enabled() ? PANEL_POLITICS : PANEL_POPULATION) :
+                           em.type == EM_RIGHTS_NEAR ? PANEL_POPULATION : em.type == EM_POWER_NEAR ? PANEL_SERVICES :
+                           era_msg_panel(&em) ? PANEL_TRADE : PANEL_NONE);
     }
     while (politics_poll_msg(&pm)) {        /* M1: politics messages -> ticker (click opens the President's desk) */
         uipol_message(&pm);
@@ -989,6 +1022,15 @@ static void drain_events(void)
             break;
         case SE_STATUS_UP: case SE_MILESTONE:
             snd_play(SND_FANFARE, 80);
+            if (e.type == SE_STATUS_UP && e.a > 0 && e.a < TS_COUNT) {   /* PL1 (PLAYTEST 2 item 2a): what is new, what is next */
+                char un[200], nx[48], line[300];
+                int ts = (int)e.a;
+                nx[0] = 0;
+                if (ts + 1 < TS_COUNT) { char p[24]; text_fmt_int(p, sizeof(p), g_statuses[ts + 1].population); str_printf(nx, sizeof(nx), " Next: %s at %s.", text_status_name(ts + 1), p); }
+                if (advice_status_unlocks(ts, un, sizeof(un)) > 0) str_printf(line, sizeof(line), "%s! Now available: %s.%s", text_status_name(ts), un, nx);
+                else str_printf(line, sizeof(line), "%s! Prestige, and a larger flag.%s", text_status_name(ts), nx);
+                uix_ticker(SEV_INFO, line, PANEL_POPULATION);
+            }
             break;
         case SE_UNLOCK:
             break;
@@ -1083,6 +1125,18 @@ void game_update(double dt)
     }
     if (s_state != GS_PLAY) return;
     script_tick();
+    if (uiguide_active()) {                          /* PL1: the Guide owns the input while it is open */
+        if (key_hit(VK_ESCAPE)) uiguide_key(VK_ESCAPE);
+        if (key_hit(VK_RETURN)) uiguide_key(VK_RETURN);
+        if (key_hit(VK_SPACE)) uiguide_key(VK_SPACE);
+        if (key_hit(VK_F4)) uiguide_key(VK_F4);
+        uiguide_input(in);
+        if (!uiguide_active()) news_closed();
+        drain_events();
+        ui_update(dt);
+        life_update(dt);
+        return;
+    }
     if (uinews_active()) {                           /* M7: the newspaper owns the input while it is open */
         if (key_hit(VK_ESCAPE)) uinews_key(VK_ESCAPE);
         if (key_hit(VK_RETURN)) uinews_key(VK_RETURN);
@@ -1214,7 +1268,8 @@ static void label_text(char *buf, int size)
         return;
     }
     text_fmt_money(m, sizeof(m), p->cost, year);
-    if (p->tool == TOOL_BUILD) str_printf(buf, size, "%s  %s%s", text_tool_name(p->tool, p->param), m, p->affordable ? "" : "  (not enough money)");
+    if (p->tool == TOOL_BUILD) str_printf(buf, size, "%s  %s%s%s", text_tool_name(p->tool, p->param), m, p->affordable ? "" : "  (not enough money)",
+                                          (def_building(p->lot_def)->flags & BDF_MODULE) ? "  (no undo)" : "");   /* PL3: complexes */
     else if (p->tool == TOOL_ZONE && (p->eff_residents || p->eff_jobs))
         str_printf(buf, size, "%d tiles  +%d %s%s", p->n_ok, p->eff_residents ? p->eff_residents : p->eff_jobs,
                    p->eff_residents ? "homes" : "jobs", p->n_rejected ? "  (some too far from a road)" : "");
@@ -1226,6 +1281,7 @@ static void draw_label(void)
     const InputState *in = input_get();
     char t[96];
     int x, y;
+    if (uinews_active() || uiguide_active()) { s_hover_lot = 0; return; }   /* PL3: never over the paper / Guide */
     if (!s_label_ok || s_consumed || !in->inside) return;
     label_text(t, sizeof(t));
     if (!t[0]) return;
@@ -1241,6 +1297,13 @@ static void draw_label(void)
     }
     x = ICLAMP(in->mx + 16, g_cam.view_x, g_cam.view_x + g_cam.view_w - s_label_w);
     y = ICLAMP(in->my + 20, g_cam.view_y, g_cam.view_y + g_cam.view_h - 15);
+    if (ui_rect_covered(x, y, s_label_w, 15)) {      /* PL3: not over an open panel / fly-out: other side, else none */
+        x = ICLAMP(in->mx - 8 - s_label_w, g_cam.view_x, g_cam.view_x + g_cam.view_w - s_label_w);
+        if (ui_rect_covered(x, y, s_label_w, 15)) {
+            y = ICLAMP(in->my - 22, g_cam.view_y, g_cam.view_y + g_cam.view_h - 15);
+            if (ui_rect_covered(x, y, s_label_w, 15)) return;
+        }
+    }
     gfx_blit_part(&s_label, 0, 0, s_label_w, 15, x, y);
 }
 
@@ -1256,6 +1319,7 @@ static void draw_play(int interactive)
     prof_begin(PROF_UI);
     ui_draw();
     uinews_draw();                                   /* M7: on top of everything while open */
+    uiguide_draw();                                  /* PL1 */
     if (interactive) draw_label();
     prof_end(PROF_UI);
 }

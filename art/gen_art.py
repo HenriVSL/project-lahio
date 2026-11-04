@@ -10,9 +10,12 @@
                                         the prefixes, reuse the rest from art/.cache (iteration)
     options: -j N (worker processes, default = CPU count), --nopreview
 
-Outputs (art/): world<k>_64.bmp / world<k>_32.bmp sheets (24-bit, <= 640 wide, <= 2048 tall, key
-RGB(255,0,255), colours pre-rounded to RGB565), sheet_world<k>_<z>.h per sheet, the index
-art_world.h (src/art.h convention), preview/*.png.  See ART.md."""
+    python3 art/gen_art.py --repack     PL4: re-cut + re-pack the cached sprites (art/.cache) into pages,
+                                        write sheets + headers, run the check (no rendering, no previews)
+
+Outputs (art/): world<k>_64.bmp / world<k>_32.bmp PAGES (24-bit, <= 512 x 256, key RGB(255,0,255),
+colours pre-rounded to RGB565), sheet_world_<z>.h per zoom (pieces + sprites), the index art_world.h
+(src/art.h convention), preview/*.png.  See ART.md (section 8: pieces and pages, PL4)."""
 import glob
 import math
 import multiprocessing
@@ -38,8 +41,12 @@ PROJ = os.path.dirname(HERE)
 CACHE = os.path.join(HERE, '.cache')
 PREVIEW = os.path.join(HERE, 'preview')
 ZOOMS = ((1.0, 64), (0.5, 32))
-SHEET_W = 640
-SHEET_MAX_H = 2048
+SHEET_W = 512           # PL4: pages of <= 512 x 256 px. The Voodoo3 driver gives DirectDraw a linear heap plus two
+SHEET_MAX_H = 256       # screen-sized rectangular heaps (1024x768 at 1024: 9,088 KB linear + 2 x 1,536 KB): 640x2048
+                        # sheets could only use the linear part (world3_64 refused at 1024 with 4,477 KB free).
+                        # Small pages fill both and leave no big holes when a zoom swap evicts/reloads them.
+PIECE_LAMBDA = 600      # PL4: VRAM px worth one extra blit (~5 us CPU per call ~ 600 px of blitter fill)
+LOT_NAME = re.compile(r'(_v\d+_(?:ab_)?r\d$)|(_build_r\d$)|(^build_\d+x\d+_r\d$)')   # drawn in strips by render.cpp
 VRAM_LIMIT_64 = int(9.6 * 1024 * 1024)    # DESIGN 14.5: only the active zoom is resident; 64-zoom world sheets
 VRAM_LIMIT_32 = VRAM_LIMIT_64             # <= ~9.6 MB at 800x600 (UI + chunk cache + targets take the rest)
 ROAD_KEYS = ('grav', 'road', 'main', 'mway')
@@ -749,57 +756,135 @@ def make_sprites(rendered, zoom_px):
     return S
 
 
+def sprite_pieces(name, img, ax, hw):
+    """PL4: cut one sprite into column pieces, each trimmed to its own opaque box -> [(x0, y0, x1, y1)] in sprite
+    px (no pieces for an empty sprite). Cuts lie on the half-tile grid (x = k * hw). render.cpp draws a lot sprite
+    (LOT_NAME, ax on the grid, wider than 2 * hw) as one strip per half-tile column with the two centre columns
+    merged (lot_pieces), so a cut on a strip boundary costs no extra blit; any other cut (inside the centre pair,
+    or in a sprite drawn whole) costs one blit, charged PIECE_LAMBDA px. Minimum-cost cut set by dynamic
+    programming; deterministic. The logical sprite (w, h, ax, ay) stays exactly as rendered."""
+    w, h = img.size
+    px = img.load()
+    cols = []
+    for cx in range(w):
+        t = b = None
+        for yy in range(h):
+            if px[cx, yy] != KEY:
+                if t is None:
+                    t = yy
+                b = yy
+        cols.append((t, b))
+
+    def box(a, b):
+        xs = [c for c in range(a, b) if cols[c][0] is not None]
+        if not xs:
+            return None
+        return (xs[0], min(cols[c][0] for c in xs), xs[-1] + 1, max(cols[c][1] for c in xs) + 1)
+
+    def area(a, b):
+        bb = box(a, b)
+        return 0 if bb is None else (bb[2] - bb[0]) * (bb[3] - bb[1])
+    strips = bool(LOT_NAME.search(name)) and ax % hw == 0 and w > 2 * hw
+    cuts = sorted(set([0, w] + list(range(hw, w, hw))))
+    free = set(c for c in range(hw, w, hw) if c != ax) if strips else set()
+    n = len(cuts)
+    best = [0] + [None] * (n - 1)
+    prev = [0] * n
+    for j in range(1, n):
+        for i in range(j):
+            v = best[i] + area(cuts[i], cuts[j]) + (0 if (i == 0 or cuts[i] in free) else PIECE_LAMBDA)
+            if best[j] is None or v < best[j]:
+                best[j] = v
+                prev[j] = i
+    seg = []
+    j = n - 1
+    while j > 0:
+        seg.append((cuts[prev[j]], cuts[j]))
+        j = prev[j]
+    return [bb for bb in (box(a, b) for (a, b) in reversed(seg)) if bb]
+
+
 def write_sheets(S, zoom_px):
-    items = [(n, S[n][0].width, S[n][0].height) for n in S]
+    """PL4: sprites -> trimmed pieces (identical pieces stored once) -> skyline-packed pages.
+    Returns (pages [(sname, img)], placed {piece id: (page, x, y, w, h)}, spr {name: [(piece id, dx, dy)]})."""
+    hw = zoom_px // 2
+    items, crops, uniq, spr = [], {}, {}, {}
+    for n in sorted(S):
+        img, anc, hot = S[n]
+        pcs = []
+        for k, (x0, y0, x1, y1) in enumerate(sprite_pieces(n, img, anc[0], hw)):
+            c = img.crop((x0, y0, x1, y1))
+            key = (c.size, c.tobytes())
+            pid = uniq.get(key)
+            if pid is None:
+                pid = '%s#%d' % (n, k)
+                uniq[key] = pid
+                crops[pid] = c
+                items.append((pid, x1 - x0, y1 - y0))
+            pcs.append((pid, x0, y0))
+        spr[n] = pcs
     pages, heights = skyline_pack(items, SHEET_W, SHEET_MAX_H)
-    sheets = []
+    out, placed = [], {}
     for k, (page, ph) in enumerate(zip(pages, heights)):
         img = Image.new('RGB', (SHEET_W, ph), KEY)
-        rects = []
-        for (name, x, y, w, h) in sorted(page, key=lambda p: p[0]):
-            im, anc, hot = S[name]
-            img.paste(im, (x, y))
-            rects.append((name, x, y, w, h, anc[0], anc[1], hot[0], hot[1]))
+        for (pid, x, y, w, h) in page:
+            img.paste(crops[pid], (x, y))
+            placed[pid] = (k, x, y, w, h)
         sname = 'world%d_%d' % (k, zoom_px)
         write_bmp(os.path.join(HERE, sname + '.bmp'), img)
-        sheets.append((sname, rects, img))
-    return sheets
+        out.append((sname, img))
+    return out, placed, spr
 
 
-def write_headers(all_sheets, alias_list):
+def write_headers(zsets, alias_list):
+    """zsets: [(zoom_px, pages, placed, spr, S)] -> sheet_world_<z>.h (pieces + sprites) + art_world.h"""
     for f in glob.glob(os.path.join(HERE, 'sheet_world*.h')):
         os.remove(f)
     idx = []
-    for (sname, rects, img, zoom_px) in all_sheets:
-        names = dict((r[0], r) for r in rects)
-        rows = list(rects)
-        for (a, target) in resolve_aliases(alias_list, names):
-            if target in names:
-                r = names[target]
-                rows.append((a,) + tuple(r[1:]))
+    for (zoom_px, pages, placed, spr, S) in zsets:
+        base = len(idx)
+        idx += [(sname, zoom_px) for (sname, img) in pages]
+        rows = [(n, n) for n in spr]
+        rows += [(a, t) for (a, t) in resolve_aliases(alias_list, spr) if t in spr]
         rows.sort(key=lambda r: r[0])
-        guard = 'SHEET_%s_H' % sname.upper()
+        plist, first = [], {}
+        for n in sorted(spr):
+            first[n] = len(plist)
+            for (pid, dx, dy) in spr[n]:
+                pg, x, y, w, h = placed[pid]
+                plist.append((base + pg, x, y, w, h, dx, dy))
+        guard = 'SHEET_WORLD_%d_H' % zoom_px
         L = ['/* generated by gen_art.py - do not edit */',
-             '/* %s.bmp: %dx%d, %d sprites. ArtSpr = name, x, y, w, h, ax, ay (anchor = south vertex of the',
-             '   footprint; cars: ground centre; smoke: puff centre), hx, hy (chimney top, -1 = none). */']
-        L[1] = L[1] % (sname, img.width, img.height, len(rows))
-        L += ['#ifndef %s' % guard, '#define %s' % guard, '',
-              'static const ArtSpr sheet_%s[] = {' % sname]
-        for r in rows:
-            L.append('    { "%s", %d, %d, %d, %d, %d, %d, %d, %d },' % r)
-        L += ['};', '#define SHEET_%s_COUNT %d' % (sname.upper(), len(rows)), '', '#endif']
-        with open(os.path.join(HERE, 'sheet_%s.h' % sname), 'w') as f:
+             '/* %d-zoom world art (PL4 pieces, art.h): %d pages, %d pieces, %d sprite names.' % (zoom_px, len(pages), len(plist), len(rows)),
+             '   ArtPiece = page (index into art_world_sheets), x, y, w, h in the page, dx, dy = top-left inside the sprite.',
+             '   ArtPSpr = name, w, h, ax, ay (anchor = south vertex of the footprint; cars: ground centre; smoke: puff',
+             '   centre), hx, hy (chimney top, -1 = none), first piece, piece count. */',
+             '#ifndef %s' % guard, '#define %s' % guard, '',
+             'static const ArtPiece art_pieces_%d[] = {' % zoom_px]
+        for p in plist:
+            L.append('    { %d, %d, %d, %d, %d, %d, %d },' % p)
+        L += ['};', '', 'static const ArtPSpr art_sprites_%d[] = {' % zoom_px]
+        for (a, t) in rows:
+            img, anc, hot = S[t]
+            L.append('    { "%s", %d, %d, %d, %d, %d, %d, %d, %d },' % (a, img.width, img.height, anc[0], anc[1], hot[0], hot[1],
+                                                                       first[t], len(spr[t])))
+        L += ['};', '#define ART_PIECES_%d_COUNT %d' % (zoom_px, len(plist)),
+              '#define ART_SPRITES_%d_COUNT %d' % (zoom_px, len(rows)), '', '#endif']
+        with open(os.path.join(HERE, 'sheet_world_%d.h' % zoom_px), 'w') as f:
             f.write('\r\n'.join(L) + '\r\n')
-        idx.append((sname, zoom_px, len(rows)))
     L = ['/* generated by gen_art.py - do not edit */',
-         '/* World art index (src/art.h "GENERATED HEADER CONVENTION"). Included only by art.cpp. */',
+         '/* World art index (src/art.h "GENERATED HEADER CONVENTION", PL4 pieces). Included only by art.cpp. */',
          '#ifndef ART_WORLD_H', '#define ART_WORLD_H', '']
-    for (sname, z, n) in idx:
-        L.append('#include "sheet_%s.h"' % sname)
+    for (zoom_px, pages, placed, spr, S) in zsets:
+        L.append('#include "sheet_world_%d.h"' % zoom_px)
     L += ['', 'static const ArtSheet art_world_sheets[] = {']
-    for (sname, z, n) in idx:
-        L.append('    { "art\\\\%s.bmp", %s, 1, sheet_%s, %d },' % (sname, 'ZOOM_64' if z == 64 else 'ZOOM_32', sname, n))
-    L += ['};', '#define ART_WORLD_SHEET_COUNT %d' % len(idx), '', '#endif']
+    for (sname, z) in idx:
+        L.append('    { "art\\\\%s.bmp", %s, 1, NULL, 0 },' % (sname, 'ZOOM_64' if z == 64 else 'ZOOM_32'))
+    L += ['};', '#define ART_WORLD_SHEET_COUNT %d' % len(idx), '', 'static const ArtPieceSet art_world_sets[] = {']
+    for (zoom_px, pages, placed, spr, S) in zsets:
+        L.append('    { %s, art_pieces_%d, ART_PIECES_%d_COUNT, art_sprites_%d, ART_SPRITES_%d_COUNT },' %
+                 ('ZOOM_64' if zoom_px == 64 else 'ZOOM_32', zoom_px, zoom_px, zoom_px, zoom_px))
+    L += ['};', '#define ART_WORLD_SET_COUNT %d' % len(zsets), '', '#endif']
     with open(os.path.join(HERE, 'art_world.h'), 'w') as f:
         f.write('\r\n'.join(L) + '\r\n')
 
@@ -1443,14 +1528,36 @@ def required_names(B, roads, art_names):
 
 
 # =========================================================================== check
+def read_pieces():
+    """PL4: parse art_world.h + sheet_world_<z>.h -> (pages [(sname, zoom)], {zoom: (pieces, sprites)});
+    piece = (page, x, y, w, h, dx, dy), sprite = (name, w, h, ax, ay, hx, hy, first, count)"""
+    idx = open(os.path.join(HERE, 'art_world.h')).read()
+    pages = [(m.group(1), int(m.group(2))) for m in re.finditer(r'"art\\\\(world\d+_(\d+))\.bmp"', idx)]
+    sets = {}
+    for z in (64, 32):
+        f = os.path.join(HERE, 'sheet_world_%d.h' % z)
+        t = open(f).read() if os.path.exists(f) else ''
+        pcs = [tuple(int(v) for v in m.groups())
+               for m in re.finditer(r'\{ (\d+), (\d+), (\d+), (\d+), (\d+), (\d+), (\d+) \}', t)]
+        spr = [(m.group(1),) + tuple(int(v) for v in m.groups()[1:])
+               for m in re.finditer(r'\{ "(\w+)", (-?\d+), (-?\d+), (-?\d+), (-?\d+), (-?\d+), (-?\d+), (\d+), (\d+) \}', t)]
+        sets[z] = (pcs, spr)
+    return pages, sets
+
+
+def logical_sprite(sheets, pcs, row):
+    """PL4: the sprite image re-assembled from its pieces (sheets: page index -> RGB image)"""
+    n, w, h, ax, ay, hx, hy, first, cnt = row
+    img = Image.new('RGB', (max(w, 1), max(h, 1)), KEY)
+    for (pg, x, y, pw, ph, dx, dy) in pcs[first:first + cnt]:
+        img.paste(sheets[pg].crop((x, y, x + pw, y + ph)), (dx, dy))
+    return img
+
+
 def read_header_rects():
-    out = {}
-    for f in glob.glob(os.path.join(HERE, 'sheet_world*.h')):
-        sname = os.path.basename(f)[6:-2]
-        out[sname] = [(m.group(1),) + tuple(int(v) for v in m.groups()[1:])
-                      for m in re.finditer(r'\{ "(\w+)", (-?\d+), (-?\d+), (-?\d+), (-?\d+), (-?\d+), (-?\d+), (-?\d+), (-?\d+) \}',
-                                           open(f).read())]
-    return out
+    """logical sprite rows per zoom: {'world_<z>': [(name, 0, 0, w, h, ax, ay, hx, hy)]} (PL4)"""
+    pages, sets = read_pieces()
+    return dict(('world_%d' % z, [(r[0], 0, 0) + tuple(r[1:7]) for r in sets[z][1]]) for z in sets)
 
 
 def seam_test_ground():
@@ -1533,10 +1640,14 @@ def seam_test_ground():
 def check(verbose=True):
     ok = True
     hdr = read_header_rects()
+    pages, sets = read_pieces()
+    pindex = dict((sn, k) for k, (sn, z) in enumerate(pages))
     total = 0
     names = {64: set(), 32: set()}
-    print('  sheets:')
-    for f in sorted(glob.glob(os.path.join(HERE, 'world*_*.bmp'))):
+    for z in sets:
+        names[z] = set(r[0] for r in sets[z][1])
+    print('  pages (PL4: <= %dx%d, pieces trimmed per half-tile column):' % (SHEET_W, SHEET_MAX_H))
+    for f in sorted(glob.glob(os.path.join(HERE, 'world*_*.bmp')), key=lambda f: (-int(f[:-4].split('_')[-1]), int(re.findall(r'world(\d+)_', f)[0]))):
         sname = os.path.basename(f)[:-4]
         d = open(f, 'rb').read()
         sig, _, _, _, off = struct.unpack('<2sIHHI', d[:14])
@@ -1553,21 +1664,33 @@ def check(verbose=True):
         vram = w * abs(h) * 2
         total += vram
         st = 'ok'
+        npc = 0
         if sig != b'BM' or bpp != 24 or comp != 0 or off != 54 or w > SHEET_W or abs(h) > SHEET_MAX_H or near or n565:
             st = 'FAIL'
             ok = False
-        if sname not in hdr:
-            st = 'FAIL (no header)'
+        if sname not in pindex:
+            st = 'FAIL (not in art_world.h)'
             ok = False
         else:
             z = int(sname.split('_')[1])
-            for r in hdr[sname]:
-                names[z].add(r[0])
+            for r in sets[z][0]:
+                if r[0] != pindex[sname]:
+                    continue
+                npc += 1
                 if r[1] < 0 or r[2] < 0 or r[1] + r[3] > w or r[2] + r[4] > abs(h):
-                    st = 'FAIL (rect %s outside)' % r[0]
+                    st = 'FAIL (piece outside)'
                     ok = False
-        print('    %-12s %3dx%-4d bpp=%d %4d sprites %6.0f KB  near-key=%d non565=%d  %s' %
-              (sname, w, abs(h), bpp, len(hdr.get(sname, ())), vram / 1024.0, near, n565, st))
+        if verbose:
+            print('    %-12s %3dx%-4d bpp=%d %4d pieces %6.0f KB  near-key=%d non565=%d  %s' %
+                  (sname, w, abs(h), bpp, npc, vram / 1024.0, near, n565, st))
+    for z in sets:                     # pieces inside their sprite; sprites point at valid pieces
+        pcs, spr = sets[z]
+        bad = [r[0] for r in spr if r[7] + r[8] > len(pcs) or any(
+            p[5] < 0 or p[6] < 0 or p[5] + p[3] > r[1] or p[6] + p[4] > r[2] for p in pcs[r[7]:r[7] + r[8]])]
+        print('  zoom %d: %d pages, %d pieces, %d sprite names; pieces outside their sprite: %s' %
+              (z, sum(1 for (sn, zz) in pages if zz == z), len(pcs), len(spr), ', '.join(bad[:6]) if bad else 'none'))
+        if bad:
+            ok = False
     # per-zoom VRAM (DESIGN 14.5): only the active zoom's world sheets are resident, UI sheets always are
     zt = {64: 0, 32: 0}
     for f in glob.glob(os.path.join(HERE, 'world*_*.bmp')):
@@ -1590,12 +1713,6 @@ def check(verbose=True):
     print('    UI sheets + fonts: %4.0f KB (always resident; gen_ui.py)' % (ui / 1024.0))
     print('    resident at 64 zoom: %.0f KB = %.2f MB world + UI; both zooms together: %.2f MB (no longer a limit)'
           % ((zt[64] + ui) / 1024.0, (zt[64] + ui) / 1048576.0, total / 1048576.0))
-    # index header
-    idx = open(os.path.join(HERE, 'art_world.h')).read()
-    for sname in hdr:
-        if '"art\\\\%s.bmp"' % sname not in idx:
-            print('  FAIL art_world.h does not list %s' % sname)
-            ok = False
     # both zooms carry the same names
     only64 = sorted(names[64] - names[32])
     only32 = sorted(names[32] - names[64])
@@ -1604,18 +1721,13 @@ def check(verbose=True):
         ok = False
     # seamless tiling: 4x4 patches of flat tiles must have no holes
     for z in (64, 32):
-        sheets = dict((s, Image.open(os.path.join(HERE, s + '.bmp')).convert('RGB')) for s in hdr if s.endswith('_%d' % z))
-        rect = {}
-        for s in hdr:
-            if s.endswith('_%d' % z):
-                for r in hdr[s]:
-                    rect[r[0]] = (s,) + r[1:]
+        psheets = dict((k, Image.open(os.path.join(HERE, sn + '.bmp')).convert('RGB')) for k, (sn, zz) in enumerate(pages) if zz == z)
+        rows = dict((r[0], r) for r in sets[z][1])
         tw, th = z, z // 2
         holes = []
         for nm in ['grass0', 'grass2', 'water1', 'field_crop', 'marsh', 'road_10', 'grav_05', 'main_15', 'rail_10', 'shore05',
                    'river_x_1', 'river_y_2', 'river_n_0', 'rapids_x_0', 'rapids_n_2']:
-            s, x, y, w, h = rect[nm][:5]
-            t = sheets[s].crop((x, y, x + w, y + h))
+            t = logical_sprite(psheets, sets[z][0], rows[nm])
             m = key_mask(t)
             can = Image.new('RGB', (tw * 5, th * 5), KEY)
             for i in range(4):
@@ -1688,14 +1800,21 @@ def check(verbose=True):
     print('  hotspots outside their sprite: %s' % (', '.join(badhot[:8]) if badhot else 'none'))
     if badhot:
         ok = False
-    # VRAM by family (sprite rects, both zooms; aliases not counted)
+    # VRAM by family (piece areas, both zooms; aliases and shared pieces not counted twice) (PL4)
+    parea = {}
+    for z in sets:
+        pcs, spr = sets[z]
+        for r in spr:
+            parea[('world_%d' % z, r[0])] = (r[7], sum(p[3] * p[4] for p in pcs[r[7]:r[7] + r[8]]))
     fam = {}
     seen = set()
     for sname, rows in hdr.items():
         for (n, x, y, w, h, ax, ay, hx, hy) in rows:
-            if (sname, x, y) in seen:
+            x, a_ = parea[(sname, n)]
+            w, h = a_, 1
+            if (sname, x) in seen:
                 continue
-            seen.add((sname, x, y))
+            seen.add((sname, x))
             km = re.match(r'(.+?)_v\d+_(ab_)?r\d$', n)
             if km:
                 f = 'abandoned' if km.group(2) else km.group(1)[:3] if km.group(1)[:3] in ('apt', 'com', 'ind') else \
@@ -1718,9 +1837,11 @@ def check(verbose=True):
     for sname, rows in hdr.items():
         z = int(sname.split('_')[1])
         for (n, x, y, w, h, ax, ay, hx, hy) in rows:
-            if (sname, x, y) in seen:
+            x, a_ = parea[(sname, n)]
+            w, h = a_, 1
+            if (sname, x) in seen:
                 continue
-            seen.add((sname, x, y))
+            seen.add((sname, x))
             g = None
             km = re.match(r'(.+?)_v(\d+)_(?:ab_)?r\d$', n)
             if km and km.group(1) in M2_KEYS:
@@ -1762,25 +1883,27 @@ def main():
     os.makedirs(CACHE, exist_ok=True)
     cpath = os.path.join(CACHE, 'sprites.pickle')
     rendered = {}
-    if only and os.path.exists(cpath):
+    repack = '--repack' in args          # PL4: cached sprites only (re-cut + re-pack, no rendering)
+    if (only or repack) and os.path.exists(cpath):
         with open(cpath, 'rb') as f:
             rendered = pickle.load(f)
         valid = set(o[0] for j in jobs for o in j.outs)
         rendered = dict((k, v) for k, v in rendered.items() if k[0] in valid)
-    rendered.update(render(jobs, only, nproc))
-    with open(cpath, 'wb') as f:
-        pickle.dump(rendered, f, protocol=pickle.HIGHEST_PROTOCOL)
+    if not repack:
+        rendered.update(render(jobs, only, nproc))
+        with open(cpath, 'wb') as f:
+            pickle.dump(rendered, f, protocol=pickle.HIGHEST_PROTOCOL)
     for f in glob.glob(os.path.join(HERE, 'world*_*.bmp')):
         os.remove(f)
-    all_sheets = []
+    zsets = []
     SS = {}
     for (z, zz) in ZOOMS:
         S = make_sprites(rendered, zz)
         SS[zz] = S
-        for (sname, rects, img) in write_sheets(S, zz):
-            all_sheets.append((sname, rects, img, zz))
-    write_headers(all_sheets, aliases())
-    if '--nopreview' not in args:
+        pages, placed, spr = write_sheets(S, zz)
+        zsets.append((zz, pages, placed, spr, S))
+    write_headers(zsets, aliases())
+    if '--nopreview' not in args and not repack:
         for zz in SS:
             for (a, t) in resolve_aliases(aliases(), SS[zz]):
                 if t in SS[zz]:

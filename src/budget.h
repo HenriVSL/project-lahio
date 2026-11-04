@@ -60,7 +60,8 @@ void  budget_set_funding(int svc, int pct);
 /* T04 additions */
 #define TAX_NEUTRAL       9          /* tax rate with no demand/attractiveness penalty */
 #define LOAN_AFTER_MONTHS 6          /* months of negative balance before the emergency loan */
-#define LOAN_RATE         8          /* per mille per month (~10%/year; T12: 20 made an exponential debt spiral) */
+#define LOAN_RATE         6          /* per mille per month (~7.4%/year; T12: 20 made an exponential debt spiral; PL2: 8 -> 6,
+                                        the rate is saved with the town, so old saves keep theirs) */
 Money budget_start_funds(int funds, int start_year);   /* FUNDS_* (sim.h) -> starting money */
 
 struct SaveFile;
@@ -71,5 +72,8 @@ int   budget_load_ext(struct SaveFile *sf);    /* T10: save: after budget_load; 
 /* F3 addition: the upkeep index in % (100 to 1959, +2.5%/year from 1960, cap 130% (P1)) for the Budget panel and
    Query upkeep lines */
 int   budget_upkeep_index(void);
+/* PL2 addition: overtime in % (100..200) on a service line's upkeep when the town's load exceeds 125% of that service's
+   capacity (Budget panel / service tooltips: "overcrowded: overtime +40%") */
+int   budget_overtime_pct(int svc);
 
 #endif

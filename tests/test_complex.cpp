@@ -214,7 +214,7 @@ TEST(complex_construction_and_stages)
     /* the stage rules (pure) */
     CHECK(complex_paper_stage_ok(2, 3000, 80, 1956, 0, 1, 50));
     CHECK(!complex_paper_stage_ok(2, 2999, 80, 1956, 0, 1, 50));
-    CHECK(!complex_paper_stage_ok(2, 3000, 79, 1956, 0, 1, 50));
+    CHECK(!complex_paper_stage_ok(2, 3000, 69, 1956, 0, 1, 50));   /* PL2: PM2 wood 80 -> 70 */
     CHECK(!complex_paper_stage_ok(2, 3000, 80, 1956, 0, 0, 50));
     CHECK(!complex_paper_stage_ok(2, 3000, 80, 1956, 0, 1, 30));
     CHECK(complex_paper_stage_ok(3, 6000, 120, 1963, 1, 1, 50));

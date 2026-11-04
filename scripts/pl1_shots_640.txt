@@ -1,0 +1,51 @@
+# pl1_shots_640.txt - PL1 VM screenshots (640x480) on the user's Jan 1992 save:
+#   lahio.exe -res 640 -load PT2_1992.KAU -script scripts\pl1_shots_640.txt
+news year
+newspaper 0
+wait 1
+shot pl1_640_news.bmp
+wait 1
+newspaper 2
+news special 1
+newspaper 0
+wait 1
+shot pl1_640_special.bmp
+wait 1
+newspaper 2
+guide 1
+wait 1
+shot pl1_640_guide.bmp
+wait 1
+guide 0
+cam 59 96
+query 59 96
+wait 1
+shot pl1_640_plant.bmp
+wait 1
+panel 0
+mouse 627 286
+wait 1
+shot pl1_640_svckey.bmp
+wait 1
+panel 5
+wait 1
+shot pl1_640_services.bmp
+wait 1
+panel 0
+flyout 0
+mouse 500 83
+wait 1
+shot pl1_640_flyout.bmp
+wait 1
+flyout -1
+mouse 300 8
+wait 1
+shot pl1_640_power.bmp
+wait 1
+news newsreel
+newspaper 0
+wait 1
+shot pl1_640_newsreel.bmp
+wait 1
+newspaper 2
+quit

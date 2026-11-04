@@ -510,7 +510,8 @@ drawing, images split into ≤512 px surfaces, keyed blits, stipple fills, bitma
 - **Two zoom levels, both pre-rendered by the art pipeline** (no runtime scaling: hardware stretch is point-sampled,
   noisy and no faster): **64x32 = main zoom**, **32x16 = zoomed out**. Stretch: a 2x close-up by magnifying 64-px chunks;
   a 16x8 overview level.
-- **Art atlases ≤ 640 px wide** (so 640x480 keeps working), any height. All art lives in VRAM (a keyed blit from
+- **Art pages are 512x256** (PL4, 2026-11-04: sprites stored as trimmed column pieces; the Voodoo3 heap is one linear
+  block plus two screen-sized blocks, so tall sheets fail at 1024). Earlier rule was atlases ≤ 640 px wide, any height. All art lives in VRAM (a keyed blit from
   system memory is 8x slower and can stall). **VRAM art budget at 800x600 ≈ 9.5 MB** for both zooms together
   (≈ 7.5 MB of 64-px art + the 32-px set at 1/4 the size). At 1024x768 subtract ≈ 1.1 MB. The art pipeline reports the
   total VRAM of all sheets and the build fails the check above 9 MB.

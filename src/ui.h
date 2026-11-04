@@ -109,5 +109,11 @@ void ui_ticker_hint(const char *text);   /* opening hint (info lamp); a click on
 int  ui_lot_hover_ok(void);              /* 1 = no panel/fly-out/tooltip is in the way of a hover label */
 /* ---- M7 addition */
 void ui_set_panel_tab(int tab);          /* tab of the open panel (scripts: screenshots) */
+/* ---- PL1 additions */
+void ui_open_flyout(int key);            /* open tool key `key`'s fly-out (scripts: screenshots); -1 closes */
+void ui_advice_go(int go, int x, int y); /* act on a Cabinet line (advice.h AGO_*): overlay / camera / panel */
+/* ---- PL3 addition */
+int  ui_rect_covered(int x, int y, int w, int h);   /* 1 = the screen rect overlaps the open panel window or
+                                                       fly-out (game.cpp moves/hides the hover label) */
 
 #endif

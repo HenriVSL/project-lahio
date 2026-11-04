@@ -341,6 +341,11 @@ static u32 eval_reqs(int zone, int tier, int id, const Ctx *c, int keep, Checkli
             int tiles = (c->x1 - c->x0 + 1) * (c->y1 - c->y0 + 1);
             s32 have = id ? net_lot_load(COV_SHOP, id) : 0, nd = need * tiles;
             met = have >= (keep ? nd * 2 / 3 : nd);
+            /* PL2 (PLAYTEST 2 item 7c): residents shop at their NEAREST shop, so the back rows of a strip never count
+               customers; when the town's shoppers can't find enough shops (C bar >= 40) they walk further and every
+               shop may grow (more jobs: the human trap was a job-limited town with C demand +60..+80 unserved) - when
+               there are hands to hire (a labour-short town fills every employer less, the mill's staff included) */
+            if (!met && id && s_dem[DEM_C].value >= (keep ? 20 : 40) && (keep || s_stats.jobs_fill_pct >= 97)) met = 1;
             if (cl) { it.have = have; it.need = nd; }
             break; }
         case REQ_WORKERS: {
@@ -602,6 +607,11 @@ static int elements_ok(int zone, int up, s32 n)
    don't go up empty when nobody is moving in (jobs and migration still set the population). */
 #define APT_UP_VACANT_PCT 4
 #define APT_UP_VACANT_MIN 120
+/* PL2 (PLAYTEST 2 item 7c, BALANCE.md 5): a lot whose ONLY missing items are power and/or water steps down after
+   SIM_G_DOWN_UTIL bad checks (2 months) instead of SIM_G_DOWN (1 month): a brownout while the next plant is being
+   built costs growth, not a whole district of tiers (the human builds power after the shortage, not before it) */
+#define SIM_UTIL_BITS   ((1u << REQ_POWER) | (1u << REQ_WATER))
+#define SIM_G_DOWN_UTIL 8
 static int apt_upgrade_ok(s32 score, int dm)
 {
     s32 own = score - IMIN(0, s_dem[dm].value / 2);
@@ -724,7 +734,7 @@ static void process_lot(int id)
         s_band_allow[dm] = IMAX(0, s_band_allow[dm] - add); s_dem[dm].allowance = IMAX(0, s_dem[dm].allowance - add);
         l->growth = 0;
         count_first(zone, d->tier + 1, SE_LOT_UPGRADED, x0, y0, up);
-    } else if (l->growth <= -SIM_G_DOWN) {
+    } else if (l->growth <= -(unmet_cur && !(unmet_cur & ~SIM_UTIL_BITS) ? SIM_G_DOWN_UTIL : SIM_G_DOWN)) {
         l->growth = 0;
         decline_step(id, l, d, unmet_cur);
     }
@@ -804,7 +814,7 @@ static void aggregate(void)
         } else {
             if (d->zone == ZONE_COMMERCIAL) s_cap_com += d->capacity;
             else if (d->zone == ZONE_INDUSTRY) s_cap_ind += d->capacity;   /* M3: not the logging camps */
-            if (l->status == LOT_ACTIVE) jobs += d->capacity;
+            if (l->status == LOT_ACTIVE) { jobs += d->capacity; st->jobs_zone[d->zone] += d->capacity; }   /* PL2: jobs_zone was never filled (strike / trade-fair cards, era history) */
         }
     }
     /* bulldozed homes: residents the sim did not move out themselves become homeless */
@@ -1156,7 +1166,7 @@ void sim_step(void)
         break;
     }
     civic_step(phase, cycle);                  /* M5: heat/sewage solves (phase 9), fires */
-    if (phase != 14) traffic_slice();          /* M2: bounded cluster work of the running traffic pass */
+    if (phase != 14) traffic_slice_phase(phase);   /* M2: bounded cluster work of the running pass (PL4: by phase) */
     dt = time_ms() - t0;
     s_phase_sum[phase] += dt;
     s_phase[phase].count++;

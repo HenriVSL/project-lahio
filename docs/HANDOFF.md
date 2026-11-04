@@ -449,3 +449,52 @@ learned while building. Append your own section when you finish a task.
 - VM B: VC6 /W3 clean; town1 -fast = Mac (pop 4,963, money 1,522, world 756ae986); bal_planner_s7_era.txt 1955-1990 = Mac
   (pop 11,696, money 12,896); BENCH20K 59.81 fps (1 s min 59.0, 19 missed frames, worst 25.2 ms; speed 3 keeps up; phase 9
   max 15.3 ms); -test menu 800 + 640 and -test ui 800 pass; 1024 starts 32-zoom only with zoom-in disabled.
+
+## PL1 guidance & information (done) — src/advice.*, tests/test_pl1.cpp, tests/out/pl1_shots/, tests/out/pl1_advice.txt
+- advice.* (read-only to sim; chunk ADVC via era_save): ranked Cabinet advice with click targets; special edition ≤ 1/year
+  (not December, problem ≥ 2 months); hindsight tallies + yearly "In hindsight" + 1990 verdict; progression/unlock
+  sentences and building purposes from defs; power network summary.
+- Newspaper: clickable "From the Cabinet" box; NEWS_SPECIAL "Extra edition"; ceremony lists unlocks + next goal; newsreel
+  "What the history books will say". ERA v2. Ticker: power near capacity, town rights within reach / reminder every 6 months.
+- UI: top-bar Power field (click = power overlay; 640 short labels), § for town rights, "Next: X at N (you have M)" with a
+  progress bar, fly-out footer with unlock sentence or purpose (POP_H 216), plant query = network load/spare/brownout,
+  Services mini key (E), Guide key + F4 (pauses). Hints for Guide/desk/newspaper; status reached → ticker what's new.
+- Script: `guide`, `panel N`, `flyout K`, `news special`, `advice`. Saves PT2_1990.KAU / PT2_1992.KAU = user's play-test 2.
+- Left for PL3: tall Cabinet box can cut column stories; newsreel "Population: 0 in 1955" (first yearly row empty, M7).
+
+## PL4 performance & art layout (done) — docs/PERF.md section 7, art/ART.md 4/7/8, tools/vramprobe, tests/test_pl4perf.cpp
+- Voodoo3 driver = one linear heap + two screen-sized blocks (1024: 9,088 + 2 × 1,536 KB); tall 640x2048 sheets only fit the
+  linear heap. Art now = trimmed column pieces on **512x256 pages** (`gen_art.py --repack`), cuts at existing strip
+  boundaries, pixel-identical (2,320 sprites). 64-zoom 7,691 KB (31 pages), 32-zoom 1,918 KB (8 pages). art_blit_part.
+- VRAM free (64 / 32 zoom): 640 3,253 / 9,026 KB; 800 2,062 / 7,835 (pool 35/35); 1024 522 (pool 41/48) / 6,295.
+  At 1024 close zoom every 64 KB of new 64-zoom art costs one chunk.
+- Benches VM B (speed 3, `-fps 60` for benches): 59.8-59.9 fps all resolutions/zooms; 1024 z64 now works.
+- Phase 9 avg 9.35 → 4.7 ms but **peak ~15 ms remains** (network rebuild + heat/sewage in one step) — **orchestrator: accepted
+  for 1.0** (occasional dropped frame at minimum spec only; covered by the 30 fps fallback; ~1.5 ms on GHz targets).
+  Phases 0/1/13/15 peak 7-9 ms. Results bit-identical.
+- 13 complex-module icons missing in the art selftest (pre-existing; PL3/cleanup).
+
+## PL2 gameplay fixes & balance (done) — tests/test_pl2.cpp, BALANCE.md section 9, tests/out/balance_era_*.txt
+- Water tower + element factory unlock at **Church village** (factory from 1960); T2 still needs elements, T3 heat.
+- Railway by default for New Game/direct starts (`-rail`/`-norail`; `-script` stays rail-off); rail-less maps/saves:
+  Valtion Metalli accepts a main road within 2 tiles, PM3 skips the station; clear reasons; station locked "No railway here".
+- Human pacing: naive-human bot; shops can grow in back rows when C bar ≥ 40 and workers free; power/water-only shortage
+  drops a tier after 2 months (was 1). Emergency loan 6‰ (was 8) + ~1/60 instalments when treasury ≥ 2,000.
+- Overtime upkeep above 125% load (≤ 300%), `budget_overtime_pct(svc)`; apartment tax weights 3/4/5; agreement offer waits
+  ≤ 24 months for a card slot; company town = company share of factory jobs ≥ 30%; PM2 wood 70, staffed at 80%;
+  bug fix: CityStats.jobs_zone was never filled.
+- s7 1955-90: planner Market 1958 / Town 1964, 4,171 mk; dense 15,353 mk (was 106,950), apt T2/T3 66/27; naive Market 1962 /
+  Town 1976, 27,095 mk, 1 loan; naive-without-factory Town 1987, 2 loans (recoverable).
+- Open: dense c3/r30 rich by 1975 (126k/147k); 13% tax piles money once built out; metal −240/month in oil years.
+
+## PL3 bugs & UX (done) — tests/test_pl3.cpp
+- Hover labels hidden under newspaper/Guide, moved beside panels (ui_rect_covered); heat overlay: pipes strong, would-be-heated
+  zoned land faint; GAME_VERSION "0.9" on title/pause; newspaper drops low-ranked Cabinet lines to keep stories whole;
+  newsreel "founded on bare land in 1955"; motorway autotile follows traffic_link_ok (fixed, not hidden); undo for bus lines
+  and gifts (complexes say "(no undo)"); module lots use the complex icon. Windowed pause menu: not reproducible now.
+- Left: motorway drag preview may show side joins (cosmetic); no delete-save button; brief junction overlaps; bus upkeep
+  ledger line; politics money a month late; a chunk stale 1-2 frames.
+
+## Polish wave verification (orchestrator, 2026-11-04)
+- Mac 182/182; gen_art + gen_ui checks pass; VC6 /W3 0 warnings on VM B; town1 headless 0 errors (pop 5,188);
+  1955-1990 planner replay (`-seed 7 -preset lakeland`) = Mac exactly (12,188 pop, 4,171 mk).

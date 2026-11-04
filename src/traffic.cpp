@@ -144,6 +144,7 @@ static TrafficQuery s_q;
 static double s_last_slice_ms, s_max_slice_ms, s_last_bnd_ms, s_max_bnd_ms, s_last_rebuild_ms;
 static double s_stage_ms[4], s_sweep_max_ms;    /* cells, rebuild, start; max cluster-sweep step (log per pass) */
 static int s_listener;
+static int s_pred_ok;                 /* PL4: slice work prediction valid (traffic_slice_phase) */
 
 /* ================================================================== helpers */
 static void clear_rows(void *arr, int elem, int byte)
@@ -155,7 +156,7 @@ static void clear_rows(void *arr, int elem, int byte)
 static int car_cls(int x, int y)
 {
     int c;
-    if (!world_in(x, y)) return 0;
+    if ((unsigned)x >= (unsigned)g_world.w || (unsigned)y >= (unsigned)g_world.h) return 0;   /* PL4: world_in inline */
     c = TILE_ROAD(WT(x, y));
     return (c && (g_roads[c].flags & RDF_CARS)) ? c : 0;
 }
@@ -328,24 +329,28 @@ static void refs_from_graph(void)
     for (e = 0; e < s_ne; e++) for (k = 0; k < s_ent[e]; k++) s_tref[s_etiles[s_et0[e] + k]] = (u16)e;
 }
 
+static u16 s_rtiles[NTILES];          /* PL4: car-road tiles of the map in scan order (graph_rebuild scratch) */
+
 static void graph_rebuild(void)
 {
-    int x, y, i, e, k, w = g_world.w, h = g_world.h, done = 0;
+    int x, y, i, e, k, w = g_world.w, h = g_world.h, done = 0, nr = 0, r;
     double t0 = time_ms();
     clear_rows(s_tref, sizeof(s_tref[0]), 0xFF);
     s_nn = s_ne = s_net = 0;
     for (y = 0; y < h; y++)
         for (x = 0; x < w; x++) {
             int c = car_cls(x, y);
-            if (c && tile_is_node(x, y, c)) add_node(TILE_IDX(x, y));
+            if (!c) continue;
+            s_rtiles[nr++] = (u16)TILE_IDX(x, y);
+            if (tile_is_node(x, y, c)) add_node(TILE_IDX(x, y));
         }
     for (;;) {
         for (; done < s_nn; done++)                         /* split nodes appended while tracing are traced too */
             for (k = 0; k < DIR_COUNT; k++) trace(done, k);
-        /* rings without any junction: their first tile becomes a node */
-        for (y = 0, i = -1; y < h && i < 0; y++)
-            for (x = 0; x < w; x++)
-                if (s_tref[TILE_IDX(x, y)] == REF_NONE && car_cls(x, y)) { i = add_node(TILE_IDX(x, y)); break; }
+        /* rings without any junction: their first tile (scan order) becomes a node. PL4: scans the road-tile
+           list instead of the map (same first tile; roads don't change during the rebuild) */
+        for (r = 0, i = -1; r < nr; r++)
+            if (s_tref[s_rtiles[r]] == REF_NONE) { i = add_node(s_rtiles[r]); break; }
         if (i < 0) break;
     }
     build_csr();
@@ -362,6 +367,7 @@ static void graph_rebuild(void)
     s_dirty = 0;
     s_mvalid = 0;
     s_rebuilds++;
+    s_pred_ok = 0;                                         /* PL4 */
     s_last_rebuild_ms = time_ms() - t0;
 }
 
@@ -566,11 +572,12 @@ static void cluster_blocks(void)
                 if (dd < bd || (dd == bd && k < nbr)) { bd = dd; nbr = k; }      /* nearest, then the smaller one */
             }
             if (nbr < 0) break;
-            for (k = 0; k < n; k++) if (lab[k] == smallest) lab[k] = (s16)nbr;
+            lab[smallest] = (s16)nbr;          /* PL4: parent link (was: relabel all; resolved below, same labels) */
             sx[nbr] += sx[smallest]; sy[nbr] += sy[smallest]; sj[nbr] += sj[smallest];
             ccx[nbr] = sx[nbr] / IMAX(1, sj[nbr]); ccy[nbr] = sy[nbr] / IMAX(1, sj[nbr]);
             live[si] = live[--alive];
         }
+        for (k = 0; k < n; k++) { int r = k; while (lab[r] != r) r = lab[r]; lab[k] = (s16)r; }   /* PL4 */
         /* cluster ids: representatives sorted by total weight desc (index order on ties) */
         s_ncl = 0;
         for (;;) {
@@ -721,6 +728,7 @@ static void pass_start(void)
     s_mcar = s_mbus = s_mslow = s_mveh = 0;
     s_cursor = 0; s_station_job = 0;
     s_running = 1;
+    s_pred_ok = 0;                                         /* PL4 */
 }
 
 /* ================================================================== pass: one cluster
@@ -801,6 +809,56 @@ static int do_stations(void)
 static void pass_start(void);
 static void cells_stage(void);
 
+/* PL4: exact work prediction of the cluster sweeps. A cluster's Dijkstra settles every node reachable from
+   its sources, so its node count is the summed size of the graph components holding them (a pure function
+   of the graph and the pass snapshot: recomputed after a rebuild, a pass start or a load, never saved). */
+static u16 s_ncomp[TG_MAXN];          /* component of a node */
+static u16 s_compsz[TG_MAXN];         /* nodes per component */
+static s32 s_clnset[TC_MAX];          /* predicted nset per cluster */
+static void predict_init(void)
+{
+    int i, k, nc = 0, head, tail, d;
+    for (i = 0; i < s_nn; i++) s_ncomp[i] = 0xFFFF;
+    for (i = 0; i < s_nn; i++) {
+        if (s_ncomp[i] != 0xFFFF) continue;
+        head = tail = 0;
+        s_order[tail++] = (u16)i; s_ncomp[i] = (u16)nc;
+        while (head < tail) {
+            int n = s_order[head++];
+            for (k = s_adj0[n]; k < s_adj0[n + 1]; k++) {
+                int e = s_adj[k], m = s_ea[e] == n ? s_eb[e] : s_ea[e];
+                if (s_ncomp[m] == 0xFFFF) { s_ncomp[m] = (u16)nc; s_order[tail++] = (u16)m; }
+            }
+        }
+        s_compsz[nc++] = (u16)tail;
+    }
+    memset(s_stamp, 0, (size_t)nc);
+    for (d = 0; d < s_ncl; d++) {
+        s32 n = 0;
+        for (k = 0; k < s_cnsrc[d]; k++) {         /* distinct components (s_stamp: pass_start scratch, by component) */
+            int c = s_ncomp[s_src[s_csrc0[d] + k]];
+            if (s_stamp[c] == d + 1) continue;
+            s_stamp[c] = (u8)(d + 1);
+            n += s_compsz[c];
+        }
+        s_clnset[d] = n;
+    }
+    s_pred_ok = 1;
+}
+
+/* 1 = the next sweep slice would finish the sweeps and run the station Dijkstra (reads the live world) */
+static int slice_reaches_stations(void)
+{
+    int c = s_cursor, work = 0;
+    if (!s_pred_ok) predict_init();
+    while (c < 2 * s_ncl && work < SLICE_WORK) {
+        int d = c < s_ncl ? c : c - s_ncl;
+        work += (c < s_ncl ? 2 : 3) * s_clnset[d] + 1;
+        c++;
+    }
+    return c >= 2 * s_ncl && work < SLICE_WORK;
+}
+
 /* Every step except phase 14: the next piece of work. Between passes: commute/rail cells, a graph rebuild
    (only after road changes), the pass start; during a pass: cluster sweeps up to SLICE_WORK node visits. */
 void traffic_slice(void)
@@ -821,6 +879,19 @@ void traffic_slice(void)
     } else return;
     s_last_slice_ms = time_ms() - t0;
     if (s_last_slice_ms > s_max_slice_ms) s_max_slice_ms = s_last_slice_ms;
+}
+
+/* PL4: sim_step's slice. Phase 9 carries the network and heat/sewage solves, so its sweep slice moves to phase
+   10, which then runs two. Results are unchanged: sweep slices read only the pass snapshot (the station
+   Dijkstra at the end reads the world: a slice that would reach it is never moved), and nothing reads the pass
+   accumulators before phase 14. Passes start only at phase 1 (cells 15, rebuild 0, start 1), so "sweeping at
+   phase 10, not reaching the stations" means the phase-9 slice was moved; that needs no saved state. */
+void traffic_slice_phase(int phase)
+{
+    int sweep = s_running && !s_station_job && s_stage == TS_IDLE;
+    if (phase == 9 && sweep && !slice_reaches_stations()) return;
+    if (phase == 10 && sweep && !slice_reaches_stations()) traffic_slice();
+    traffic_slice();
 }
 
 /* ================================================================== pass: finish (outputs) */
@@ -982,6 +1053,7 @@ void traffic_reset(void)
     s_running = 0; s_cursor = 0; s_ncl = 0; s_nsrc = 0; s_own = 25; s_own1024 = 256; s_msa_k = 1; s_station_job = 0;
     s_stage = TS_IDLE;
     s_nlines = 0; s_mvalid = 0; s_q_tile = -1; s_pass_id = 0;
+    s_pred_ok = 0;                                         /* PL4 */
     s_overflow_logged = 0;
     s_max_slice_ms = s_max_bnd_ms = 0;
     transit_reset();
@@ -1320,6 +1392,7 @@ int traffic_load(struct SaveFile *sf)
     build_csr();
     build_edge_conn();
     s_mvalid = 0; s_q_tile = -1;
+    s_pred_ok = 0;                                         /* PL4 */
     if (!load_ok(sf)) { traffic_reset(); return 0; }
     return 1;
 }

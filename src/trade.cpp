@@ -269,7 +269,8 @@ void trade_month(void)
         T.deliv_12 = T.quota_12 = 0;
         for (k = 0; k < 12; k++) { T.deliv_12 += s_deliv_hist[k]; T.quota_12 += s_quota_hist[k]; }
         if (T.shortfall_months > 0) T.shortfall_months--;
-        if (A.offer && ++A.offer_months >= TRADE_OFFER_MONTHS && !(pol_on() && era_card_pending())) sign(TL_STANDARD, 1);
+        if (A.offer && ++A.offer_months >= (pol_on() ? TRADE_OFFER_WAIT_POL : TRADE_OFFER_MONTHS) && !(pol_on() && era_card_pending()))
+            sign(TL_STANDARD, 1);
     } else { T.exports_east = T.oil_town = T.oil_plants = 0; }
     /* ---- the Western multiplier */
     T.exports_west = wt;

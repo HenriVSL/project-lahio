@@ -409,7 +409,8 @@ TEST(trade_old_save_loads)
     test_log("AUTO1: %d-%02d pop %d status %d, agreement %d-%d level %d, oil %d", sim_date()->year, sim_date()->month + 1,
              sim_stats()->population, sim_stats()->town_status, trade_agreement()->from_year, trade_agreement()->to_year,
              trade_agreement()->level, trade_state()->oil_index);
-    CHECK(trade_agreement()->level >= 0 && !trade_state()->closed);
+    if (sim_date()->year < TRADE_END_YEAR) CHECK(trade_agreement()->level >= 0 && !trade_state()->closed);
+    else CHECK(trade_state()->closed);        /* PL2: AUTO1.KAU is now the user's 1992 autosave: clearing ended in 1990 */
     CHECK_EQ(era_status_eligible(), sim_stats()->town_status);
     for (y = 60; y < 110 && !site; y++)       /* a presidential sauna site for the VM screenshot script */
         for (x = 60; x < 110 && !site; x++)

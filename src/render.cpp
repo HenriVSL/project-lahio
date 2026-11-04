@@ -460,7 +460,7 @@ static void small_up_init(int z)      /* lazily for the current (resident) zoom:
 static void draw_piece(int z, const Piece *p)
 {
     const ArtSprite *sp = art_get(z, p->id);
-    gfx_blit_part(sp->img, sp->x + p->c0, sp->y, p->c1 - p->c0, sp->h, p->sx + p->c0, p->sy);
+    art_blit_part(z, p->id, p->c0, 0, p->c1 - p->c0, sp->h, p->sx + p->c0, p->sy);   /* PL4: art pieces */
 }
 
 /* ================================================================== chunk rendering */
@@ -797,6 +797,11 @@ void render_set_zoom(int zoom, int sx, int sy)
 {
     if (zoom < 0 || zoom >= ZOOM_COUNT || zoom == g_cam.zoom) return;
     if (!art_zoom_available(zoom)) return;     /* F3: that zoom's art does not fit at this resolution */
+    if (s_residency) {                         /* PL4: drop the ghost copies (per zoom anyway) so they leave no hole
+                                                  between the art pages that the swap frees and re-creates */
+        int i;
+        for (i = 0; i < 4; i++) if (s_ghost[i].img.w) { gfx_free_img(&s_ghost[i].img); memset(&s_ghost[i], 0, sizeof(Ghost)); }
+    }
     if (s_residency && !art_set_resident_zoom(zoom)) { log_printf("render: error: zoom %d art not resident", zoom); return; }
     cam_set_zoom(zoom, sx, sy);
     if (s_inited) index_setup();
@@ -1053,7 +1058,7 @@ static int occlude(int z, const RSprite *s, int X0, int Y0, int X1, int Y1)
         ix0 = IMAX(X0, p->sx + p->c0); ix1 = IMIN(X1, p->sx + p->c1);
         iy0 = IMAX(Y0, p->sy); iy1 = IMIN(Y1, p->sy + sp->h);
         if (ix0 >= ix1 || iy0 >= iy1) continue;
-        gfx_blit_part(sp->img, sp->x + ix0 - p->sx, sp->y + iy0 - p->sy, ix1 - ix0, iy1 - iy0, ix0, iy0);
+        art_blit_part(z, p->id, ix0 - p->sx, iy0 - p->sy, ix1 - ix0, iy1 - iy0, ix0, iy0);   /* PL4: art pieces */
         blits++;
     }
     return blits;

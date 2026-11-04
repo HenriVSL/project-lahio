@@ -38,6 +38,8 @@ enum { TG_MACHINERY, TG_HOUSES, TG_TEXTILES, TG_DAIRY, TG_ELECTRONICS,   /* good
 #define TRADE_FIRST_PERIOD  1956
 #define TRADE_END_YEAR      1990     /* clearing trade ends in January */
 #define TRADE_OFFER_MONTHS  6
+#define TRADE_OFFER_WAIT_POL 24      /* PL2: with politics on the offer waits this long for its card (the one-card-a-year gap and
+                                        the election quiet months used to hand 3 of 6 agreements to the Ministry) */
 #define TRADE_COMPLEX_SLOTS 4
 #define TRADE_REVIEW_PCT    80
 #define OIL_PLANT_UNITS     25       /* oil units / month of an oil plant (clearing credit at index 100) */

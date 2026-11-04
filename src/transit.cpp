@@ -527,3 +527,22 @@ void transit_load(struct SaveFile *sf)
     s_serial++;
     s_edit = -1;
 }
+
+/* ------------------------------------------------------------------ PL3: undo/redo */
+int transit_set_line(int line, const BusLine *l)
+{
+    int s, edit = s_edit;
+    if (line < 0 || line >= BUS_MAX_LINES) return 0;
+    if (s_lines[line].used) transit_delete_line(line);       /* removes its shelters */
+    if (l && l->used) {
+        s_lines[line] = *l;
+        world_batch_begin();
+        for (s = 0; s < s_lines[line].nstops; s++) place_shelter(&s_lines[line], s);
+        world_batch_end();
+        s_depots = count_depots();
+        line_status(&s_lines[line]);
+        if (edit == line) s_edit = edit;                       /* undoing a stop keeps drawing the same line */
+    }
+    s_serial++;
+    return 1;
+}

@@ -42,7 +42,9 @@ typedef struct {
 enum { REJ_NONE = 0, REJ_NO_ROAD_REACH = 32, REJ_LOCKED, REJ_NO_MONEY, REJ_BRIDGE_TOO_LONG,
        REJ_BRIDGE_NOT_STRAIGHT, REJ_NOTHING_TO_DO, REJ_PROTECTED_TILE, REJ_WRONG_TERRAIN,
        REJ_NEEDS_RAIL, REJ_BUS_NOT_ROAD, REJ_BUS_MAX, REJ_BUS_NO_ROUTE,   /* M2 (transit.h) */
-       REJ_CPX_WATER, REJ_CPX_RAIL, REJ_CPX_FAR, REJ_CPX_NO_GIFT, REJ_CPX_ROAD };   /* M6 (complex.h) */
+       REJ_CPX_WATER, REJ_CPX_RAIL, REJ_CPX_FAR, REJ_CPX_NO_GIFT, REJ_CPX_ROAD,     /* M6 (complex.h) */
+       REJ_NO_RAILWAY,     /* PL2: the station on a map without a railway */
+       REJ_CPX_MAIN_ROAD };/* PL2: Valtion Metalli on a map without a railway: needs a main road within 2 tiles */
 enum { PT_OK, PT_UPGRADE, PT_NOOP, PT_REJECT };
 typedef struct { u8 x, y, state, reason; } PreviewTile;
 #define TOOL_MAX_PREVIEW 2048

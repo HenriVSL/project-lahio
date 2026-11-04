@@ -75,8 +75,11 @@ const EraYear *era_year_row(int i);        /* 0 = first January */
    era_news() is the latest issue; era_news_pending() > 0 when one waits to be shown (game.cpp pauses and the
    UI shows it; ui_news_close -> era_news_seen). Kinds: the January issue, a ceremony page (town status), the
    end-of-era newsreel (1990, also on demand). Text is plain English with Latin-1 escapes (THEME 6 tone). */
-enum { NEWS_NONE, NEWS_YEAR, NEWS_CEREMONY, NEWS_NEWSREEL, NEWS_KIND_COUNT };
+enum { NEWS_NONE, NEWS_YEAR, NEWS_CEREMONY, NEWS_NEWSREEL,
+       NEWS_SPECIAL,                       /* PL1: special edition for an urgent problem (advice.h, <= 1 a game year) */
+       NEWS_KIND_COUNT };
 #define NEWS_HEADS 3
+#define NEWS_CAB   3                       /* PL1: "From the Cabinet" lines (advice.h ADV_TEXT) */
 typedef struct {
     int  kind, year, month, issue_no, status;  /* status: ceremony TS_* */
     char head[NEWS_HEADS][64];             /* headlines (head[0] = the main one) */
@@ -84,6 +87,14 @@ typedef struct {
     char body[NEWS_HEADS][240];            /* a short paragraph */
     char filler_head[48], filler[200];     /* the satirical filler */
     int  topic[NEWS_HEADS];                /* NT_* (tests) */
+    /* PL1 (ERA chunk v2): the Cabinet's advice (January paper, special edition), clickable in the UI (AGO_*, x, y) */
+    int  ncab;
+    char cab[NEWS_CAB][200];
+    u8   cab_kind[NEWS_CAB], cab_go[NEWS_CAB];
+    s16  cab_x[NEWS_CAB], cab_y[NEWS_CAB];
+    char hind_head[48], hind[240];         /* "In hindsight" (January, replaces the filler when set) */
+    int  nverdict;
+    char verdict[3][120];                  /* newsreel: "What the history books will say" */
 } NewsIssue;
 enum { NT_NONE, NT_ERA, NT_STATUS, NT_GROWTH, NT_DECLINE, NT_EMIGRATION, NT_UNEMPLOYMENT, NT_MONEY_UP, NT_MONEY_DOWN,
        NT_LOAN, NT_ELECTION, NT_LANDMARK, NT_CLEARING_DEFICIT, NT_CLEARING_SURPLUS, NT_WEST_UP, NT_WEST_DOWN,
@@ -96,6 +107,7 @@ void era_news_seen_kind(int kind);
 void era_news_build_year(NewsIssue *out);  /* generate the January issue for the current date (tests) */
 void era_news_build_ceremony(NewsIssue *out, int ts);
 void era_news_build_newsreel(NewsIssue *out);
+void era_news_build_special(NewsIssue *out, int adv_kind);   /* PL1: tests / scripts ("news special"); ADV_* */
 void era_news_request_newsreel(void);      /* on demand (UI) */
 int  era_news_score(int topic);            /* last generation: newsworthiness per topic (tests, debug) */
 int  era_newsreel_lines(char lines[][96], int max);   /* summary lines (what you built, decrees, emigration) */
@@ -103,7 +115,11 @@ int  era_newsreel_lines(char lines[][96], int max);   /* summary lines (what you
 /* ------------------------------------------------------------------ messages (ticker; game.cpp drains) */
 enum { EM_OFFER, EM_SIGNED, EM_AUTO_SIGNED, EM_DEFICIT, EM_SHORTFALL, EM_OIL_SHOCK, EM_OIL_SHOCK2, EM_OIL_COLLAPSE,
        EM_CLEARING_END, EM_DEVALUATION, EM_LOAN, EM_LOAN_REPAID, EM_RIGHTS_PETITION, EM_SAUNA_NIGHT, EM_STATUE,
-       EM_LANDMARK, EM_COUNT };
+       EM_LANDMARK,
+       EM_POWER_NEAR,      /* PL1: a = demand % of supply (>= 90, before a shortage) */
+       EM_RIGHTS_NEAR,     /* PL1: a = TS_* within reach, b = population */
+       EM_RIGHTS_REMIND,   /* PL1: a = TS_*, b = months the decree has waited */
+       EM_COUNT };
 typedef struct { u8 type; s32 a, b; } EraMsg;
 void era_push_msg(int type, s32 a, s32 b);
 int  era_poll_msg(EraMsg *m);
@@ -113,7 +129,7 @@ int  era_msg_panel(const EraMsg *m);       /* 1 = clicking the ticker opens the 
 /* ------------------------------------------------------------------ scripts, debug, save */
 int  era_script_line(int n, char **t, FILE *out);   /* SCR_* (tools.h) or -1 = not an M7 command:
         trade sign modest|standard|ambitious | trade bond | trade complex SLOT GOODS EAST WEST | trade dump |
-        era dump | era sauna | news [year|ceremony|newsreel|seen] */
+        era dump | era sauna | news [year|ceremony|newsreel|special [ADV_*]|seen] | advice (PL1 dump) */
 void era_dump(FILE *f);
 u32  era_hash(void);
 struct SaveFile;

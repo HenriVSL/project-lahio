@@ -93,4 +93,8 @@ struct SaveFile;
 void transit_save(struct SaveFile *sf);    /* written inside the TRAF chunk (v2+) */
 void transit_load(struct SaveFile *sf);
 
+/* PL3: undo/redo of line edits (tools.cpp keeps BusLine snapshots): line `line` becomes *l (l NULL or l->used 0
+   = no line); its shelters are re-placed, the status recomputed. No money moves (the undo log refunds). */
+int  transit_set_line(int line, const BusLine *l);
+
 #endif

@@ -55,7 +55,9 @@ enum { CPX_NONE, CPX_PAPER, CPX_METAL, CPX_KIND_COUNT };
 #define CPX_MAX_GIFTS   16
 #define CPX_GIFT_RADIUS 12          /* gifts go within 12 tiles (Chebyshev) of the complex */
 #define CPX_BUILD_MONTHS 6
-#define CPX_DEP_PCT     40          /* company town: complex jobs >= 40% of all jobs */
+#define CPX_DEP_PCT     30          /* company town: the company's jobs >= 30% of the town's factory jobs (industry zone, logging,
+                                       complexes; a paper company also owns the wood industry and the logging; complex.cpp).
+                                       PL2: was 40% of ALL jobs, never reached (a 900-job mill is 15% of a 6,000 town's jobs) */
 
 enum { CF_RAPIDS = 0x01,           /* paper: own hydro on the rapids (no grid power) */
        CF_MODERNISED = 0x02,       /* paper: accepted the new machine (fewer jobs, same output) */
@@ -133,6 +135,7 @@ int  complex_risk_ahead(int *ev, int *months);   /* M7 newspaper: an announced r
 int  complex_check_place(int kind, int x, int y, Money *cost);
 int  complex_place(int kind, int x, int y);              /* complex index + 1, 0 = refused (no money check) */
 int  complex_tool_locked(int def, char *hint, int size); /* 1 = not available now (hint "Market town", ...) */
+int  complex_map_has_rail(void);       /* PL2: the map has a railway (else Valtion Metalli takes a main road) */
 Money complex_tool_cost(int def);          /* what the fly-out shows (VM by decree: 0) */
 int  complex_gift_pending(void);           /* gifts waiting */
 int  complex_gift_def(int k);              /* def of waiting gift k (0 = head), B_NONE if none */
@@ -172,5 +175,9 @@ void complex_after_load(int had_chunk);    /* recompute the module use tables */
 struct SaveFile;
 int  complex_save(struct SaveFile *sf);    /* chunk "CPLX" v1 */
 int  complex_load(struct SaveFile *sf);    /* 0 = no chunk */
+
+/* PL3: undo of a gift placement (tools.cpp undo log): the gift lot goes and the gift waits again at the head of
+   the queue (its mood boost taken back). 0 = not possible (lot changed, queue full). Redo = complex_place_gift. */
+int  complex_gift_undo(int lot);
 
 #endif

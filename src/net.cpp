@@ -73,6 +73,7 @@ static int s_dirty, s_turn, s_elem_factories;
 /* incremental state from the last full flood: components as lot lists in BFS order */
 static u16 s_tcomp[NTILES];             /* component of a flooded tile (valid where s_mark == s_pgen) */
 static u16 s_pgen;                      /* s_gen of the last full flood */
+static int s_pbb[4], s_pbb_full = 1;     /* PL4: box of tiles that may carry power bits (solve_power_full) */
 static u32 s_pserial;                   /* world_struct_serial() at the last full flood */
 static u16 s_pnext[MAX_LOTS], s_lot_pcomp[MAX_LOTS];
 static u8  s_pknown[MAX_LOTS];
@@ -201,6 +202,7 @@ void net_reset(void)
     s_turn = 0;
     s_pvalid = 0;
     s_wvalid = 0;
+    s_pbb_full = 1; s_pbb[2] = -1;                       /* PL4 */
 }
 
 void net_mark_dirty(int nets)
@@ -307,21 +309,34 @@ static int power_cond(const Tile *t)
 }
 
 #define conductive(idx) (s_cond[idx] == 1)
+/* PL4: s_cond is evaluated lazily (only tiles the flood looks at: s_cmk == s_gen), and the bits pass covers only
+   the box of the last flood's tiles + every box where a solver set power bits since (s_pbb; whole map after a
+   reset/load). Same values, same flood order, same changed tiles as the full-map passes. */
+static u16 s_cmk[NTILES];
+static void pbb_add(int x0, int y0, int x1, int y1)
+{
+    if (s_pbb[2] < 0) { s_pbb[0] = x0; s_pbb[1] = y0; s_pbb[2] = x1; s_pbb[3] = y1; return; }
+    s_pbb[0] = IMIN(s_pbb[0], x0); s_pbb[1] = IMIN(s_pbb[1], y0); s_pbb[2] = IMAX(s_pbb[2], x1); s_pbb[3] = IMAX(s_pbb[3], y1);
+}
+#define PCOND(idx) (s_cmk[idx] == s_gen ? s_cond[idx] : pcond_eval(idx))
+static u8 pcond_eval(int idx)
+{
+    const Tile *t = &g_world.t[idx];
+    s_cmk[idx] = (u16)s_gen;
+    return s_cond[idx] = (u8)(power_cond(t) ? 1 : (t->road & TR_CLASS_MASK) ? 2 : 0);
+}
 
 static void solve_power_full(void)
 {
     int i, x, y, qt = 0, w = g_world.w, h = g_world.h, ncomp = 0, x0 = 9999, y0 = 9999, x1 = -1, y1 = -1;
+    int fbx0, fby0, fbx1, fby1, rx0, ry0, rx1, ry1;
     NetStats *ns = &s_ns[0];
     memset(ns, 0, sizeof(*ns));
     next_gen();
     s_pgen = s_gen;
     s_pserial = world_struct_serial();
-    for (y = 0; y < h; y++) {
-        const Tile *t = WT(0, y);
-        u8 *cd = &s_cond[TILE_IDX(0, y)];
-        for (x = 0; x < w; x++, t++)
-            cd[x] = (u8)(power_cond(t) ? 1 : (t->road & TR_CLASS_MASK) ? 2 : 0);
-    }
+    if (s_gen == 1) memset(s_cmk, 0, sizeof(s_cmk));                     /* PL4: stamps wrapped with s_gen */
+    fbx0 = fby0 = 9999; fbx1 = fby1 = -1;
     memset(s_pknown, 0, sizeof(s_pknown));
     for (i = 1; i < g_world.lot_hi; i++) {
         s_lot_pstate[i] = NLS_NONE;
@@ -340,7 +355,11 @@ static void solve_power_full(void)
         for (y = ly0; y <= ly1; y++)
             for (x = lx0; x <= lx1; x++) { int idx = TILE_IDX(x, y); s_mark[idx] = s_gen; s_queue[qt++] = (u16)idx; }
         while (qh < qt) {
-            int idx = s_queue[qh++], tx = idx & (MAP_STRIDE - 1), ty = idx >> MAP_SHIFT, lot = g_world.t[idx].lot, d;
+            int idx = s_queue[qh++], tx = idx & (MAP_STRIDE - 1), ty = idx >> MAP_SHIFT, lot = g_world.t[idx].lot;
+            if (tx < fbx0) fbx0 = tx;
+            if (tx > fbx1) fbx1 = tx;
+            if (ty < fby0) fby0 = ty;
+            if (ty > fby1) fby1 = ty;
             if (lot && s_lot_gen[lot] != s_gen) {
                 Lot *l = &g_world.lots[lot];
                 s_lot_gen[lot] = s_gen;
@@ -354,21 +373,23 @@ static void solve_power_full(void)
                     s_lot_pstate[lot] = NLS_OK;
                 } else s_order[nl++] = (u16)lot;
             }
-            for (d = 0; d < DIR_COUNT; d++) {
-                int nx = tx + g_dir_dx[d], ny = ty + g_dir_dy[d], ni;
-                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                ni = TILE_IDX(nx, ny);
-                if (s_mark[ni] == s_gen) continue;
-                if (conductive(ni)) { s_mark[ni] = s_gen; s_queue[qt++] = (u16)ni; continue; }
+            /* PL4: the 4 directions in DIR order (NE (0,-1), SE (+1,0), SW (0,+1), NW (-1,0)), unrolled */
 #if POWER_JUMP_ROADS
-                if (s_cond[ni] == 2) {
-                    int jx = nx + g_dir_dx[d], jy = ny + g_dir_dy[d], ji;
-                    if (jx < 0 || jy < 0 || jx >= w || jy >= h) continue;
-                    ji = TILE_IDX(jx, jy);
-                    if (s_mark[ji] != s_gen && conductive(ji)) { s_mark[ji] = s_gen; s_queue[qt++] = (u16)ji; }
-                }
-#endif
+#define PSTEP(ok, ni, jok, ji) \
+            if ((ok) && s_mark[ni] != s_gen) { \
+                int c_ = PCOND(ni); \
+                if (c_ == 1) { s_mark[ni] = s_gen; s_queue[qt++] = (u16)(ni); } \
+                else if (c_ == 2 && (jok) && s_mark[ji] != s_gen && PCOND(ji) == 1) { s_mark[ji] = s_gen; s_queue[qt++] = (u16)(ji); } \
             }
+#else
+#define PSTEP(ok, ni, jok, ji) \
+            if ((ok) && s_mark[ni] != s_gen && PCOND(ni) == 1) { s_mark[ni] = s_gen; s_queue[qt++] = (u16)(ni); }
+#endif
+            PSTEP(ty > 0, idx - MAP_STRIDE, ty > 1, idx - 2 * MAP_STRIDE)
+            PSTEP(tx < w - 1, idx + 1, tx < w - 2, idx + 2)
+            PSTEP(ty < h - 1, idx + MAP_STRIDE, ty < h - 2, idx + 2 * MAP_STRIDE)
+            PSTEP(tx > 0, idx - 1, tx > 1, idx - 2)
+#undef PSTEP
         }
         /* allocate in BFS order: the furthest consumers lose power first */
         left = supply;
@@ -400,8 +421,17 @@ static void solve_power_full(void)
         if (s_lot_pstate[i] == NLS_OK) l->flags |= LF_POWERED; else l->flags &= ~LF_POWERED;
         if (s_lot_pstate[i] == NLS_NONE && lot_active(l) && CPX_DEF_USE(l->def, power_use, CPXU_POWER) > 0) ns->lots_unconnected++;
     }
-    for (y = 0; y < h; y++)
-        for (x = 0; x < w; x++) {
+    /* bits: tiles of this flood or with bits from an earlier solve (PL4: s_pbb box; outside it none) */
+    rx0 = 0; ry0 = 0; rx1 = w - 1; ry1 = h - 1;
+    if (!s_pbb_full) {
+        rx0 = fbx0; ry0 = fby0; rx1 = fbx1; ry1 = fby1;
+        if (s_pbb[2] >= 0) { rx0 = IMIN(rx0, s_pbb[0]); ry0 = IMIN(ry0, s_pbb[1]); rx1 = IMAX(rx1, s_pbb[2]); ry1 = IMAX(ry1, s_pbb[3]); }
+        rx0 = IMAX(rx0, 0); ry0 = IMAX(ry0, 0); rx1 = IMIN(rx1, w - 1); ry1 = IMIN(ry1, h - 1);
+    }
+    s_pbb_full = 0;
+    s_pbb[0] = fbx0; s_pbb[1] = fby0; s_pbb[2] = fbx1; s_pbb[3] = fby1;
+    for (y = ry0; y <= ry1; y++)
+        for (x = rx0; x <= rx1; x++) {
             int idx = TILE_IDX(x, y);
             Tile *t = &g_world.t[idx];
             u8 nb = (u8)(s_mark[idx] == s_gen ? s_newbits[idx] : 0);
@@ -512,6 +542,7 @@ static int solve_power_incremental(void)
                         Tile *t = WT(xx, yy);
                         t->zone = (u8)((t->zone & ~(ZF_POWER_NET | ZF_POWERED)) | want);
                     }
+                pbb_add(lx0, ly0, lx1, ly1);                        /* PL4 */
                 x0 = IMIN(x0, lx0); y0 = IMIN(y0, ly0); x1 = IMAX(x1, lx1); y1 = IMAX(y1, ly1);
             }
         }
@@ -1421,6 +1452,7 @@ int net_load(struct SaveFile *sf)
     load_bytes(sf, &s_ws[1], s_nws * (int)sizeof(WaterSrc));
     load_bytes(sf, s_ns, sizeof(s_ns));
     s_rr_dirty = 2; s_pvalid = 0; s_wvalid = 0; update_roads();
+    s_pbb_full = 1; s_pbb[2] = -1;                       /* PL4: loaded tiles carry their bits */
     memset(s_winfo, 0xFF, sizeof(s_winfo));   /* per-tile BFS data is not saved: the next solve rebuilds it */
     s_wr_dirty = 0; s_lc_hi = 1;
     memset(s_lc_key, 0, sizeof(s_lc_key)); memset(s_lc_ok, 0, sizeof(s_lc_ok)); memset(s_lw_ok, 0, sizeof(s_lw_ok));

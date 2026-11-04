@@ -489,7 +489,7 @@ static void draw_frame_decor(void)
     int x, y, i, by = -1;
     /* top bar */
     spr_tile(A.bar_tile, L->top.x, L->top.y, L->top.w, L->top.h);
-    txt(L->top.x + 8, L->top.y + 3, GAME_TITLE " " GAME_VERSION, FONT_BODY_BRASS);
+    txt(L->top.x + 8, L->top.y + 3, GAME_TITLE " " TEXT_DOT " Version " GAME_VERSION, FONT_BODY_BRASS);
     str_printf(buf, sizeof(buf), "A town-builder of the Finnish reconstruction");
     txt_r(L->top.x + L->top.w - 8, L->top.y + 3, buf, FONT_BODY_LIGHT);
     /* teak panel */
@@ -593,7 +593,7 @@ static void screen_title(void)
         spr(fr, ix + 14, iy + ty);
         spr(A.pres_l[2], ix + 16, iy + ty + 2);
         txt_c(ix + 14, spr_w(fr), iy + ty + 6 + spr_h(fr), g_cfg.president, FONT_BODY_DARK);
-        txt(ix + 8, iy + ih - 13, "Version " GAME_VERSION " " TEXT_DOT " Milestone 1", FONT_BODY_GREY);
+        txt(ix + 8, iy + ih - 13, "Version " GAME_VERSION, FONT_BODY_GREY);
         spr(A.seal, ix + iw - 24, iy + ih - 22);
     }
     bx = ix + 14 + spr_w(fr) + 22; by = iy + ty;

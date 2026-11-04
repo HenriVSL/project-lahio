@@ -31,7 +31,8 @@ static const Mod s_vm[] = { { B_VM_HALL, 0, 0 }, { B_VM_YARD, 3, 0 }, { B_VM_SID
 
 /* paper stages (INDUSTRY.md 7.2): jobs, wood, power, water, air pollution, West share of exports */
 static const s16 s_pjobs[4] = { 0, 300, 600, 900 };
-static const s16 s_pwood[4] = { 0, 40, 80, 120 };
+static const s16 s_pwood[4] = { 0, 40, 70, 120 };     /* PL2: PM2 80 -> 70 (what the town's two logging blocks yield; the
+                                                            bot mill sat at 61-76 for 15 years and never got PM2) */
 static const s16 s_ppow[4]  = { 0, 40, 70, 100 };
 static const s16 s_pwat[4]  = { 0, 30, 60, 90 };
 static const s16 s_ppol[4]  = { 0, 250, 400, 500 };
@@ -354,13 +355,24 @@ static int water_side(int x, int y, int *rapids)
     return n;
 }
 
-static int rail_near(int x0, int y0, int x1, int y1, int d)
+/* PL2: cls ROAD_RAIL = the railway; ROAD_MAIN = a main road (the national road counts) */
+static int rail_near(int x0, int y0, int x1, int y1, int d, int cls)
 {
     int x, y;
     for (y = y0 - d; y <= y1 + d; y++)
         for (x = x0 - d; x <= x1 + d; x++)
-            if (world_in(x, y) && TILE_ROAD(WT(x, y)) == ROAD_RAIL) return 1;
+            if (world_in(x, y) && (cls == ROAD_RAIL ? TILE_ROAD(WT(x, y)) == ROAD_RAIL
+                                                    : TILE_ROAD(WT(x, y)) == ROAD_MAIN)) return 1;
     return 0;
+}
+
+/* PL2 (PLAYTEST 2 item 9): players can't lay track, so on maps (and old saves) without a railway the state works make
+   do with a main road: lorries instead of the siding */
+int complex_map_has_rail(void)
+{
+    int rn[ROAD_CLASS_COUNT];
+    world_road_stats(rn, NULL, NULL);
+    return rn[ROAD_RAIL] > 0;
 }
 
 int complex_vm_permit(void)
@@ -422,7 +434,10 @@ int complex_check_place(int kind, int x, int y, Money *cost)
         if (r != PLACE_OK) return r;
     }
     if (kind == CPX_PAPER && water_side(x, y, &rapids) < 2) return REJ_CPX_WATER;
-    if (kind == CPX_METAL && !rail_near(x, y, x + w - 1, y + h - 1, 2)) return REJ_CPX_RAIL;
+    if (kind == CPX_METAL) {
+        if (complex_map_has_rail()) { if (!rail_near(x, y, x + w - 1, y + h - 1, 2, ROAD_RAIL)) return REJ_CPX_RAIL; }
+        else if (!rail_near(x, y, x + w - 1, y + h - 1, 2, ROAD_MAIN)) return REJ_CPX_MAIN_ROAD;   /* PL2 */
+    }
     if (!world_footprint_road_dist(x, y, x + w - 1, y + h - 1, 2, &rr)) return REJ_CPX_ROAD;
     if (cost) *cost = c;
     return PLACE_OK;
@@ -917,13 +932,15 @@ static void update(Complex *c, int idx)
     /* owner */
     if (owner_present(c)) mood_step(c, fill);
     /* stages */
-    if (fill >= 90 && c->jobs > 0) c->staffed++; else c->staffed = 0;
+    if (fill >= 80 && c->jobs > 0) c->staffed++; else c->staffed = 0;   /* PL2: 90 -> 80 (a labour-short town fills every
+                                                                          employer alike: 86% kept PM2 away for 15 years) */
     if (c->staffed > 120) c->staffed = 120;
     /* the mill's contracts come first: only other complexes' wood counts against it (the sawmills then run short) */
     avail = W->supply - (W->need_ext - c->wood_need);
     if (c->kind == CPX_PAPER) {
         if (!c->next && c->stage < 3 && (c->ev_state != EVS_RUNNING) &&
-            complex_paper_stage_ok(c->stage + 1, st->population, avail, year, transit_stations() > 0, c->staffed >= 6, c->mood)) {
+            complex_paper_stage_ok(c->stage + 1, st->population, avail, year, transit_stations() > 0 || !complex_map_has_rail(),   /* PL2: no rail: lorries */
+                                   c->staffed >= 6, c->mood)) {
             c->next = (u8)(c->stage + 1); c->build_left = CPX_BUILD_MONTHS;
             push_msg(CM_STAGE_START, idx, c->next, 0);
         }
@@ -971,7 +988,7 @@ static Money gift_upkeep(void)
 void complex_month(void)
 {
     const CityStats *st = sim_stats();
-    int i, rate = 0, ct, mi = now_mi();
+    int i, rate = 0, ct, mi = now_mi(), paper = 0;
     s32 cj = 0;
     Money svc, contrib;
     /* Valtion Metalli unlock (DESIGN 14.3): a hidden decree with politics, a Market-town unlock without */
@@ -1001,9 +1018,16 @@ void complex_month(void)
         const Complex *c = &X.c[i];
         if (!c->kind || !(c->flags & CF_ACTIVE)) continue;
         cj += c->jobs;
+        if (c->kind == CPX_PAPER) paper = 1;
         rate = IMAX(rate, c->kind == CPX_PAPER ? 20 : 10);       /* the patron pays a fifth, the state a tenth */
     }
-    X.dep_pct = st->jobs > 0 ? (int)((s64)cj * 100 / st->jobs) : 0;
+    {   /* PL2: the company's share of the town's FACTORY jobs (industry zone + logging + complexes; shops and services don't
+           make a company town). A paper company also owns the sawmills and joineries and buys the logging: a 5-8k mill town
+           at PM1-2 reaches it, a 12k engineering town grows out of it. Valtion Metalli counts only its own works. */
+        s32 ind = st->jobs_zone[ZONE_INDUSTRY] + st->jobs_zone[ZONE_FORESTRY] + cj, chain = cj;
+        if (paper) chain += industry_kinds()->jobs[IK_WOOD] + st->jobs_zone[ZONE_FORESTRY];
+        X.dep_pct = ind > 0 ? (int)ICLAMP((s64)chain * 100 / ind, (s64)0, (s64)100) : 0;
+    }
     ct = X.dep_pct >= CPX_DEP_PCT && rate > 0;
     if (ct != X.company_town) push_msg(CM_COMPANY_TOWN, 0, X.dep_pct, ct);
     X.company_town = ct;
@@ -1027,7 +1051,8 @@ int complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x
     buf[0] = 0;
     switch (m->type) {
     case CM_PLACED:
-        if (kind == CPX_METAL) str_printf(buf, size, "Valtion Metalli breaks ground by the railway. The Ministry promises tractors within six months.");
+        if (kind == CPX_METAL) str_printf(buf, size, complex_map_has_rail() ? "Valtion Metalli breaks ground by the railway. The Ministry promises tractors within six months."
+                                                                            : "Valtion Metalli breaks ground by the main road. Lorries will do until the railway comes; the Ministry promises tractors within six months.");
         else str_printf(buf, size, "%s breaks ground by the water%s. Production starts in six months.", nm, m->a ? ", on the rapids: its own turbines will power it" : "");
         sev = SEV_POLITICAL; break;
     case CM_PRODUCTION:
@@ -1052,8 +1077,8 @@ int complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x
                    m->a == B_PATRON_VILLA ? "The patron's villa" : "The gift of ", m->a == B_PATRON_VILLA ? "" : complex_gift_name(m->a, kind));
         break;
     case CM_COMPANY_TOWN:
-        if (m->b) str_printf(buf, size, "Company town: %d%% of the jobs are at the works. The company now pays part of the school, clinic and fire upkeep.", m->a);
-        else str_printf(buf, size, "No longer a company town: %d%% of the jobs are at the works.", m->a);
+        if (m->b) str_printf(buf, size, "Company town: %d%% of the factory jobs are the company's. It now pays part of the school, clinic and fire upkeep.", m->a);
+        else str_printf(buf, size, "No longer a company town: %d%% of the factory jobs are the company's.", m->a);
         sev = SEV_POLITICAL; break;
     case CM_EV_ANNOUNCE:
         sev = SEV_WARN;
@@ -1073,10 +1098,12 @@ int complex_msg_text(char *buf, int size, const CpxMsg *m, int *severity, int *x
         str_copy(buf, "The Ministry seeks a site for a state metal works. A decree would bring Valtion Metalli here: President's desk > Decrees.", size);
         sev = SEV_POLITICAL; break;
     case CM_VM_PERMIT:
-        str_copy(buf, "Decree signed: Valtion Metalli builds its works here at the state's expense. Pick a site by the railway: Industry > Valtion Metalli.", size);
+        str_copy(buf, complex_map_has_rail() ? "Decree signed: Valtion Metalli builds its works here at the state's expense. Pick a site by the railway: Industry > Valtion Metalli."
+                                             : "Decree signed: Valtion Metalli builds its works here at the state's expense. With no railway here, pick a site by a main road: Industry > Valtion Metalli.", size);
         sev = SEV_POLITICAL; break;
     case CM_VM_UNLOCK:
-        str_copy(buf, "As a market town we may now host a state metal works: Industry > Valtion Metalli (by the railway).", size);
+        str_copy(buf, complex_map_has_rail() ? "As a market town we may now host a state metal works: Industry > Valtion Metalli (by the railway)."
+                                             : "As a market town we may now host a state metal works: Industry > Valtion Metalli (by a main road: there is no railway here).", size);
         break;
     case CM_CLEARING_END:
         if (!m->a) str_copy(buf, "The clearing trade with the East ends in January. Valtion Metalli expects to halve its output.", size);
@@ -1170,9 +1197,9 @@ int complex_lot_line(int lot, int k, char *buf, int size, int *font)
     }
     LINE(X.company_town ? 3 : 1)
         text_fmt_money(b, sizeof(b), X.contrib, year);
-        if (X.company_town) str_printf(buf, size, "Company town: %d%% of all jobs here; the company pays %d%% of school, clinic "
+        if (X.company_town) str_printf(buf, size, "Company town: %d%% of the factory jobs here; the company pays %d%% of school, clinic "
                                        "and fire upkeep (%s last month)", X.dep_pct, X.contrib_rate, b);
-        else str_printf(buf, size, "%d%% of all jobs here (company town from %d%%)%s%s", X.dep_pct, CPX_DEP_PCT,
+        else str_printf(buf, size, "%d%% of the factory jobs here (company town from %d%%)%s%s", X.dep_pct, CPX_DEP_PCT,
                         X.contrib > 0 ? "; gift upkeep paid " : "", X.contrib > 0 ? b : "");
     END
     n = 0;
@@ -1196,8 +1223,8 @@ int complex_lot_line(int lot, int k, char *buf, int size, int *font)
             s32 avail = W->supply - (W->need_ext - c->wood_need);
             if (c->stage == 1) str_printf(buf, size, "PM2 needs: town 3,000 (%d), wood %d for the mill (%d), staff, mood 31+",
                                           sim_stats()->population, s_pwood[2], avail);
-            else str_printf(buf, size, "PM3 needs: 1963, town 6,000 (%d), wood %d (%d), a railway station, mood 31+",
-                            sim_stats()->population, s_pwood[3], avail);
+            else str_printf(buf, size, "PM3 needs: 1963, town 6,000 (%d), wood %d (%d)%s, mood 31+",
+                            sim_stats()->population, s_pwood[3], avail, complex_map_has_rail() ? ", a railway station" : "");
         END
     }
     {
@@ -1375,4 +1402,24 @@ void complex_after_load(int had_chunk)
         fill_use(&X.c[i]);
         industry_set_ext_wood(i, X.c[i].wood_need);
     }
+}
+
+/* ------------------------------------------------------------------ PL3: gift undo */
+int complex_gift_undo(int lot)
+{
+    const Lot *l = world_lot(lot);
+    int k, j, cpx;
+    if (!l || X.nq >= CPX_GIFT_QUEUE) return 0;
+    for (k = X.ng - 1; k >= 0; k--) if (X.g[k].def == l->def && X.g[k].x == l->x && X.g[k].y == l->y) break;
+    if (k < 0) return 0;
+    cpx = X.g[k].cpx;
+    for (j = k; j + 1 < X.ng; j++) X.g[j] = X.g[j + 1];
+    X.ng--;
+    for (j = X.nq; j > 0; j--) X.q[j] = X.q[j - 1];
+    X.q[0].def = (u8)l->def; X.q[0].cpx = (u8)cpx;
+    X.nq++;
+    X.c[cpx].gift_boost = (s16)IMAX(0, X.c[cpx].gift_boost - GIFT_BOOST);
+    log_printf("complex: gift %s at %d,%d taken back (undo)", def_building(l->def)->key, l->x, l->y);
+    world_lot_remove(lot);
+    return 1;
 }

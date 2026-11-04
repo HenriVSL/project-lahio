@@ -12,6 +12,7 @@
 #include "tools.h"
 #include "budget.h"
 #include "fields.h"
+#include "advice.h"     /* PL1: building purposes in the unlock line */
 
 static const char *const s_months[MONTHS_PER_YEAR] = { "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December" };
@@ -185,6 +186,8 @@ const char *text_place_reason(int place)
     case REJ_CPX_FAR:           return "Gifts go within 12 tiles of the works";
     case REJ_CPX_NO_GIFT:       return "No gift is waiting";
     case REJ_CPX_ROAD:          return "Needs a road within 2 tiles";
+    case REJ_NO_RAILWAY:        return "No railway on this map: the station has nothing to stand by";   /* PL2 */
+    case REJ_CPX_MAIN_ROAD:     return "No railway here: needs a main road within 2 tiles";             /* PL2 */
     }
     return "?";
 }
@@ -342,7 +345,7 @@ int text_req_line(char *buf, int size, const ReqItem *it)
             return str_printf(buf, size, "%s District heating: %s (heat plant %s/%s)", g,
                               it->why == 2 ? "short" : "no spare for a bigger block", a, b);
         }
-        return str_printf(buf, size, "%s District heating (no heated pipe within reach)", g);
+        return str_printf(buf, size, "%s District heating (no heat plant's pipe within reach)", g);   /* PL1: names the heat plant */
     case REQ_ROUTE:                 /* M2: traffic.cpp; have = commute in walk tiles */
         if (it->met) return str_printf(buf, size, "%s Route to jobs (%d tiles)", g, (int)it->have);
         return str_printf(buf, size, "%s Route to jobs (no road to the town's jobs)", g);
@@ -420,6 +423,8 @@ int text_event(char *buf, int size, const SimEvent *e, int *severity)
     case SE_UNLOCK:
         if (e->b == 1) return str_printf(buf, size, "Now available: %s.", (e->a > 0 && e->a < ROAD_CLASS_COUNT) ? g_roads[e->a].name : "a new road");
         if (e->b == 2) return str_printf(buf, size, "Now available: %s zones.", text_zone_name(e->a));
+        if (advice_purpose((int)e->a) && (e->a == B_HEAT_PLANT || e->a == B_ELEMENT_FACTORY || e->a == B_WATER_TOWER || e->a == B_SEWAGE_WORKS))
+            return str_printf(buf, size, "Now available: %s. %s.", def_building(e->a)->name, advice_purpose((int)e->a));   /* PL1 */
         return str_printf(buf, size, "Now available: %s.", def_building(e->a)->name);
     case SE_EMIGRATION:
         text_fmt_int(a, sizeof(a), e->a);

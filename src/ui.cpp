@@ -44,12 +44,14 @@
 #include "traffic.h"      /* M2 */
 #include "transit.h"      /* M2 */
 #include "complex.h"      /* M6 */
+#include "era.h"
+#include "advice.h"       /* PL1: progression, unlock sentences, purposes, the power summary */
 
 /* ================================================================== constants */
 #define WIN_MAX_W   340          /* the panel target; every panel fits (600x420 rule: fits 640x480) */
 #define WIN_MAX_H   320
 #define POP_W       300          /* fly-out / tooltip target */
-#define POP_H       208
+#define POP_H       216          /* PL1: 208 -> 216 (fly-out footer line: unlock sentence / purpose) */
 #define CMD_QUEUE   16
 #define TICK_MAX    8
 #define TICK_TEXT   160
@@ -67,11 +69,11 @@ enum { C_TOP, C_SIDE, C_TICKER, C_WIN, C_POP, C_COUNT };
 static const char *const s_cache_name[C_COUNT] = { "top", "side", "ticker", "window", "popup" };
 
 /* hot ids (what the mouse is over) */
-enum { H_NONE = 0, H_TOP = 1, H_DATE, H_FUNDS, H_POP, H_DEMAND, H_APPROVAL, H_WATER /* F1 */,
+enum { H_NONE = 0, H_TOP = 1, H_DATE, H_FUNDS, H_POP, H_DEMAND, H_APPROVAL, H_WATER /* F1 */, H_POWER /* PL1 */,
        H_SPEED0 = 10, H_MENU = 14, H_ZOOM0 = 15 /* F3: zoom out, zoom in */,
        H_SIDE = 20, H_PLATE, H_PLAQUE, H_MMAP, H_TOOLLABEL, H_ZONEV /* F3: zone-view key */,
        H_M7K0 = 26 /* M7: graphs, trade, newspaper keys (26..28) right of the zone-view key */,
-       H_KEY0 = 30, H_MINI0 = 40,
+       H_KEY0 = 30, H_MINI0 = 40, H_GUIDE = 45 /* PL1: the wide Guide key under the M7 row */,
        H_TICKER = 50, H_TICK0 = 51,
        H_FLY = 60, H_FLYROW0 = 61,
        H_WIN = 100, H_CTL0 = 101 };
@@ -98,7 +100,8 @@ static struct {
     int seal;
     int zoom[2][4];                  /* F3: btn_zoom_out/in x normal hover pressed disabled */
     int zonev[2];                    /* F3: icon_zoneview, _off */
-    int m7k[3][2];                   /* M7: icon_graphs, icon_trade, icon_newspaper (+ _off) */
+    int m7k[4][2];                   /* M7: icon_graphs, icon_trade, icon_newspaper (+ _off); PL1: [3] = Services (icon_key_services) */
+    int guide[2];                    /* PL1: icon_info (+ _off) on the Guide key */
 } S;
 static Slice9 s9_btn[BS_COUNT], s9_fly, s9_inset, s9_mmap, s9_plaque, s9_tip, s9_win;
 static Slice3 s3_well, s3_cal, s3_flyhover, s3_flysel, s3_grille, s3_plate, s3_track, s3_fill, s3_tab[3];
@@ -182,7 +185,7 @@ static double s_win_check;
 static int s_ovl_local, s_ovl_seen, s_show_buildings = 1;
 typedef struct { s16 x, y, w, h; u8 kind; s16 a, b; } Ctl;
 enum { CK_CLOSE, CK_TAB, CK_SLIDER, CK_BUTTON, CK_CHECK, CK_OVL, CK_POL /* M1: ui_pol.cpp */ };
-enum { BT_RESUME, BT_SAVE, BT_QUICKSAVE, BT_LOAD, BT_MENU, BT_QUIT, BT_CLOSE };
+enum { BT_RESUME, BT_SAVE, BT_QUICKSAVE, BT_LOAD, BT_MENU, BT_QUIT, BT_CLOSE, BT_RIGHTS /* PL1: open the desk at the town-rights decree */ };
 enum { CHK_BUILDINGS };
 static Ctl s_ctl[MAX_CTL];
 static int s_nctl;
@@ -190,7 +193,7 @@ static int s_drag_ctl = -1, s_drag_val, s_drag_mmap;
 static int s_tax_res = -1, s_tax_bus = -1;   /* last values sent (shown until the budget follows) */
 
 /* top bar hit rects (indexed by H_* - H_DATE) */
-static s16 s_topr[6][4];
+static s16 s_topr[7][4];          /* PL1: + Power */
 
 /* side panel */
 static int s_key_drawn[NKEYS], s_mini_drawn[NMINI];
@@ -483,6 +486,7 @@ static int ent_locked(const FlyEnt *e, char *hint, int hsize)
     case TOOL_BUILD: {
         const BuildingDef *d = def_building(e->param);
         if (d->flags & BDF_MODULE) return complex_tool_locked(e->param, hint, hsize);   /* M6 */
+        if (e->param == B_STATION && !all && !complex_map_has_rail()) { str_copy(hint, "No railway here", hsize); return 1; }   /* PL2 */
         if (def_unlocked(e->param, y, st, all)) {
             if (d->variants > 0) return 0;
             str_copy(hint, "Coming later", hsize);
@@ -581,7 +585,7 @@ static void zonev_rect(int *x, int *y, int *w, int *h)
     *w = L->mini.w; *h = L->mini.h;
     *x = L->mini.x; *y = L->grille.y + 1;
 }
-static int grille_top(void) { return L->grille.y + L->mini.h + 4; }
+static int grille_top(void) { return L->grille.y + 2 * L->mini.h + 6; }   /* PL1: below the Guide key row */
 
 void ui_map_rect(int *x, int *y, int *w, int *h)
 {
@@ -589,20 +593,55 @@ void ui_map_rect(int *x, int *y, int *w, int *h)
     *x = L->map.x; *y = L->map.y; *w = L->map.w; *h = L->map.h;
 }
 
+/* PL1 (PLAYTEST 2 items 1, 2c, 4): the fly-out footer for entry i: what unlocks it ("Unlocks at Market town (3,000
+   residents) and 1962") and what it is for ("Lets apartment blocks grow to tier 3"); returns the lines (<= max) */
+static int fly_foot_lines(int k, int i, char lines[][96], int max)
+{
+    const FlyEnt *e = &s_keys[k].e[i];
+    char hint[48];
+    const char *pur = e->tool == TOOL_BUILD ? advice_purpose(e->param) : NULL;
+    int n = 0, lk = ent_locked(e, hint, sizeof(hint));
+    if (lk && n < max) {
+        switch (e->tool) {
+        case TOOL_ROAD: advice_unlock_text(lines[n], 96, g_roads[e->param].status_req, g_roads[e->param].era_year); break;
+        case TOOL_ZONE: advice_unlock_text(lines[n], 96, TS_CHURCH_VILLAGE, 1955); break;
+        case TOOL_GIFT: str_copy(lines[n], "The patron's gift waits here when he sends one", 96); break;
+        case TOOL_BUILD: {
+            const BuildingDef *d = def_building(e->param);
+            if (d->flags & BDF_MODULE) str_printf(lines[n], 96, "Needs: %s", hint);
+            else if (!strcmp(hint, "Coming later")) str_copy(lines[n], "Not in this version yet", 96);
+            else advice_unlock_text(lines[n], 96, d->status_req, d->era_year);
+            break; }
+        default: str_copy(lines[n], hint, 96); break;
+        }
+        if (lines[n][0]) n++;
+    }
+    if (pur && n < max) str_copy(lines[n++], pur, 96);
+    if (!lk && e->tool == TOOL_BUILD && (def_building(e->param)->flags & BDF_MODULE) && n < max)   /* PL3 */
+        str_copy(lines[n++], "Cannot be undone once placed", 96);
+    return n;
+}
+static int s_fly_nfoot = 1;              /* footer lines of the open fly-out (fly_layout: the most any entry needs) */
+static int fly_foot_n(int k) { return s_keys[k].n > 10 ? 1 : 2; }
+
 /* fly-out rect for key k (also sets s_fly_*); content width from the rows */
 static void fly_layout(int k)
 {
-    char cost[48], hint[48];
-    int i, wn = 0, wc = 0, kx, ky, kw, kh;
+    char cost[48], hint[48], fl[2][96];
+    int i, j, wn = 0, wc = 0, wf = 0, kx, ky, kw, kh, nf, nmax = 1;
     for (i = 0; i < s_keys[k].n; i++) {
         const FlyEnt *e = &s_keys[k].e[i];
         int lk = ent_locked(e, hint, sizeof(hint));
         wn = IMAX(wn, txtw(text_tool_name(e->tool, e->param), FONT_BODY_DARK));
         if (!lk) ent_cost(e, cost, sizeof(cost));
         wc = IMAX(wc, txtw(lk ? hint : cost, FONT_BODY_DARK));
+        nf = fly_foot_lines(k, i, fl, fly_foot_n(k));                 /* PL1 */
+        nmax = IMAX(nmax, nf);
+        for (j = 0; j < nf; j++) wf = IMAX(wf, txtw(fl[j], FONT_BODY_GREY));
     }
-    s_fly_w = ICLAMP(8 + 13 + 4 + wn + 12 + wc + 8, 150, POP_W - 8);
-    s_fly_h = 6 + s_keys[k].n * 17 + 6;
+    s_fly_w = ICLAMP(IMAX(8 + 13 + 4 + wn + 12 + wc + 8, wf + 16), 150, POP_W - 8);
+    s_fly_nfoot = nmax;
+    s_fly_h = 6 + s_keys[k].n * 17 + 6 + nmax * 11 + 2;              /* PL1: footer */
     key_rect(k, &kx, &ky, &kw, &kh);
     s_fly_x = L->panel.x - 4 - s_fly_w;
     s_fly_y = ICLAMP(ky - 20, L->top.y + L->top.h + 2, s_sh - s_fly_h - 2);
@@ -689,6 +728,8 @@ static void top_vals(int *v)            /* everything the top bar shows (value s
     v[9] = net_stats(NET_WATER)->used; v[10] = net_stats(NET_WATER)->supply; v[11] = net_stats(NET_WATER)->lots_short;  /* F1 */
     v[12] = politics_enabled() ? politics_popularity() * 2 + (politics_pending_event() >= 0) : -1;   /* M1 */
     v[13] = g_cam.zoom;                                                                               /* F3 */
+    v[14] = net_stats(NET_POWER)->demand; v[15] = net_stats(NET_POWER)->supply * 2 + (net_stats(NET_POWER)->lots_short > 0);  /* PL1 */
+    v[16] = advice_rights_waiting();
 }
 
 static int top_hotstate(void)
@@ -749,9 +790,10 @@ static void compose_top(void)
     x += 4;
     /* demand */
     if (x + 6 + 40 + 19 < limit) {
+        const char *lab = L->scr_w >= 800 ? "Demand" : "RCI";      /* PL1: room for Power at 640 */
         spr(S.bar_sep, x, 2); x += 6;
         i = x;
-        txt(x, 3, "Demand", FONT_BODY_BRASS); x += txtw("Demand", FONT_BODY_BRASS) + 4;
+        txt(x, 3, lab, FONT_BODY_BRASS); x += txtw(lab, FONT_BODY_BRASS) + 4;
         spr(S.dem_well, x, 1);
         for (w = 0; w < 3; w++) {
             int v = dem_level(dem_ids[w]);
@@ -762,16 +804,36 @@ static void compose_top(void)
         top_field_rect(3, i, x - i);
         x += 2;
     }
+    /* PL1 (PLAYTEST 2 item 3): power demand / supply over all networks, like Water (tooltip "Power 1,180 / 1,500 (79%)") */
+    {
+        const NetStats *pn = net_stats(NET_POWER);
+        int pct = pn->supply > 0 ? (int)((s64)pn->demand * 100 / pn->supply) : 0;
+        int fnt = pn->lots_short > 0 ? FONT_BODY_RED_LT : pct >= 90 ? FONT_BODY_AMBER : FONT_BODY_LIGHT;
+        const char *lab = L->scr_w >= 800 ? "Power" : "Pow.";
+        str_printf(val, sizeof(val), "%d%%", pct);
+        if (x + 6 + txtw(lab, FONT_BODY_BRASS) + 4 + txtw(val, fnt) + 8 + 6 < limit) {
+            spr(S.bar_sep, x, 2); x += 6;
+            i = x;
+            x += txt(x, 3, lab, FONT_BODY_BRASS) + 4;
+            w = txtw(val, fnt) + 8;
+            draw3h(&s3_well, x, 2, w);
+            txt(x + 4, 2, val, fnt);
+            x += w + 3;
+            top_field_rect(6, i, x - i);
+            x += 2;
+        }
+    }
     /* F1: water used / supplied over all networks (tooltip: "Water 3,400 / 4,000 (85%)") */
     {
         const NetStats *wn = net_stats(NET_WATER);
         int pct = wn->supply > 0 ? (int)((s64)wn->used * 100 / wn->supply) : 0;
         int fnt = wn->lots_short > 0 ? FONT_BODY_RED_LT : pct >= 80 ? FONT_BODY_AMBER : FONT_BODY_LIGHT;
+        const char *lab = L->scr_w >= 800 ? "Water" : "Wat.";      /* PL1: short labels at 640 (room for Power) */
         str_printf(val, sizeof(val), "%d%%", pct);
-        if (x + 6 + txtw("Water", FONT_BODY_BRASS) + 4 + txtw(val, fnt) + 8 + 6 < limit) {
+        if (x + 6 + txtw(lab, FONT_BODY_BRASS) + 4 + txtw(val, fnt) + 8 + 6 < limit) {
             spr(S.bar_sep, x, 2); x += 6;
             i = x;
-            x += txt(x, 3, "Water", FONT_BODY_BRASS) + 4;
+            x += txt(x, 3, lab, FONT_BODY_BRASS) + 4;
             w = txtw(val, fnt) + 8;
             draw3h(&s3_well, x, 2, w);
             txt(x + 4, 2, val, fnt);
@@ -781,17 +843,17 @@ static void compose_top(void)
         }
     }
     /* approval (M1: popularity; hidden when politics is off) */
-    if (politics_enabled() && x + 6 + txtw("Approval", FONT_BODY_BRASS) + 30 < limit) {
+    if (politics_enabled() && x + 6 + txtw(L->scr_w >= 800 ? "Approval" : "Appr.", FONT_BODY_BRASS) + 30 < limit) {
         int pop = politics_popularity();
         spr(S.bar_sep, x, 2); x += 6;
         i = x;
-        x += txt(x, 3, "Approval", FONT_BODY_BRASS) + 4;
+        x += txt(x, 3, L->scr_w >= 800 ? "Approval" : "Appr.", FONT_BODY_BRASS) + 4;
         str_printf(val, sizeof(val), "%d%%", pop);
         w = txtw(val, FONT_BODY_LIGHT) + 8;
         draw3h(&s3_well, x, 2, w);
         txt(x + 4, 2, val, pop >= 60 ? FONT_BODY_GREEN_LT : pop < 40 ? FONT_BODY_RED_LT : FONT_BODY_LIGHT);
         x += w + 3;
-        if (politics_pending_event() >= 0) x += txt(x, 3, "\xa7", FONT_BODY_RED_LT) + 3;
+        if (politics_pending_event() >= 0 || advice_rights_waiting()) x += txt(x, 3, "\xa7", FONT_BODY_RED_LT) + 3;   /* PL1: + town rights */
         top_field_rect(4, i, x - i);
     }
     /* speed keys + menu */
@@ -828,14 +890,30 @@ static void m7k_rect(int k, int *x, int *y, int *w, int *h)
 }
 static int m7k_state(int k)
 {
-    static const int pn[2] = { PANEL_GRAPHS, PANEL_TRADE };
+    static const int pn[4] = { PANEL_GRAPHS, PANEL_TRADE, PANEL_NONE, PANEL_SERVICES };   /* PL1: [3] Services */
     if (s_down && s_press_hot == H_M7K0 + k && s_hot == s_press_hot) return BS_PRESSED;
-    if (k < 2 && s_panel == pn[k]) return BS_SELECTED;
+    if (k != 2 && s_panel == pn[k]) return BS_SELECTED;
     if (k == 2 && uinews_active()) return BS_SELECTED;
     if (s_hot == H_M7K0 + k) return BS_HOVER;
     return BS_NORMAL;
 }
-static int s_m7k_drawn[3] = { -1, -1, -1 };
+static int s_m7k_drawn[4] = { -1, -1, -1, -1 };
+#define NM7K 4                           /* PL1: graphs, trade, newspaper, services */
+
+/* PL1: the wide Guide key: a third row under the zone-view / M7 row, as wide as the mini keys */
+static void guide_rect(int *x, int *y, int *w, int *h)
+{
+    *w = L->mini_count * L->mini.w + (L->mini_count - 1) * L->mini_gap; *h = L->mini.h;
+    *x = L->mini.x; *y = L->grille.y + 1 + L->mini.h + 2;
+}
+static int guide_state(void)
+{
+    if (s_down && s_press_hot == H_GUIDE && s_hot == s_press_hot) return BS_PRESSED;
+    if (uiguide_active()) return BS_SELECTED;
+    if (s_hot == H_GUIDE) return BS_HOVER;
+    return BS_NORMAL;
+}
+static int s_guide_drawn = -1;
 
 static int zonev_state(void)             /* F3 */
 {
@@ -943,10 +1021,20 @@ static void compose_side(const s16 *clip)
     zonev_rect(&x, &y, &w, &h);
     s_zonev_drawn = zonev_state();
     draw_key(x, y, w, h, S.zonev, NULL, s_zonev_drawn);
-    for (i = 0; i < 3 && L->mini_count > 3; i++) {       /* M7 */
+    for (i = 0; i < NM7K && i + 1 < L->mini_count; i++) {       /* M7 (+ PL1 Services) */
         m7k_rect(i, &x, &y, &w, &h);
         s_m7k_drawn[i] = m7k_state(i);
         draw_key(x, y, w, h, S.m7k[i], NULL, s_m7k_drawn[i]);
+    }
+    {   /* PL1: Guide key (icon + "Guide") */
+        int st, o, tw;
+        guide_rect(&x, &y, &w, &h);
+        st = s_guide_drawn = guide_state();
+        o = (st == BS_PRESSED || st == BS_SELECTED) ? 1 : 0;
+        draw9(&s9_btn[st], x, y, w, h, -1);
+        tw = 13 + 4 + txtw("Guide", FONT_BODY_DARK);
+        spr(S.guide[0], x + (w - tw) / 2 + o, y + (h - 1 - 13) / 2 + o);
+        txt(x + (w - tw) / 2 + 17 + o, y + (h - 11) / 2 + o, "Guide", FONT_BODY_DARK);
     }
     /* grille (radio speaker slots) + badge */
     ns = (L->grille.y + L->grille.h - grille_top() - 4 + 3) / 8;
@@ -986,8 +1074,9 @@ static void side_check(void)
     for (i = 0; i < NMINI && i < L->mini_count; i++)
         if (mini_state(i) != s_mini_drawn[i]) { mini_rect(i, &x, &y, &w, &h); side_dirty(x, y, w, h); }
     if (zonev_state() != s_zonev_drawn) { zonev_rect(&x, &y, &w, &h); side_dirty(x, y, w, h); }   /* F3 */
-    for (i = 0; i < 3 && L->mini_count > 3; i++)                                                  /* M7 */
+    for (i = 0; i < NM7K && i + 1 < L->mini_count; i++)                                           /* M7 + PL1 */
         if (m7k_state(i) != s_m7k_drawn[i]) { m7k_rect(i, &x, &y, &w, &h); side_dirty(x, y, w, h); }
+    if (guide_state() != s_guide_drawn) { guide_rect(&x, &y, &w, &h); side_dirty(x, y, w, h); }       /* PL1 */
     sig = hash_bytes(HASH_INIT, ss->town, NAME_LEN);
     if (sig != s_plate_sig) { s_plate_sig = sig; side_dirty(L->plate.x, L->plate.y, L->plate.w, L->plate.h); }
     tool_label_text(buf, sizeof(buf));
@@ -1120,6 +1209,15 @@ static void compose_fly(void)
         if (!lk) ent_cost(e, cost, sizeof(cost));
         txt_r(s_fly_x + s_fly_w - 8, ry + 3, lk ? hint : cost, lk ? FONT_BODY_GREY : FONT_BODY_DARK);
     }
+    {   /* PL1: footer for the hovered row: unlock sentence + purpose */
+        char fl[2][96];
+        int nf = 0, j, fy = s_fly_y + 6 + kd->n * 17 + 2, hov = (s_hot >= H_FLYROW0 && s_hot < H_FLYROW0 + kd->n) ? s_hot - H_FLYROW0 : -1;
+        int red = hov >= 0 && ent_locked(&kd->e[hov], hint, sizeof(hint));
+        spr_tile(S.fly_sep, s_fly_x + 6, fy - 1, s_fly_w - 12, 2);
+        if (hov >= 0) nf = fly_foot_lines(s_fly, hov, fl, s_fly_nfoot);
+        else { str_copy(fl[0], "Point at an item: what it needs, what it does", 96); nf = 1; }
+        for (j = 0; j < nf; j++) txt_fit(s_fly_x + 8, fy + 2 + j * 11, fl[j], j == 0 && red ? FONT_BODY_RED : FONT_BODY_GREY, s_fly_w - 16);
+    }
     end_compose(C_POP);
 }
 
@@ -1207,6 +1305,8 @@ static void tip_demand_block(int dem)
     }
 }
 
+static void tip_bar(int pct);                  /* PL1 */
+static void bar(int x, int y, int w, int h, int v, int signed_bar, PIX c);
 /* fill s_tip for hot item h; returns 0 if h has no tooltip */
 static int tip_build(int h)
 {
@@ -1222,10 +1322,10 @@ static int tip_build(int h)
         tip_add(a, FONT_BODY_DARK, NULL, 0);
         str_printf(a, sizeof(a), "Status: %s", text_status_name(cs->town_status));
         tip_add(a, FONT_BODY_DARK, NULL, 0);
-        if (cs->town_status + 1 < TS_COUNT) {
-            text_fmt_int(b, sizeof(b), g_statuses[cs->town_status + 1].population);
-            str_printf(a, sizeof(a), GLYPH_BULLET " Next: %s at %s residents", text_status_name(cs->town_status + 1), b);
-            tip_add(a, FONT_BODY_GREY, NULL, 0);
+        {   /* PL1: "Next: Market town at 3,000 (you have 2,750)" + bar */
+            int pct = advice_progress(b, sizeof(b), NULL);
+            tip_add(b, advice_rights_waiting() ? FONT_BODY_RED : FONT_BODY_GREY, NULL, 0);
+            if (cs->town_status + 1 < TS_COUNT) tip_bar(pct);
         }
         return 1;
     }
@@ -1265,6 +1365,13 @@ static int tip_build(int h)
         tip_add(GLYPH_ARROW_DOWN " Left for Sweden this month", FONT_BODY_DARK, a, cs->emigrated_month ? FONT_BODY_RED : FONT_BODY_DARK);
         text_fmt_int(a, sizeof(a), cs->emigrated_total);
         tip_add("Emigrated to Sweden in all", FONT_BODY_DARK, a, FONT_BODY_RED);
+        {   /* PL1 (PLAYTEST 2 item 1): the next status, how far, and the decree when it waits */
+            int pct = advice_progress(b, sizeof(b), NULL);
+            str_printf(a, sizeof(a), "%s: %s", text_status_name(cs->town_status), b);
+            tip_add(a, advice_rights_waiting() ? FONT_BODY_RED : FONT_BODY_DARK, NULL, 0);
+            if (cs->town_status + 1 < TS_COUNT) tip_bar(pct);
+            if (advice_rights_waiting()) tip_add("\xa7 Click Approval: the decree is on the desk", FONT_BODY_GREY, NULL, 0);
+        }
         return 1;
     }
     if (h == H_DEMAND) {
@@ -1295,10 +1402,30 @@ static int tip_build(int h)
         tip_add("Click for the water overlay", FONT_BODY_GREY, NULL, 0);
         return 1;
     }
+    if (h == H_POWER) {     /* PL1 (PLAYTEST 2 item 3) */
+        const NetStats *pn = net_stats(NET_POWER);
+        PowerNetInfo pt;
+        advice_power_total(&pt);
+        text_fmt_int(a, sizeof(a), pt.demand); text_fmt_int(b, sizeof(b), pt.supply);
+        { char c3[64]; str_printf(c3, sizeof(c3), "Power %s / %s (%d%%)", a, b, pt.pct); tip_add(c3, FONT_BODY_DARK, NULL, 0); }
+        str_printf(a, sizeof(a), "%d network%s " TEXT_DOT " %d short " TEXT_DOT " %d not connected", pn->networks, pn->networks == 1 ? "" : "s",
+                   (int)pn->lots_short, (int)pn->lots_unconnected);
+        tip_add(a, pn->lots_short ? FONT_BODY_RED : FONT_BODY_GREY, NULL, 0);
+        text_fmt_int(b, sizeof(b), pt.spare);
+        if (pn->lots_short) str_printf(a, sizeof(a), "Short by %d units: the furthest buildings go dark first", (int)(pt.demand - pt.supply));
+        else str_printf(a, sizeof(a), "Spare: %s units%s", b, pt.pct >= 90 ? " - time for a new plant" : "");
+        tip_add(a, pn->lots_short ? FONT_BODY_RED : pt.pct >= 90 ? FONT_BODY_AMBER : FONT_BODY_GREY, NULL, 0);
+        tip_add("Click for the power overlay", FONT_BODY_GREY, NULL, 0);
+        return 1;
+    }
     if (h == H_APPROVAL) {      /* M1 */
         char pl[8][64];
         n = uipol_tip(pl, 8);
         for (k = 0; k < n; k++) tip_add(pl[k], k == 0 ? FONT_BODY_DARK : FONT_BODY_GREY, NULL, 0);
+        if (advice_rights_waiting()) {     /* PL1: the town-rights decree waits (\xa7) */
+            str_printf(a, sizeof(a), "\xa7 %s rights await your signature", text_status_name(era_status_eligible()));
+            tip_add(a, FONT_BODY_RED, NULL, 0);
+        }
         return 1;
     }
     if (h >= H_SPEED0 && h < H_SPEED0 + 4) {
@@ -1347,10 +1474,16 @@ static int tip_build(int h)
         tip_add("Shows zone borders whatever tool you hold", FONT_BODY_GREY, NULL, 0);
         return 1;
     }
-    if (h >= H_M7K0 && h < H_M7K0 + 3) {              /* M7 */
-        static const char *const t1[3] = { "Graphs (G)", "Trade and the treasury (T)", "The newspaper (N)" };
-        static const char *const t2[3] = { "Population, money, demand, work, approval, clearing",
-                                           "The clearing agreement, the balance, oil, the bond", "Maakunnan Sanomat: the latest issue" };
+    if (h == H_GUIDE) {                               /* PL1 */
+        tip_add("The President's Handbook (F4)", FONT_BODY_DARK, NULL, 0);
+        tip_add("The town ladder, what each system is for, the keys", FONT_BODY_GREY, NULL, 0);
+        return 1;
+    }
+    if (h >= H_M7K0 && h < H_M7K0 + NM7K) {           /* M7 + PL1 */
+        static const char *const t1[NM7K] = { "Graphs (G)", "Trade and the treasury (T)", "The newspaper (N)", "Services (E)" };
+        static const char *const t2[NM7K] = { "Population, money, demand, work, approval, clearing",
+                                              "The clearing agreement, the balance, oil, the bond", "Maakunnan Sanomat: the latest issue",
+                                              "Schools, clinics, saunas... load / capacity; power and water" };
         tip_add(t1[h - H_M7K0], FONT_BODY_DARK, NULL, 0);
         tip_add(t2[h - H_M7K0], FONT_BODY_GREY, NULL, 0);
         return 1;
@@ -1359,12 +1492,15 @@ static int tip_build(int h)
 }
 
 static u32 tip_sig(void) { return hash_bytes(HASH_INIT, s_tip, s_ntip * (int)sizeof(TipLine)); }
+#define TIP_BAR 0xFF                       /* PL1: a progress bar line (r[0] = percent) */
+static void tip_bar(int pct) { char r[2]; r[0] = (char)ICLAMP(pct, 1, 100); r[1] = 0; tip_add("", TIP_BAR, r, TIP_BAR); }
 
 static void compose_tip(void)
 {
     Cache *c = &s_c[C_POP];
     int i, w = 0, h, x, y, lw;
     for (i = 0; i < s_ntip; i++) {
+        if (s_tip[i].fl == TIP_BAR) { w = IMAX(w, 160); continue; }
         lw = txtw(s_tip[i].l, s_tip[i].fl) + (s_tip[i].r[0] ? 12 + txtw(s_tip[i].r, s_tip[i].fr) : 0);
         w = IMAX(w, lw);
     }
@@ -1378,6 +1514,7 @@ static void compose_tip(void)
     begin_compose(c, 1, NULL);
     draw9(&s9_tip, x, y, w, h, COL(UI_COL_TIP));
     for (i = 0; i < s_ntip; i++) {
+        if (s_tip[i].fl == TIP_BAR) { bar(x + 6, y + 4 + i * 11, w - 13, 7, (u8)s_tip[i].r[0], 0, COL(UI_COL_GREEN)); continue; }
         txt(x + 6, y + 3 + i * 11, s_tip[i].l, s_tip[i].fl);
         if (s_tip[i].r[0]) txt_r(x + w - 7, y + 3 + i * 11, s_tip[i].r, s_tip[i].fr);
     }
@@ -1646,12 +1783,19 @@ static void panel_population(int x, int y, int w, int h)
         rule(x + 6, yy, w - 12); yy += 6;
         str_printf(b, sizeof(b), "Status: %s", text_status_name(cs->town_status));
         txt(x + 6, yy, b, FONT_BODY_DARK);
-        if (cs->town_status + 1 < TS_COUNT) {
-            text_fmt_int(a, sizeof(a), g_statuses[cs->town_status + 1].population);
-            str_printf(b, sizeof(b), "next: %s at %s", text_status_name(cs->town_status + 1), a);
-            txt_r(x + w - 6, yy, b, FONT_BODY_GREY);
+        {   /* PL1 (PLAYTEST 2 item 1): "Next: Market town at 3,000 (you have 2,750)" + progress bar; the decree when it waits */
+            char pg[96];
+            int pct = advice_progress(pg, sizeof(pg), NULL), sw = txtw(b, FONT_BODY_DARK) + 12;
+            if (advice_rights_waiting()) {
+                yy += 12;
+                button(x + 6, yy, w - 12, 18, pg, BT_RIGHTS);
+                yy += 20;
+            } else {
+                txt_fit(x + sw, yy, pg, FONT_BODY_GREY, w - 6 - sw);
+                yy += 12;
+                if (cs->town_status + 1 < TS_COUNT) { bar(x + 6, yy, w - 12, 6, pct, 0, COL(UI_COL_GREEN)); yy += 9; }
+            }
         }
-        yy += 12;
         str_printf(b, sizeof(b), "Lots: %d houses, %d apartments, %d shops, %d industry",
                    cs->lots_tier[ZONE_HOUSES][1] + cs->lots_tier[ZONE_HOUSES][2] + cs->lots_tier[ZONE_HOUSES][3],
                    cs->lots_tier[ZONE_APARTMENTS][1] + cs->lots_tier[ZONE_APARTMENTS][2] + cs->lots_tier[ZONE_APARTMENTS][3],
@@ -1782,6 +1926,8 @@ static void panel_query(int x, int y, int w, int h)
                    (d->zone == ZONE_HOUSES ? "houses" : d->zone == ZONE_APARTMENTS ? "apartments" : d->zone == ZONE_COMMERCIAL ? "commercial" :
                     d->zone == ZONE_FORESTRY ? "forestry" : d->zone == ZONE_FARM ? "farm" : "industry")   /* M3 */
                    : d->key);
+        if (d->flags & BDF_MODULE)              /* PL3: complex modules show their complex's icon (no per-module icons) */
+            str_copy(ic, complex_kind_of_def(li.def) == CPX_PAPER ? "b_paper_mill" : "b_valtion_metalli", sizeof(ic));
         spr(icon_id(ic, li.status == LOT_ABANDONED), x + 6, yy + 2);
         { const Lot *l = world_lot(s_q_lot); text_address(l ? l->x : 0, l ? l->y : 0, b, sizeof(b)); }
         txt_fit(x + 24, yy, b, FONT_BODY_DARK, w - 30);
@@ -1793,6 +1939,9 @@ static void panel_query(int x, int y, int w, int h)
         txt_fit(x + 24, yy + 11, b, FONT_BODY_GREY, w - 30);
         yy += 26;
         rule(x + 6, yy, w - 12); yy += 6;
+        if (d->cat != BCAT_ZONE && advice_purpose(li.def)) {     /* PL1: what it is for (heat plant: "Lets apartment blocks grow to tier 3") */
+            txt_fit(x + 6, yy, advice_purpose(li.def), FONT_BODY_GREY, w - 12); yy += 12;
+        }
         if (d->cat == BCAT_ZONE) {
             if (d->water_use > 0) yy = query_water(x, yy, w, ymax, s_q_lot, d);   /* F1 */
             for (k = 0; k < 4 && yy < ymax - 80; k++) {     /* M3: why this kind, its input, exports; farms, camps */
@@ -1824,7 +1973,27 @@ static void panel_query(int x, int y, int w, int h)
                 str_printf(b, sizeof(b), "Catchment: %s tiles by road", a);
                 txt(x + 6, yy, b, FONT_BODY_DARK); yy += 12;
             }
-            if (li.power_out) { text_fmt_int(a, sizeof(a), li.power_out); str_printf(b, sizeof(b), "Power output: %s units", a); txt(x + 6, yy, b, FONT_BODY_DARK); yy += 12; }
+            if (d->cat == BCAT_POWER) {    /* PL1 (PLAYTEST 2 item 5): like the water source query, for the whole network */
+                PowerNetInfo pn;
+                if (advice_power_network(s_q_lot, &pn) && pn.supply > 0) {
+                    text_fmt_int(a, sizeof(a), pn.demand); text_fmt_int(c2, sizeof(c2), pn.supply);
+                    if (pn.lots_short) str_printf(b, sizeof(b), "Power %s / %s used (%d%%) - brownout", a, c2, pn.pct);
+                    else { char sp[24]; text_fmt_int(sp, sizeof(sp), pn.spare); str_printf(b, sizeof(b), "Power %s / %s used (%d%%), %s spare", a, c2, pn.pct, sp); }
+                    txt_fit(x + 6, yy, b, pn.lots_short ? FONT_BODY_RED : pn.pct >= 90 ? FONT_BODY_AMBER : FONT_BODY_DARK, w - 12); yy += 12;
+                    bar(x + 6, yy, w - 12, 7, pn.pct, 0, pn.lots_short ? COL(UI_COL_RED) : pn.pct >= 90 ? COL(UI_COL_AMBER) : COL(UI_COL_GREEN)); yy += 10;
+                    if (pn.lots_short) str_printf(b, sizeof(b), "Serves %d buildings; %d in the dark (the furthest first)", pn.lots - pn.lots_short, pn.lots_short);
+                    else str_printf(b, sizeof(b), "Serves %d buildings", pn.lots);
+                    txt_fit(x + 6, yy, b, pn.lots_short ? FONT_BODY_RED : FONT_BODY_DARK, w - 12); yy += 12;
+                    text_fmt_int(a, sizeof(a), li.power_out);
+                    if (pn.plants > 1) str_printf(b, sizeof(b), "This plant: %s units of the network's %s (%d plants)", a, c2, pn.plants);
+                    else str_printf(b, sizeof(b), "This plant: %s units", a);
+                    txt_fit(x + 6, yy, b, FONT_BODY_GREY, w - 12); yy += 12;
+                } else if (li.power_out) {
+                    text_fmt_int(a, sizeof(a), li.power_out);
+                    str_printf(b, sizeof(b), "Power output: %s units (nothing connected yet)", a);
+                    txt_fit(x + 6, yy, b, FONT_BODY_DARK, w - 12); yy += 12;
+                } else { txt(x + 6, yy, "Power: not producing", FONT_BODY_GREY); yy += 12; }
+            } else if (li.power_out) { text_fmt_int(a, sizeof(a), li.power_out); str_printf(b, sizeof(b), "Power output: %s units", a); txt(x + 6, yy, b, FONT_BODY_DARK); yy += 12; }
             yy = query_water(x, yy, w, ymax, s_q_lot, d);      /* F1 (WATER.md 3.6 B/C) */
             if (d->jobs) { text_fmt_int(a, sizeof(a), li.occupants); text_fmt_int(c2, sizeof(c2), d->jobs);
                 str_printf(b, sizeof(b), "Staff: %s/%s", a, c2); txt(x + 6, yy, b, FONT_BODY_DARK); yy += 12; }
@@ -1989,8 +2158,8 @@ static void legend(int x, int y, int w, int ovl)
     case OVL_GROWTH: ramp = OVR_PROBLEM; cats = growc; ncat = GROWC_COUNT; break;
     case OVL_ZONES: ramp = OVR_ZONE; break;
     case OVL_HEAT: {                                  /* M5 */
-        static const char *const heatc[4] = { "Heated", "Not connected", "Short of heat", "Heated pipe / land" };
-        ramp = OVR_NET; cats = heatc; ncat = 4; break; }
+        static const char *const heatc[5] = { "Heated", "Not connected", "Short of heat", "Heated pipe", "New lots get heat" };   /* PL3 */
+        ramp = OVR_NET; cats = heatc; ncat = 5; break; }
     case OVL_NONE: break;
     default: ramp = OVR_COVER; lo = "none"; hi = "full"; break;
     }
@@ -2113,7 +2282,9 @@ static void panel_services(int x, int y, int w, int h)
     rule(x + 6, yy, w - 12); yy += 6;
     text_fmt_int(a, sizeof(a), cs->power_demand); text_fmt_int(b, sizeof(b), cs->power_supply);
     str_printf(ic, sizeof(ic), "%s / %s units", a, b);
-    row_lr(x + 6, yy, w - 12, "Power used / supplied", FONT_BODY_DARK, ic, cs->power_demand > cs->power_supply ? FONT_BODY_RED : FONT_BODY_DARK);
+    row_lr(x + 6, yy, w - 12, cs->power_supply > 0 && cs->power_demand * 10 >= cs->power_supply * 9 && cs->power_demand <= cs->power_supply ?
+           "Power used / supplied (nearly full)" : "Power used / supplied", FONT_BODY_DARK, ic,
+           cs->power_demand > cs->power_supply ? FONT_BODY_RED : cs->power_demand * 10 >= cs->power_supply * 9 ? FONT_BODY_AMBER : FONT_BODY_DARK);
     yy += 11;
     text_fmt_int(a, sizeof(a), net_stats(NET_WATER)->used); text_fmt_int(b, sizeof(b), cs->water_supply);   /* F1: delivered */
     str_printf(ic, sizeof(ic), "%s / %s units", a, b);
@@ -2126,7 +2297,7 @@ static void panel_settings(int x, int y, int w, int h)
     int k, bw = w - 40;
     UNUSED(h);
     for (k = 0; k < 6; k++) button(x + 20, y + 8 + k * 25, bw, 20, lab[k], BT_RESUME + k);
-    txt_c(x, w, y + 8 + 6 * 25 + 4, GAME_TITLE " " GAME_VERSION, FONT_BODY_GREY);
+    txt_c(x, w, y + 8 + 6 * 25 + 4, GAME_TITLE " " TEXT_DOT " Version " GAME_VERSION, FONT_BODY_GREY);
 }
 
 static void panel_size(int p, int *w, int *h)
@@ -2208,7 +2379,8 @@ static u32 panel_data_sig(void)
         for (d = 0; d < DEM_COUNT; d++) h = hash_bytes(h, sim_demand(d), sizeof(Demand));
         break; }
     case PANEL_QUERY:
-        if (s_q_lot) { LotInfo li; memset(&li, 0, sizeof(li)); sim_query_lot(s_q_lot, &li); h = hash_bytes(h, &li, sizeof(li)); }
+        if (s_q_lot) { LotInfo li; PowerNetInfo pn; memset(&li, 0, sizeof(li)); sim_query_lot(s_q_lot, &li); h = hash_bytes(h, &li, sizeof(li));
+                       if (def_building(li.def)->cat == BCAT_POWER) { advice_power_network(s_q_lot, &pn); h = hash_bytes(h, &pn, sizeof(pn)); } }   /* PL1 */
         else { TileInfo ti; memset(&ti, 0, sizeof(ti)); sim_query_tile(s_q_x, s_q_y, &ti); h = hash_bytes(h, &ti, sizeof(ti)); }
         break;
     case PANEL_SERVICES:
@@ -2283,7 +2455,7 @@ static int hit_test(int mx, int my)
         for (i = 0; i < 4; i++) { speed_rect(i, &x, &y, &w, &h); if (in_rect(mx, my, x, y, w, h)) return H_SPEED0 + i; }
         if (in_rect(mx, my, L->menu_key.x, L->menu_key.y, L->menu_key.w, L->menu_key.h)) return H_MENU;
         for (i = 0; i < 2 && L->zoom_key.w > 0; i++) { zoom_rect(i, &x, &y, &w, &h); if (in_rect(mx, my, x, y, w, h)) return H_ZOOM0 + i; }   /* F3 */
-        for (i = 0; i < 6; i++) if (s_topr[i][2] && in_rect(mx, my, s_topr[i][0], s_topr[i][1], s_topr[i][2], s_topr[i][3])) return H_DATE + i;
+        for (i = 0; i < 7; i++) if (s_topr[i][2] && in_rect(mx, my, s_topr[i][0], s_topr[i][1], s_topr[i][2], s_topr[i][3])) return H_DATE + i;
         return H_TOP;
     }
     if (in_rect(mx, my, L->panel.x, L->panel.y, L->panel.w, L->panel.h)) {
@@ -2291,7 +2463,9 @@ static int hit_test(int mx, int my)
         for (i = 0; i < NMINI && i < L->mini_count; i++) { mini_rect(i, &x, &y, &w, &h); if (in_rect(mx, my, x, y, w - 1, h - 1)) return H_MINI0 + i; }
         zonev_rect(&x, &y, &w, &h);
         if (in_rect(mx, my, x, y, w - 1, h - 1)) return H_ZONEV;                     /* F3 */
-        for (i = 0; i < 3 && L->mini_count > 3; i++) { m7k_rect(i, &x, &y, &w, &h); if (in_rect(mx, my, x, y, w - 1, h - 1)) return H_M7K0 + i; }   /* M7 */
+        for (i = 0; i < NM7K && i + 1 < L->mini_count; i++) { m7k_rect(i, &x, &y, &w, &h); if (in_rect(mx, my, x, y, w - 1, h - 1)) return H_M7K0 + i; }   /* M7 + PL1 */
+        guide_rect(&x, &y, &w, &h);
+        if (in_rect(mx, my, x, y, w - 1, h - 1)) return H_GUIDE;                    /* PL1 */
         if (in_rect(mx, my, L->mmap.x, L->mmap.y, L->mmap.w, L->mmap.h)) return H_MMAP;
         if (in_rect(mx, my, L->plaque.x, L->plaque.y, L->plaque.w, L->plaque.h)) return H_PLAQUE;
         return H_SIDE;
@@ -2351,6 +2525,7 @@ static void ctl_click(int i)
         case BT_LOAD:      cmd(UC_LOAD, 0, 0); ui_close_panel(); break;
         case BT_MENU:      cmd(UC_MENU, 0, 0); ui_close_panel(); break;
         case BT_QUIT:      cmd(UC_QUIT, 0, 0); break;
+        case BT_RIGHTS:    uipol_show(DEC_TOWN_RIGHTS * 10 + 1); break;     /* PL1 */
         }
         break;
     }
@@ -2364,8 +2539,9 @@ static void click(int h)
         return;
     }
     if (h == H_ZONEV) { s_zone_view = !s_zone_view; cmd(UC_ZONE_VIEW, s_zone_view, 0); return; }   /* F3 */
-    if (h >= H_M7K0 && h < H_M7K0 + 3) {                                                          /* M7 */
-        int pn = h == H_M7K0 ? PANEL_GRAPHS : PANEL_TRADE;
+    if (h == H_GUIDE) { cmd(UC_M7, M7A_GUIDE, 0); return; }                                        /* PL1 */
+    if (h >= H_M7K0 && h < H_M7K0 + NM7K) {                                                       /* M7 + PL1 */
+        int pn = h == H_M7K0 ? PANEL_GRAPHS : h == H_M7K0 + 3 ? PANEL_SERVICES : PANEL_TRADE;
         if (h == H_M7K0 + 2) { cmd(UC_M7, M7A_NEWS_LAST, 0); return; }
         if (s_panel == pn) ui_close_panel(); else ui_open_panel(pn);
         return;
@@ -2373,6 +2549,7 @@ static void click(int h)
     if (h == H_MENU) { if (s_panel == PANEL_SETTINGS) ui_close_panel(); else ui_open_panel(PANEL_SETTINGS); return; }
     if (h == H_FUNDS) { ui_open_panel(PANEL_BUDGET); return; }
     if (h == H_WATER) { cmd(UC_OVERLAY, render_overlay() == OVL_WATER ? OVL_NONE : OVL_WATER, 0); return; }   /* F1 */
+    if (h == H_POWER) { cmd(UC_OVERLAY, render_overlay() == OVL_POWER ? OVL_NONE : OVL_POWER, 0); return; }   /* PL1 */
     if (h == H_POP || h == H_DEMAND) { s_tab[PANEL_POPULATION] = h == H_DEMAND ? 0 : 1; ui_open_panel(PANEL_POPULATION); return; }
     if (h == H_DATE) { ui_open_panel(PANEL_POPULATION); s_tab[PANEL_POPULATION] = 1; return; }
     if (h == H_APPROVAL || (h == H_PLAQUE && politics_enabled())) {     /* M1 */
@@ -2487,6 +2664,19 @@ void ui_ticker_hint(const char *text)
 
 int ui_lot_hover_ok(void) { return s_inited && s_fly < 0; }
 
+/* PL3: rects overlap (the hover label must not draw over the panel window or a fly-out) */
+static int rects_meet(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh)
+{
+    return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
+}
+int ui_rect_covered(int x, int y, int w, int h)
+{
+    if (!s_inited) return 0;
+    if (s_panel && rects_meet(x, y, w, h, s_win_x, s_win_y, s_win_w, s_win_h)) return 1;
+    if (s_fly >= 0 && rects_meet(x, y, w, h, s_fly_x, s_fly_y, s_fly_w + 6, s_fly_h)) return 1;
+    return 0;
+}
+
 void ui_president_say(int mood)
 {
     s_mood = ICLAMP(mood, 0, PRES_MOOD_COUNT - 1);
@@ -2556,6 +2746,8 @@ static void art_resolve(void)
         S.m7k[0][0] = icon_id("graphs", 0); S.m7k[0][1] = icon_id("graphs", 1);         /* M7 */
         S.m7k[1][0] = icon_id("trade", 0); S.m7k[1][1] = icon_id("trade", 1);
         S.m7k[2][0] = icon_id("newspaper", 0); S.m7k[2][1] = icon_id("newspaper", 1);
+        S.m7k[3][0] = icon_id("key_services", 0); S.m7k[3][1] = icon_id("key_services", 1);   /* PL1 */
+        S.guide[0] = icon_id("info", 0); S.guide[1] = icon_id("info", 1);
     }
     for (i = 0; i < FONT_COUNT; i++) font_build(i);
 }
@@ -2653,7 +2845,7 @@ static void president_auto(void)
 
 void ui_update(double dt)
 {
-    int i, v[16], r;
+    int i, v[20], r;
     u32 sv, sh;
     if (!s_inited) return;
     s_now += dt;
@@ -2676,7 +2868,7 @@ void ui_update(double dt)
 
     /* ---- top bar */
     top_vals(v);
-    sv = hash_ints(v, 14);
+    sv = hash_ints(v, 17);
     sh = (u32)top_hotstate();
     if (s_c[C_TOP].dirty || sh != s_c[C_TOP].sig_hot || (sv != s_c[C_TOP].sig_val && s_now - s_c[C_TOP].last >= VALUE_RATE)) {
         if (sv != s_c[C_TOP].sig_val) s_c[C_TOP].last = s_now;
@@ -2993,8 +3185,11 @@ int ui_selftest(void)
             case P_QUERY_LOT: t_mouse(mapx + 20, mapy + 300); ui_open_query(house, 0, 0); break;
             case P_QUERY_TILE: ui_open_query(0, 45, 52); break;
             case P_OVERLAYS: t_mini_centre(2, &mx, &my); t_mouse(mx, my); t_press(); break;
-            case P_SERVICES: t_mouse(mapx + 20, mapy + 300); ui_open_panel(PANEL_SERVICES); break;
-            case P_SETTINGS: t_mouse(L->menu_key.x + 5, L->menu_key.y + 5); t_press(); break;
+            case P_SERVICES:      /* PL1: through the new Services key (PLAYTEST 2 item 6: the panel was unreachable) */
+                ui_close_panel(); m7k_rect(3, &mx, &my, &k, &i); t_mouse(mx + k / 2, my + i / 2); t_press(); break;
+            case P_SETTINGS:
+                t_check(s_panel == PANEL_SERVICES, "PL1: the Services key opened the Services panel (panel %d)", s_panel);
+                t_mouse(L->menu_key.x + 5, L->menu_key.y + 5); t_press(); break;
             case P_MMAP: ui_close_panel(); t_mouse(L->mmap.x + 20, L->mmap.y + 20); t_press(); break;
             case P_RUNNING: t_mouse(mapx + 100, mapy + 200); sim_set_speed(SPEED_3); ui_float_money(46, 64, -450); break;
             case P_IDLE_PANEL: sim_set_speed(SPEED_PAUSE); ui_open_panel(PANEL_BUDGET); s_tab[PANEL_BUDGET] = 0; t_mouse(mapx + 100, mapy + 200); break;
@@ -3126,6 +3321,23 @@ void uix_tabs(int x, int y, int right, const char *const *names, int n, int sel)
 int  uix_tab(void) { return s_tab[PANEL_POLITICS]; }
 int  uix_tab_of(int panel) { return (panel > PANEL_NONE && panel < PANEL_COUNT) ? s_tab[panel] : 0; }   /* M7 */
 void ui_set_panel_tab(int tab) { if (s_panel > PANEL_NONE) { s_tab[s_panel] = tab; s_c[C_WIN].dirty = 1; } }   /* M7 */
+/* PL1 */
+void ui_open_flyout(int key) { if (key >= 0 && key < NKEYS && s_keys[key].n > 1 && !key_all_locked(key)) fly_open(key); else fly_close(); }
+void ui_advice_go(int go, int x, int y)
+{
+    switch (go) {
+    case AGO_POWER:    cmd(UC_OVERLAY, OVL_POWER, 0); break;
+    case AGO_WATER:    cmd(UC_OVERLAY, OVL_WATER, 0); break;
+    case AGO_HEAT:     cmd(UC_OVERLAY, OVL_HEAT, 0); break;
+    case AGO_SERVICES: ui_open_panel(PANEL_SERVICES); break;
+    case AGO_PEOPLE:   s_tab[PANEL_POPULATION] = 1; ui_open_panel(PANEL_POPULATION); break;
+    case AGO_DEMAND:   s_tab[PANEL_POPULATION] = 0; ui_open_panel(PANEL_POPULATION); break;
+    case AGO_BUDGET:   ui_open_panel(PANEL_BUDGET); break;
+    case AGO_DESK:     if (politics_enabled()) uipol_show(DEC_TOWN_RIGHTS * 10 + 1); break;
+    }
+    if (x >= 0 && y >= 0 && go != AGO_SERVICES && go != AGO_PEOPLE && go != AGO_DEMAND && go != AGO_BUDGET && go != AGO_DESK)
+        cmd(UC_CAMERA, x, y);
+}
 void uix_set_tab(int t) { s_tab[PANEL_POLITICS] = t; }
 void uix_sprite(int id, int x, int y) { if (id > 0) spr(id, x, y); }
 void uix_portrait(int mood, int x, int y)

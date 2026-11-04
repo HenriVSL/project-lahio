@@ -21,9 +21,9 @@ python3 art/gen_art.py -j 1 --nopreview   # single process, skip previews
 | `artlib.py` | core: solids, ray-cast G-buffer, palette + style C, shading passes (`normal`, `ab` = abandoned), BMP writer, skyline packer |
 | `art_terrain.py` | ground materials: grass/meadow, water + shimmer frames, shores (with islet cleanup), fields, marsh, road/rail autotile geometry, lot grounds |
 | `art_models.py` | materials, trees, props, the Lada, every building builder, construction stage, lot ground, bridges, power poles |
-| `world<k>_64.bmp`, `world<k>_32.bmp` | sheets: 24-bit BI_RGB, 640 wide, <= 2048 tall, key RGB(255,0,255), all colours pre-rounded to RGB565 |
-| `sheet_world<k>_<z>.h` | `static const ArtSpr sheet_world<k>_<z>[]` per sheet (+ `SHEET_..._COUNT`) |
-| `art_world.h` | the index: includes the sheet headers, `art_world_sheets[]`, `ART_WORLD_SHEET_COUNT` (src/art.h convention) |
+| `world<k>_64.bmp`, `world<k>_32.bmp` | **pages** (PL4): 24-bit BI_RGB, <= 512 x 256, key RGB(255,0,255), all colours pre-rounded to RGB565; hold trimmed sprite **pieces** (section 8) |
+| `sheet_world_<z>.h` | per zoom: `art_pieces_<z>[]` (ArtPiece: page, x, y, w, h, dx, dy) + `art_sprites_<z>[]` (ArtPSpr: name, w, h, ax, ay, hx, hy, first piece, count) |
+| `art_world.h` | the index: includes the two headers, `art_world_sheets[]` (the pages, `spr` NULL), `ART_WORLD_SHEET_COUNT`, `art_world_sets[]` (one ArtPieceSet per zoom) (src/art.h convention) |
 | `preview/*.png` | review sheets (`tiles_`, `roads_`, `misc_`, `pipes_zonev_`, `b_<key>_`, `build_ground_`) and mockups `town_64.png`, `town_64_houses.png`, `town_64_overlay.png`, `town_32.png`; F2: `town_64_water.png` / `town_32_water.png` (water overlay with wet/short/dry pipes), `yards_64.png` (industrial band with 1x1 yards), `town_64_zones.png` / `town_32_zones.png` (persistent zone view); M4: `m2_<group>_<64|32>.png` (one sheet per Milestone-2 group) and the 1960s-70s transformation mockups `town_m2_64.png` (concrete suburb, health centre, shopping centre, bus at its stop, heat plant), `town_m2_mill_64.png` (paper mill by the rapids, company housing, church, forestry edge), `town_m2_ind_64.png` (industry kinds, station, Valtion Metalli, farms), `town_m2_south_64.png` (old wooden district being replaced, civic services, sewage works, a house fire), `town_m2_farms_64.png`, `town_m2_32.png`, `town_m2_overview_32.png` |
 | `art_m2_res.py`, `art_m2_ind.py`, `art_m2_cplx.py`, `art_m2_misc.py` | M4 Milestone-2 buildings by group (apartments/commercial/civic; industry kinds/utilities; complexes/gifts/landmarks; transport/farms/forestry/fire/bus): `ENTRIES`, `KEY_ALIASES`, `GROUPS`, `extra_jobs()`, `extra_procedural()` (gen_art.py "Milestone-2 modules") |
 | `art_m2_common.py` | shared imports for those modules, `add_colours()` (new palette entries without editing artlib.py) |
@@ -194,10 +194,13 @@ UI icons (gen_ui.py, UI.md): `icon_b_heat_plant`, `icon_b_sewage_works`, `icon_b
 ## 4. Anchors, hotspots, header format
 
 ```c
-static const ArtSpr sheet_world2_64[] = {
-    { "grass0", 0, 0, 64, 32, 32, 32, -1, -1 },          /* name, x, y, w, h, ax, ay, hx, hy */
-    { "ind_t2_2x2_v0_r0", 512, 1122, 128, 117, 64, 117, 104, 1 }, ... };
+static const ArtPiece art_pieces_64[] = {
+    { 3, 128, 0, 32, 41, 0, 76 },      /* page, x, y, w, h in the page, dx, dy inside the sprite box (PL4) */ ... };
+static const ArtPSpr art_sprites_64[] = {
+    { "grass0", 64, 32, 32, 32, -1, -1, 120, 1 },       /* name, w, h, ax, ay, hx, hy, first piece, count */
+    { "ind_t2_2x2_v0_r0", 128, 117, 64, 117, 104, 1, 431, 3 }, ... };
 ```
+(w, h, ax, ay, hx, hy) describe the sprite box exactly as rendered; the pieces only carry its opaque parts.
 
 - `(ax, ay)`: pixel that sits on the **south vertex of the footprint** (tiles, lots, bridges, power, trees,
   overlays). Draw at `south_vertex - (ax, ay)`. Lot sprites keep their full footprint width (32(n+m) px at 64)
@@ -263,27 +266,38 @@ static const ArtSpr sheet_world2_64[] = {
 
 ## 7. VRAM report (16-bit; `--check` prints the current numbers)
 
-DESIGN 14.5: only the **active zoom's** world sheets are resident in VRAM, so the budget is per zoom. `--check` prints
+DESIGN 14.5: only the **active zoom's** world pages are resident in VRAM, so the budget is per zoom. `--check` prints
 the 64-zoom and 32-zoom world totals separately plus the UI sheets (always resident) and **fails if the 64-zoom
-world sheets exceed 9.6 MB** (the 32-zoom set has the same limit; it is ~1/4 of the 64 set). The old 9 MB limit for
-both zooms together is gone (printed for information only).
+world pages exceed 9.6 MB** (the 32-zoom set has the same limit). PL4 (2026-11-04) cut every sprite into trimmed
+pieces on 512x256 pages (section 8): same pixels, much less transparent margin in VRAM.
 
-| Sheet | Size | KB |
+| Set | Before PL4 (640x2048 sheets) | After PL4 (512x256 pages) |
 |---|---|---|
-| world0_64 | 640x2048 | 2560 |
-| world1_64 | 640x2047 | 2559 |
-| world2_64 | 640x2048 | 2560 |
-| world3_64 | 640x1450 | 1812 |
-| **64-zoom total** | | **9491 KB = 9.27 MB** (limit 9.6 MB: **headroom 339 KB**) |
-| world0_32 | 640x1859 | 2324 KB = 2.27 MB |
-| UI (ui_frame, ui_icons, ui_pres, font_body, font_head) | | 655 KB |
+| 64-zoom world | 4 sheets, 9,520 KB | 31 pages, 1,467 pieces, **7,691 KB** (-1,829 KB; headroom to 9.6 MB 2,139 KB) |
+| 32-zoom world | 1 sheet 640x1861, 2,326 KB | 8 pages, 1,435 pieces, **1,918 KB** |
+| UI (ui_frame, ui_icons, ui_pres, font_body, font_head; gen_ui.py) | 655 KB | 655 KB |
 
-M4 (Milestone-2 buildings) added 2,076 KB at 64 zoom (7,415 -> 9,491) and 499 KB at 32. `--check` prints the
-Milestone-2 groups (unique sprite area, 64 / 32 KB): apartments T2-T3 425 / 106, commercial T3 192 / 48 (+ abandoned),
-industry kinds 405 / 101, services civic 116 / 29, transport 145 / 36, utilities 88 / 22, forestry + farms 88 / 22,
-paper mill 114 / 28, Valtion Metalli 116 / 29, patron gifts 123 / 31, landmarks 109 / 26, fire + bus 16 / 4; plus
-abandoned v0 for apt_t2_* and com_t3_* (~ 320 KB). How it fits: symmetric art with r2/r3 aliases (rots 2), r0-only
+M4 (Milestone-2 buildings) added 2,076 KB at 64 zoom (7,415 -> 9,491, before PL4) and 499 KB at 32. `--check` prints
+the Milestone-2 groups (piece area since PL4). How M4 fit: symmetric art with r2/r3 aliases (rots 2), r0-only
 square/fixed pieces, industry kinds as zero-cost aliases of the M1 tier art, the paper-mill boiler as an alias of
 the heat plant, no abandoned art for industry kinds/services/complexes, only existing footprints, and a better packer
-(artlib `skyline_pack` now tries four item orders: area order saved ~470 KB over height order; waste ~5%).
-`--check` warns when the 64-zoom headroom drops below 150 KB.
+(artlib `skyline_pack` tries four item orders). `--check` warns when the 64-zoom headroom drops below 150 KB.
+
+## 8. Pieces and pages (PL4)
+
+- **Why.** The Voodoo3 driver gives DirectDraw one *linear* heap plus two *rectangular* heaps of exactly the screen
+  size (VM B, `tools/vramprobe`: 1024x768 = 9,088 KB linear + 2 x 1024x768 = 2 x 1,536 KB; 800x600 ~11.3 MB +
+  2 x 938 KB; 640x480 ~12.8 MB + 2 x 600 KB). A surface taller than the screen can only live in the linear heap, so
+  the old 640x2048 sheets refused the 4th 64-zoom sheet at 1024 with 4,477 KB "free" (all of it rect heap). Pages of
+  <= 512x256 fit both kinds of heap and leave only small holes when a zoom swap evicts and re-creates them.
+- **Pieces.** `sprite_pieces()` cuts each sprite into columns on the half-tile grid (32 px at 64 zoom, 16 at 32) and
+  trims each column group to its opaque box. render.cpp draws lot sprites (`LOT_NAME`, anchor on the grid, wider than
+  two half-tiles) one strip per half-tile column (centre pair merged), so cuts on those boundaries cost **no extra
+  blit**; any other cut costs one blit and is only made when it saves more than `PIECE_LAMBDA` = 600 px. Identical
+  pieces are stored once. Result: 64-zoom 9,212 KB of sprite boxes -> 7,485 KB of pieces (packed 7,691 KB).
+- **Contract.** The sprite box (w, h, ax, ay, hx, hy) is unchanged, so render.cpp's strip grid, picking and anchors are
+  unchanged; code draws world sprites only through `art_draw`, `art_draw_cols`, `art_blit_part` (sprite-local rect)
+  and reads pixels through `art_pixels` (multi-piece sprites are assembled in a scratch buffer) / `art_opaque`.
+- **Iteration.** `python3 art/gen_art.py --repack` re-cuts and re-packs the cached sprites (art/.cache) in ~15 s and
+  runs the check. The PL4 switch was verified pixel-exact: every one of the 2,320 sprites (both zooms) re-assembled
+  from its pieces equals the old sheet rect, with the same w, h, ax, ay, hx, hy.

@@ -15,6 +15,7 @@
 #include "save.h"
 #include "util.h"
 #include "era.h"           /* M7: town rights by decree */
+#include "trade.h"         /* PL2: a waiting agreement offer has the next card slot */
 
 #define TIMED_MAX  24
 #define MSG_RING   16
@@ -598,6 +599,8 @@ static int card_gate(int ev)
     if (P.card_since < POL_EVENT_MIN) return 0;
     mte = politics_months_to_election();
     if (mte >= 0 && mte <= POL_CARD_QUIET) return 0;
+    if (ev != EV_AGREEMENT && trade_agreement()->offer) return 0;   /* PL2: the Delegation waits first in line (no random,
+                                                                       patron or risk card takes the slot it is waiting for) */
     return ev == EV_AGREEMENT || P.event_next <= 0;
 }
 int politics_card_slot_free(void) { return card_gate(-1); }

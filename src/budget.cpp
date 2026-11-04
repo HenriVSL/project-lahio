@@ -16,9 +16,13 @@
    resident ~0.27 (LV 55). Cottage villages live on grants and business tax; services pay back through
    upgrades (BALANCE.md). */
 static const int s_tax_weight[2][4] = { { 0, 1, 4, 6 },      /* houses T1..T3 */
-                                        { 0, 4, 5, 7 } };    /* apartments T1..T3 (P1: was 4/6/9 - with T2/T3 flats now
+                                        { 0, 3, 4, 5 } };    /* apartments T1..T3 (P1: was 4/6/9 - with T2/T3 flats now
                                                                 growing on their own, a precast lahio paid 1.5x a tier-3
-                                                                house per resident and dense towns piled up 180k+ by 1975) */
+                                                                house per resident and dense towns piled up 180k+ by 1975;
+                                                                PL2: 4/5/7 -> 3/4/5: rented flats, working-class incomes, and
+                                                                a block needs half the power, pipes and streets per resident of
+                                                                a house; with T2 no longer waiting for elements the dense bot
+                                                                reached 358k by 1990) */
 /* Upkeep index (wage/price level, %): 100 until UPKEEP_INFL_FROM, then +UPKEEP_INFL_PCT per year (1970: 125%), capped
    at UPKEEP_INFL_CAP (P1: 130% from 1972; was 150% from 1980). Applied to service, road, network, utility and special
    upkeep: the welfare-state years get dearer, so a built-out town doesn't pile up money (T04 note) unless it keeps
@@ -34,12 +38,30 @@ static int upkeep_index(void)
     return y <= 0 ? 100 : IMIN(UPKEEP_INFL_CAP, 100 + y * UPKEEP_INFL_PCT / 10);
 }
 int budget_upkeep_index(void) { return upkeep_index(); }    /* F3: shown in the Budget panel and Query */
+
+/* PL2: overtime. A service running above OVERTIME_FREE_PCT of its capacity (town-wide load / capacity, sim stats) pays
+   its staff overtime: the line's upkeep grows with the load beyond that, up to OVERTIME_MAX_PCT. Without it a town that
+   never built a second fire station or clinic served 19,000 residents for the price of 10,000 and the skimping bots
+   (dense, naive) piled up 130-250k by 1990, while the planner that built enough broke even. */
+#define OVERTIME_FREE_PCT 125
+#define OVERTIME_MAX_PCT  300
+int budget_overtime_pct(int svc)
+{
+    const CityStats *st = sim_stats();
+    s32 cap, load;
+    if (svc < 0 || svc >= SVC_COUNT) return 100;
+    cap = st->svc_capacity[svc]; load = st->svc_load[svc];
+    if (cap <= 0) return 100;
+    return (int)ICLAMP((s64)load * 100 / cap - (OVERTIME_FREE_PCT - 100), (s64)100, (s64)OVERTIME_MAX_PCT);
+}
 #define RES_TAX_LV_BASE 30
 #define RES_TAX_DIV     17000
 #define GRANT_BASE      400         /* state grant to a village: GRANT_BASE - pop / GRANT_FADE_DIV */
 #define GRANT_FADE_DIV  8
 #define LOAN_MAX        40000       /* no further emergency loans above this debt: the treasury stays
                                        negative (construction denied) instead of an interest spiral */
+#define LOAN_INSTALMENT_FLOOR 2000  /* PL2: instalments only while the treasury keeps this much */
+#define LOAN_INSTALMENT_MIN   100   /* PL2: smallest monthly instalment (mk) */
 
 Budget g_budget;
 static s64 s_rem[BL_COUNT];       /* sub-mk remainders per line (numerator units of each formula) */
@@ -129,7 +151,7 @@ static void compute_lines(Money *out, int book)
         lines10 += (s64)world_pipe_tiles(NULL) * g_misc.pipe_upkeep10;     /* F1: water pipes (BL_NETWORKS) */
     }
     ui = upkeep_index();
-    for (i = 0; i < SVC_COUNT; i++) svc[i] = svc[i] * ui;
+    for (i = 0; i < SVC_COUNT; i++) svc[i] = svc[i] * ui * budget_overtime_pct(i) / 100;   /* PL2: overtime */
     roads10 *= ui; lines10 *= ui;
     util = (Money)((s64)util * ui / 100); special = (Money)((s64)special * ui / 100);
     out[BL_TAX_RES] = div_rem(res * g_budget.tax_res, RES_TAX_DIV, BL_TAX_RES, book);
@@ -161,9 +183,14 @@ void budget_month_end(void)
         total += lines[i];
     }
     if (!g_budget.unlimited) g_budget.money += total;
-    /* loan repayment: when the treasury is healthy again, pay back what exceeds 15,000 mk */
-    if (g_budget.loan > 0 && g_budget.money > 15000 && !g_budget.unlimited) {
-        Money pay = IMIN(g_budget.loan, g_budget.money - 15000);
+    /* loan repayment: when the treasury is healthy again, pay back what exceeds 15,000 mk. PL2 (PLAYTEST 2 item 10):
+       plus an instalment of 1/60 of the debt (at least LOAN_INSTALMENT_MIN) whenever the treasury holds more than
+       LOAN_INSTALMENT_FLOOR: a town hovering under 15,000 never paid anything back and the interest (8 per mille of
+       30-45k) ate its whole surplus for 20 years (the mill bot: 4 loans in the 1960s, still 32k owed in 1990) */
+    if (g_budget.loan > 0 && g_budget.money > LOAN_INSTALMENT_FLOOR && !g_budget.unlimited) {
+        Money pay = IMAX(LOAN_INSTALMENT_MIN, (g_budget.loan + 59) / 60);
+        if (g_budget.money > 15000) pay = IMAX(pay, g_budget.money - 15000);
+        pay = IMIN(IMIN(pay, g_budget.loan), g_budget.money - LOAN_INSTALMENT_FLOOR);
         g_budget.loan -= pay;
         g_budget.money -= pay;
         g_budget.cur[BL_INTEREST] -= pay;

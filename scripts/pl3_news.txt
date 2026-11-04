@@ -1,0 +1,26 @@
+# pl3_news.txt - PL3: hover label suppressed over the newspaper, Cabinet box vs column stories, newsreel line.
+#   lahio.exe -load PT2_1990.KAU -script scripts\pl3_news.txt -exitafter 90 -log
+speed 3
+cam 59 96
+mouse 545 395
+wait 1
+shot pl3_800_label.bmp
+wait 1
+news year
+newspaper 0
+wait 1
+shot pl3_800_news.bmp
+wait 1
+newspaper 2
+news special 1
+newspaper 0
+wait 1
+shot pl3_800_special.bmp
+wait 1
+newspaper 2
+newspaper 1
+wait 1
+shot pl3_800_reel.bmp
+wait 1
+newspaper 2
+quit

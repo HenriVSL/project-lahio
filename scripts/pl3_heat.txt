@@ -1,0 +1,61 @@
+# pl3_heat.txt - PL3: heat overlay (heated pipes + faint new-lot land; no blue carpet), with buildings and flat.
+#   lahio.exe -load tests\out\P1_DENSE.KAU -script scripts\pl3_heat.txt -exitafter 30 -log
+speed 0
+cam 70 42
+overlay 117
+wait 0
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+shot pl3_800_heat_b.bmp
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+overlay 17
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+shot pl3_800_heat.bmp

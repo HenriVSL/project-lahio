@@ -54,6 +54,12 @@ static u8   s_served[MAX_LOTS];
 static u8   s_cutA[MAX_USRC + 1], s_cutN[MAX_USRC + 1];
 static s32  s_pool0[MAX_USRC + 1];
 static u8   s_cond[B_COUNT];
+/* PL4: s_info / s_pass are valid where s_igen / s_pgen == s_ig (no whole-map clear per solve; passability is
+   evaluated only for tiles the BFS looks at); heat_apply's tile pass covers the box of this solve's reached
+   tiles and heated lots + the box of the tiles it lit last time (s_hbb; whole map after a reset/load). */
+static u16  s_igen[NTILES], s_pgen[NTILES], s_ig;
+static int  s_ubb[4], s_hbb[4], s_hbb_full = 1;
+#define INFO(idx) (s_igen[idx] == s_ig ? s_info[idx] : UI_NONE)
 
 /* ---- lakes */
 static u16  s_lake[NCELLS];                    /* x LAKE_FIX, water cells */
@@ -65,6 +71,10 @@ static u32  s_lemit[NCELLS];                   /* scratch: residents' worth arri
 static u16  s_ltmp[NCELLS];
 static u16  s_cq[NCELLS];
 static int  s_lake_reason, s_lake_avg;
+/* PL4: terrain-only lake cell maps (lake_cells_build): water cells in scan order, "water within 2 cells" */
+static u16  s_wlist[NCELLS];
+static int  s_nwl, s_lk_valid, s_lk_dirty, s_lk_x0, s_lk_y0, s_lk_x1, s_lk_y1, s_lk_cw, s_lk_ch;
+static u8   s_near2[NCELLS];
 
 static int cells_w(void) { return (g_world.w + 1) >> FIELD_SHIFT; }
 static int cells_h(void) { return (g_world.h + 1) >> FIELD_SHIFT; }
@@ -82,6 +92,8 @@ void civic_reset(void)
     memset(s_pool, 0, sizeof(s_pool)); memset(s_nsup, 0, sizeof(s_nsup)); memset(s_sum, 0, sizeof(s_sum));
     memset(s_lake, 0, sizeof(s_lake)); memset(s_lext, 0, sizeof(s_lext)); memset(s_shore, 0, sizeof(s_shore));
     memset(s_water, 0, sizeof(s_water)); memset(s_near, 0xFF, sizeof(s_near));
+    s_lk_valid = 0; s_lk_dirty = 0; s_nwl = 0;          /* PL4: lake cell maps rebuilt at the next update */
+    s_hbb_full = 1; s_hbb[2] = -1;                      /* PL4: tiles may carry ZF_HEAT from a load */
     s_lake_reason = s_lake_avg = 0;
     fire_reset();
 }
@@ -192,13 +204,9 @@ static void util_solve(int ut)
     USrc *S = s_us[ut];
     UtilSummary *sum = &s_sum[ut];
     memset(sum, 0, sizeof(*sum));
-    /* 0. passability */
-    for (y = 0; y < h; y++) {
-        const Tile *t = WT(0, y);
-        u8 *p = &s_pass[TILE_IDX(0, y)];
-        u32 *in = &s_info[TILE_IDX(0, y)];
-        for (x = 0; x < w; x++, t++) { p[x] = (u8)util_pass(t); in[x] = UI_NONE; }
-    }
+    /* 0. passability (lazily, PL4) and "nothing reached": a new stamp */
+    if (++s_ig == 0) { memset(s_igen, 0, sizeof(s_igen)); memset(s_pgen, 0, sizeof(s_pgen)); s_ig = 1; }
+    s_ubb[0] = s_ubb[1] = 9999; s_ubb[2] = s_ubb[3] = -1;
     /* 1. sources in lot id order, BFS */
     s_uf[0] = 0;
     for (i = 1; i < g_world.lot_hi; i++) {
@@ -215,8 +223,8 @@ static void util_solve(int ut)
         for (y = ly0; y <= ly1; y++)
             for (x = lx0; x <= lx1; x++) {
                 int idx = TILE_IDX(x, y);
-                if (s_info[idx] != UI_NONE) continue;
-                s_info[idx] = (u32)ns << 16;
+                if (INFO(idx) != UI_NONE) continue;
+                s_info[idx] = (u32)ns << 16; s_igen[idx] = s_ig;
                 s_q[qt++] = (u16)idx;
             }
     }
@@ -224,14 +232,19 @@ static void util_solve(int ut)
     while (qh < qt) {
         int idx = s_q[qh++], tx = idx & (MAP_STRIDE - 1), ty = idx >> MAP_SHIFT, d;
         u32 v = s_info[idx], own = v & 0xFFFF0000u;
+        if (tx < s_ubb[0]) s_ubb[0] = tx;
+        if (tx > s_ubb[2]) s_ubb[2] = tx;
+        if (ty < s_ubb[1]) s_ubb[1] = ty;
+        if (ty > s_ubb[3]) s_ubb[3] = ty;
         for (d = 0; d < DIR_COUNT; d++) {
             int nx = tx + g_dir_dx[d], ny = ty + g_dir_dy[d], ni;
             u32 o;
             if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
             ni = TILE_IDX(nx, ny);
+            if (s_pgen[ni] != s_ig) { s_pass[ni] = (u8)util_pass(&g_world.t[ni]); s_pgen[ni] = s_ig; }
             if (!s_pass[ni]) continue;
-            o = s_info[ni];
-            if (o == UI_NONE) { s_info[ni] = (v & 0xFFFF) < 0xFFFE ? v + 1 : v; s_q[qt++] = (u16)ni; }
+            o = INFO(ni);
+            if (o == UI_NONE) { s_info[ni] = (v & 0xFFFF) < 0xFFFE ? v + 1 : v; s_igen[ni] = s_ig; s_q[qt++] = (u16)ni; }
             else if ((o & 0xFFFF0000u) != own) uf_meet((u16)(o >> 16), (u16)(own >> 16));
         }
     }
@@ -248,7 +261,7 @@ static void util_solve(int ut)
         lot_rect_q(l, &lx0, &ly0, &lx1, &ly1);
         for (y = ly0; y <= ly1; y++)
             for (x = lx0; x <= lx1; x++) {
-                u32 v = s_info[TILE_IDX(x, y)];
+                u32 v = INFO(TILE_IDX(x, y));
                 if (v != UI_NONE && (int)(v & 0xFFFF) < best) { best = (int)(v & 0xFFFF); own = (int)(v >> 16); }
             }
         if (!own) {
@@ -314,53 +327,82 @@ static void util_solve(int ut)
 static void heat_apply(void)
 {
     int i, x, y, w = g_world.w, h = g_world.h, x0 = 9999, y0 = 9999, x1 = -1, y1 = -1;
+    int rx0 = s_ubb[0], ry0 = s_ubb[1], rx1 = s_ubb[2], ry1 = s_ubb[3], ox0 = 9999, oy0 = 9999, ox1 = -1, oy1 = -1;
     USrc *S = s_us[UT_HEAT];
     for (i = 1; i < g_world.lot_hi; i++) {
         Lot *l = &g_world.lots[i];
         if (l->def == B_NONE) continue;
-        if (s_lst[UT_HEAT][i] == NLS_OK || l->def == B_HEAT_PLANT) l->flags |= LF_HEAT; else l->flags &= ~LF_HEAT;
+        if (s_lst[UT_HEAT][i] == NLS_OK || l->def == B_HEAT_PLANT) {
+            int lx0, ly0, lx1, ly1;
+            l->flags |= LF_HEAT;
+            lot_rect_q(l, &lx0, &ly0, &lx1, &ly1);
+            rx0 = IMIN(rx0, lx0); ry0 = IMIN(ry0, ly0); rx1 = IMAX(rx1, lx1); ry1 = IMAX(ry1, ly1);
+        } else l->flags &= ~LF_HEAT;
     }
-    for (y = 0; y < h; y++) {
-        Tile *t = WT(0, y);
-        const u32 *in = &s_info[TILE_IDX(0, y)];
-        for (x = 0; x < w; x++, t++) {
-            u32 v = in[x];
+    if (s_hbb_full) { rx0 = 0; ry0 = 0; rx1 = w - 1; ry1 = h - 1; s_hbb_full = 0; }
+    else if (s_hbb[2] >= 0) { rx0 = IMIN(rx0, s_hbb[0]); ry0 = IMIN(ry0, s_hbb[1]); rx1 = IMAX(rx1, s_hbb[2]); ry1 = IMAX(ry1, s_hbb[3]); }
+    rx0 = IMAX(rx0, 0); ry0 = IMAX(ry0, 0); rx1 = IMIN(rx1, w - 1); ry1 = IMIN(ry1, h - 1);
+    for (y = ry0; y <= ry1; y++) {
+        Tile *t = WT(rx0, y);
+        for (x = rx0; x <= rx1; x++, t++) {
+            u32 v = INFO(TILE_IDX(x, y));
             int on = 0;
             if (t->lot) on = (g_world.lots[t->lot].flags & LF_HEAT) != 0;
             else if (v != UI_NONE) {
                 const USrc *s = &S[v >> 16];
                 if (s_nsup[UT_HEAT][s->net] > 0 && (s->cut != DIST_NONE ? (v & 0xFFFF) < s->cut : s_pool[UT_HEAT][s->net] > 0)) on = 1;
             }
+            if (on) { ox0 = IMIN(ox0, x); oy0 = IMIN(oy0, y); ox1 = IMAX(ox1, x); oy1 = IMAX(oy1, y); }
             if (on != ((t->zone & ZF_HEAT) != 0)) {
                 t->zone = (u8)(on ? (t->zone | ZF_HEAT) : (t->zone & ~ZF_HEAT));
                 x0 = IMIN(x0, x); y0 = IMIN(y0, y); x1 = IMAX(x1, x); y1 = IMAX(y1, y);
             }
         }
     }
+    s_hbb[0] = ox0; s_hbb[1] = oy0; s_hbb[2] = ox1; s_hbb[3] = oy1;
     if (x1 >= 0) world_notify(x0, y0, x1, y1, WCHG_NET);
 }
 
 /* ------------------------------------------------------------------ lakes */
-static void lake_update(void)
+/* PL4: the water cells (s_water), the nearest-water map (s_near) and the cells with water within 2 cells
+   (s_near2) depend on the terrain only: kept between updates and rebuilt when a WCHG_TERRAIN rect turns a
+   cell's water state (or after a reset/load). Same values and the same loop orders as recomputing them every
+   update; the per-cell lake passes visit only the water cells (s_wlist, scan order) and the shore pass only
+   cells near water (all other cells are 0, as before). */
+
+static void lake_listener(int x0, int y0, int x1, int y1, int kinds, void *user)
 {
-    int cw = cells_w(), ch = cells_h(), cx, cy, i, qh = 0, qt = 0, n = 0;
-    s64 sum = 0;
-    s32 untreated = 0, near_res = 0, all_res = 0;
+    UNUSED(user);
+    if (!(kinds & WCHG_TERRAIN)) return;
+    if (!s_lk_dirty) { s_lk_x0 = x0; s_lk_y0 = y0; s_lk_x1 = x1; s_lk_y1 = y1; s_lk_dirty = 1; }
+    else { s_lk_x0 = IMIN(s_lk_x0, x0); s_lk_y0 = IMIN(s_lk_y0, y0); s_lk_x1 = IMAX(s_lk_x1, x1); s_lk_y1 = IMAX(s_lk_y1, y1); }
+}
+
+static u8 cell_water(int cx, int cy)
+{
+    int a, b, wt = 0, rv = 0;
+    for (b = cy * 2; b <= cy * 2 + 1; b++)
+        for (a = cx * 2; a <= cx * 2 + 1; a++) {
+            int ter;
+            if (!world_in(a, b)) continue;
+            ter = TER_TYPE(WT(a, b));
+            if (ter == TER_WATER) wt++;
+            else if (ter == TER_RIVER) rv++;
+        }
+    return (u8)(wt ? 1 : rv ? 2 : 0);
+}
+
+static void lake_cells_build(void)
+{
+    int cw = cells_w(), ch = cells_h(), cx, cy, qh = 0, qt = 0;
     /* water cells (any water tile in the cell; rivers flush faster) */
+    s_nwl = 0;
     for (cy = 0; cy < ch; cy++)
         for (cx = 0; cx < cw; cx++) {
-            int c = CELL_IDX(cx, cy), a, b, wt = 0, rv = 0;
-            for (b = cy * 2; b <= cy * 2 + 1; b++)
-                for (a = cx * 2; a <= cx * 2 + 1; a++) {
-                    int ter;
-                    if (!world_in(a, b)) continue;
-                    ter = TER_TYPE(WT(a, b));
-                    if (ter == TER_WATER) wt++;
-                    else if (ter == TER_RIVER) rv++;
-                }
-            s_water[c] = (u8)(wt ? 1 : rv ? 2 : 0);
-            s_near[c] = -1; s_lemit[c] = 0;
-            if (s_water[c]) { s_near[c] = (s16)c; s_cq[qt++] = (u16)c; s_ltmp[c] = 0; }
+            int c = CELL_IDX(cx, cy);
+            s_water[c] = cell_water(cx, cy);
+            s_near[c] = -1;
+            if (s_water[c]) { s_near[c] = (s16)c; s_cq[qt++] = (u16)c; s_ltmp[c] = 0; s_wlist[s_nwl++] = (u16)c; }
             else { s_lake[c] = 0; s_ltmp[c] = 0xFFFF; }
         }
     /* nearest water cell within CIVIC_LAKE_REACH (4-neighbour cell BFS; s_ltmp = distance) */
@@ -375,6 +417,38 @@ static void lake_update(void)
             s_ltmp[nc] = (u16)(s_ltmp[c] + 1); s_near[nc] = s_near[c]; s_cq[qt++] = (u16)nc;
         }
     }
+    for (cy = 0; cy < ch; cy++)
+        for (cx = 0; cx < cw; cx++) {
+            int a, b, n = 0;
+            for (b = IMAX(0, cy - 2); b <= IMIN(ch - 1, cy + 2) && !n; b++)
+                for (a = IMAX(0, cx - 2); a <= IMIN(cw - 1, cx + 2); a++) if (s_water[CELL_IDX(a, b)]) { n = 1; break; }
+            s_near2[CELL_IDX(cx, cy)] = (u8)n;
+        }
+    s_lk_valid = 1; s_lk_cw = cw; s_lk_ch = ch;
+}
+
+static void lake_cells_check(void)
+{
+    world_add_listener(lake_listener, NULL);            /* dedupes (world_init drops listeners) */
+    if (s_lk_cw != cells_w() || s_lk_ch != cells_h()) s_lk_valid = 0;
+    if (s_lk_valid && s_lk_dirty) {
+        int cx0 = IMAX(0, s_lk_x0 >> 1), cy0 = IMAX(0, s_lk_y0 >> 1), cx1 = IMIN(cells_w() - 1, s_lk_x1 >> 1),
+            cy1 = IMIN(cells_h() - 1, s_lk_y1 >> 1), cx, cy;
+        for (cy = cy0; cy <= cy1 && s_lk_valid; cy++)
+            for (cx = cx0; cx <= cx1; cx++)
+                if (cell_water(cx, cy) != s_water[CELL_IDX(cx, cy)]) { s_lk_valid = 0; break; }
+    }
+    s_lk_dirty = 0;
+    if (!s_lk_valid) lake_cells_build();
+}
+
+static void lake_update(void)
+{
+    int cw = cells_w(), ch = cells_h(), cx, cy, i, k, n = 0;
+    s64 sum = 0;
+    s32 untreated = 0, near_res = 0, all_res = 0;
+    lake_cells_check();
+    for (k = 0; k < s_nwl; k++) s_lemit[s_wlist[k]] = 0;
     /* untreated sewage: watered homes not served by a works (their sewers end in the lake) */
     for (i = 1; i < g_world.lot_hi; i++) {
         const Lot *l = &g_world.lots[i];
@@ -395,52 +469,46 @@ static void lake_update(void)
     s_sum[UT_SEWAGE].untreated = untreated;
     /* add (a resident's worth = 1/4 x LAKE_FIX), spread among water cells (missing neighbours count as the
        cell itself: no leak into the land), decay 1/32 (rivers 1/8) */
-    for (cy = 0; cy < ch; cy++)
-        for (cx = 0; cx < cw; cx++) {
-            int c = CELL_IDX(cx, cy);
-            if (s_water[c]) s_lake[c] = (u16)IMIN(60000, (s32)s_lake[c] + (s32)IMIN(s_lemit[c], 200000u) / 4);
+    for (k = 0; k < s_nwl; k++) {
+        int c = s_wlist[k];
+        s_lake[c] = (u16)IMIN(60000, (s32)s_lake[c] + (s32)IMIN(s_lemit[c], 200000u) / 4);
+    }
+    for (k = 0; k < s_nwl; k++) {
+        int c = s_wlist[k], d;
+        s32 v = 2 * (s32)s_lake[c];
+        cx = c % FIELD_MAX_W; cy = c / FIELD_MAX_W;
+        for (d = 0; d < DIR_COUNT; d++) {
+            int nx = cx + g_dir_dx[d], ny = cy + g_dir_dy[d], nc;
+            if (nx < 0 || ny < 0 || nx >= cw || ny >= ch) { v += s_lake[c]; continue; }
+            nc = CELL_IDX(nx, ny);
+            v += s_water[nc] ? s_lake[nc] : s_lake[c];
         }
-    for (cy = 0; cy < ch; cy++)
-        for (cx = 0; cx < cw; cx++) {
-            int c = CELL_IDX(cx, cy), d;
-            s32 v;
-            if (!s_water[c]) continue;
-            v = 2 * (s32)s_lake[c];
-            for (d = 0; d < DIR_COUNT; d++) {
-                int nx = cx + g_dir_dx[d], ny = cy + g_dir_dy[d], nc;
-                if (nx < 0 || ny < 0 || nx >= cw || ny >= ch) { v += s_lake[c]; continue; }
-                nc = CELL_IDX(nx, ny);
-                v += s_water[nc] ? s_lake[nc] : s_lake[c];
-            }
-            s_ltmp[c] = (u16)(v / 6);
-        }
-    for (cy = 0; cy < ch; cy++)
-        for (cx = 0; cx < cw; cx++) {
-            int c = CELL_IDX(cx, cy);
-            s32 v;
-            if (!s_water[c]) continue;
-            v = s_ltmp[c];
-            v -= s_water[c] == 2 ? (v + 7) >> 3 : (v + 31) >> 5;
-            s_lake[c] = (u16)IMAX(0, v);
-            if (s_lake[c] >= 4 * LAKE_FIX) { sum += s_lake[c] / LAKE_FIX; n++; }
-        }
+        s_ltmp[c] = (u16)(v / 6);
+    }
+    for (k = 0; k < s_nwl; k++) {
+        int c = s_wlist[k];
+        s32 v = s_ltmp[c];
+        v -= s_water[c] == 2 ? (v + 7) >> 3 : (v + 31) >> 5;
+        s_lake[c] = (u16)IMAX(0, v);
+        if (s_lake[c] >= 4 * LAKE_FIX) { sum += s_lake[c] / LAKE_FIX; n++; }
+    }
     s_lake_avg = n ? (int)(sum / n) : 0;
-    /* shore: worst lake value within 2 cells (separable max: rows into s_ltmp, then columns) */
+    /* shore: worst lake value within 2 cells (separable max: rows into s_ltmp, then columns); 0 away from water */
     for (cy = 0; cy < ch; cy++)
         for (cx = 0; cx < cw; cx++) {
             int a, m = 0;
-            for (a = cx - 2; a <= cx + 2; a++) {
-                int c;
-                if (a < 0 || a >= cw) continue;
-                c = CELL_IDX(a, cy);
-                if (s_water[c]) m = IMAX(m, IMIN(255, s_lake[c] / LAKE_FIX));
-            }
+            if (s_near2[CELL_IDX(cx, cy)])
+                for (a = IMAX(0, cx - 2); a <= IMIN(cw - 1, cx + 2); a++) {
+                    int c = CELL_IDX(a, cy);
+                    if (s_water[c]) m = IMAX(m, IMIN(255, s_lake[c] / LAKE_FIX));
+                }
             s_ltmp[CELL_IDX(cx, cy)] = (u16)m;
         }
     for (cy = 0; cy < ch; cy++)
         for (cx = 0; cx < cw; cx++) {
             int b, m = 0;
-            for (b = cy - 2; b <= cy + 2; b++) if (b >= 0 && b < ch) m = IMAX(m, s_ltmp[CELL_IDX(cx, b)]);
+            if (s_near2[CELL_IDX(cx, cy)])
+                for (b = IMAX(0, cy - 2); b <= IMIN(ch - 1, cy + 2); b++) m = IMAX(m, s_ltmp[CELL_IDX(cx, b)]);
             s_shore[CELL_IDX(cx, cy)] = (u8)m;
         }
     /* politics: share of residents living by polluted water */
@@ -591,8 +659,11 @@ u8 civic_overlay_value(int ovl, int param, int x, int y)
             st = s_lst[UT_HEAT][lot];
             return OVV(OVR_NET, st == NLS_OK ? NETC_OK : st == NLS_SHORT ? NETC_SHORTAGE : NETC_NOT_CONNECTED);
         }
-        if (t->zone & ZF_HEAT) return OVV(OVR_NET, NETC_CARRIER);
-        return OVV_NONE;
+        /* PL3: the water overlay's style: heated pipes strong blue, zoned empty land that a new building would
+           heat only the faint "wet" dither (was a solid blue carpet over every heated zoned tile) */
+        if (!(t->zone & ZF_HEAT)) return OVV_NONE;
+        if (t->flags & TF_PIPE) return OVV(OVR_NET, NETC_CARRIER);
+        return TILE_ZONE(t) ? OVV(OVR_NET, NETC_WET) : OVV_NONE;
     }
     return OVV_NONE;
 }

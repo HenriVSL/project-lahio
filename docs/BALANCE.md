@@ -211,3 +211,49 @@ A built-out planner town runs about -140 mk/month during the oil years (fuel ~21
 after the 1986 oil collapse. Dense (apartment) towns stay richer: fewer service buildings per resident. Cards: at most one
 per year from all sources (+ the election campaign card in election years), ~24 in 35 years for the politics bot.
 The 20-year milestones (section 2) are unchanged up to 1972; 1973-75 rows are slightly better (index 130 vs 137.5).
+
+## 9. PL2 polish pass (2026-11-04): play-test 2 items 7, 9, 10
+
+New bot style **naive** (`tests/test_balance.cpp` `bot_naive`): a first-time human as in PLAYTEST 2 item 7. Houses and
+apartments in turn, a small shop corner per neighbourhood (another small block after a year of C demand > 60), a plant
+only after 3 months of brownouts, a well after 2 dry months, services only after the checklist names them for 100+
+residents for 3 months or a service runs full for 6 months, the element factory 18 months after blocks start waiting for
+it, politics on (cards answered after 3 months with the first choice, town rights signed a year late, no other decree),
+one tax notch when the treasury has been empty for 3 months. `balance_naive_skips_element_factory` plays the same
+player without the factory at all. All 11 styles now also run 1955-1990 (`tests/out/balance_era_summary.txt`).
+
+The same naive bot on the **pre-PL2 rules** (scratch copy, planner/dense reproduce section 8 exactly): Market town 1964,
+never Town (6,800 plateau), 4 emergency loans (46,700 owed), 313 months in debt, -6,615 mk in 1990. The first, stingier
+version of the bot matched the play-test even closer: 4,900 plateau, -214k by 1990.
+
+| change | old -> new | why |
+|---|---|---|
+| Water tower (defs.cpp) | Market town -> Church village | apartments T2 need its pressure; a T1-block town could not reach 3,000 |
+| Element factory | Market town 1962 -> Church village 1960 | the other T2 need (the pool stays the lahio's cap: T2 still takes elements) |
+| Shop customers (sim.cpp REQ_CUSTOMERS) | nearest-shop residents only | also met while C bar >= 40 (keep 20) and jobs filled >= 97%: back-row shops grow when shoppers can't find shops (human towns were job-limited at C +60..+80) |
+| Utility-only decline (sim.cpp) | 4 bad checks | 8 (`SIM_G_DOWN_UTIL`): a brownout costs growth, not a district of tiers in one month |
+| Service overtime (budget.cpp) | none | upkeep x (load/capacity - 25%), 100..300%: skipping the second fire station no longer saves money (dense/naive piled 130-250k) |
+| Apartment tax weights | 4/5/7 | 3/4/5: rented flats; a block needs half the power, pipes and streets per resident |
+| Emergency loan (budget.cpp/h) | 8 per mille, repaid only above 15,000 | 6 per mille, + an instalment of 1/60 (min 100) whenever the treasury holds 2,000+ |
+| Agreement card (trade.cpp, politics.cpp) | Ministry signs after 6 months waiting | with politics on it waits up to 24 months and has the next card slot: 6 of 6 reach the desk (was 3 of 6) |
+| Company town (complex.cpp/h) | complex jobs >= 40% of ALL jobs | >= 30% of FACTORY jobs (industry + logging + complexes); a paper company also counts the wood industry and the logging |
+| PM2 (complex.cpp) | wood 80, staffed = 90% filled | wood 70, staffed = 80% (labour-short towns fill every employer alike) |
+| `CityStats.jobs_zone` (sim.cpp) | never filled (always 0) | filled in aggregate: strike / trade-fair cards and the era's industry history work |
+
+1955-1990 on s7 (January values; L = emergency loans, deepest debt, months with a loan or a negative treasury):
+
+| style | 1960 | 1965 | 1975 | 1990 | money 1975 | 1990 | min | L | church/market/town | apt T2/T3 1975 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| planner | 5,810 | 12,260 | 12,188 | 12,188 | 27,899 | 4,171 | 31 | 0 | 1956/1958/1964 | - |
+| politics | 6,045 | 12,222 | 12,228 | 12,228 | 30,648 | 7,100 | 303 | 0 | 1956/1958/1962 | - |
+| dense | 5,810 | 15,897 | 19,587 | 18,974 | 28,200 | 15,353 | 81 | 0 | 1956/1958/1964 | 66/27 |
+| mill | 6,126 | 11,991 | 11,991 | 11,991 | 60,123 | 70,507 | 15 | 0 | 1956/1958/1963 | - |
+| metal | 5,256 | 12,302 | 12,230 | 12,230 | 27,928 | -375 | -667 | 1 (10.7k) | 1956/1958/1965 | - |
+| **naive** | 2,992 | 4,554 | 10,400 | 18,120 | 673 | 27,095 | -5,491 | 1 (10.4k) | 1957/1962/1976 | 56/0 |
+| naive, no factory | | 5,482 | 7,879 | 10,389 | 12,111 | 6,218 | -1,811 | 2 (13.1k) | -/1962/1987 | 0/0 |
+| greedy | 2,154 | 4,335 | 4,968 | 4,968 | 15,784 | 1,183 | -412 | 1 | 1956/1962/- | - |
+| tax13 | 1,963 | 5,144 | 10,089 | 11,931 | 42,986 | 351,659 | 42 | 0 | 1956/1962/1975 | - |
+
+Open: dense on c3/r30 (25-28k on 4 modules) still ends the 20-year run at 126-147k: half the plants and pipes per
+resident. Levers if wanted: apartment power/water use, or district-heat fees. tax13 piles money once built out (the
+money-for-growth trade; exempt from the 150k cap). Metal's oil-years deficit (-240/month) takes one late loan.

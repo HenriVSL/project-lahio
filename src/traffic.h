@@ -101,5 +101,8 @@ typedef struct {
 void traffic_stats(TrafficStats *out);
 int  traffic_car_own_pct(int year);         /* car ownership by year: 25% 1955 -> 85% 1975 */
 void traffic_dump(FILE *f);                 /* DEBUG FROM TEXT: graph/pass summary + busiest edges */
+/* ---- PL4 addition */
+void traffic_slice_phase(int phase);        /* sim_step's slice: phase 9's sweep slice runs in phase 10 instead
+                                               (same results; phase 9 has the network solves) */
 
 #endif

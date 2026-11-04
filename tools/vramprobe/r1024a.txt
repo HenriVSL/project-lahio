@@ -1,0 +1,326 @@
+mode 1024x768: free before primary 13698 KB
+primary pitch 4096, free 12162 KB
+back off 3145728 pitch 4096
+640x2048*4
+    0  640x2048 ok   off 4285658144 (row 3348170 col  272) pitch  1280  free 9602 KB
+    1  640x2048 ok   off 4288279584 (row 3350218 col  272) pitch  1280  free 7042 KB
+    2  640x2048 ok   off 4290901024 (row 3352266 col  272) pitch  1280  free 4482 KB
+    3  640x2048 FAIL hr=8876017c free 4482 KB
+256x128*80
+    3  256x128  ok   off 4293522464 (row 8385786 col   16) pitch   512  free 4418 KB
+    4  256x128  ok   off 4293588000 (row 8385914 col   16) pitch   512  free 4354 KB
+    5  256x128  ok   off 4293653536 (row 8386042 col   16) pitch   512  free 4290 KB
+    6  256x128  ok   off 4293719072 (row 8386170 col   16) pitch   512  free 4226 KB
+    7  256x128  ok   off 4293784608 (row 8386298 col   16) pitch   512  free 4162 KB
+    8  256x128  ok   off 4293850144 (row 8386426 col   16) pitch   512  free 4098 KB
+    9  256x128  ok   off 4293915680 (row 8386554 col   16) pitch   512  free 4034 KB
+   10  256x128  ok   off 4293981216 (row 8386682 col   16) pitch   512  free 3970 KB
+   11  256x128  ok   off 4294046752 (row 8386810 col   16) pitch   512  free 3906 KB
+   12  256x128  ok   off 4294112288 (row 8386938 col   16) pitch   512  free 3842 KB
+   13  256x128  ok   off 4294177824 (row 8387066 col   16) pitch   512  free 3778 KB
+   14  256x128  ok   off 4294243360 (row 8387194 col   16) pitch   512  free 3714 KB
+   15  256x128  ok   off 4294308896 (row 8387322 col   16) pitch   512  free 3650 KB
+   16  256x128  ok   off 4294374432 (row 8387450 col   16) pitch   512  free 3586 KB
+   17  256x128  ok   off 4294439968 (row 8387578 col   16) pitch   512  free 3522 KB
+   18  256x128  ok   off 4294505504 (row 8387706 col   16) pitch   512  free 3458 KB
+   19  256x128  ok   off 4294571040 (row 8387834 col   16) pitch   512  free 3394 KB
+   20  256x128  ok   off 4294636576 (row 8387962 col   16) pitch   512  free 3330 KB
+   21  256x128  ok   off 4294702112 (row 8388090 col   16) pitch   512  free 3266 KB
+   22  256x128  ok   off 4294767648 (row 8388218 col   16) pitch   512  free 3202 KB
+   23  256x128  ok   off 4294833184 (row 8388346 col   16) pitch   512  free 3138 KB
+   24  256x128  ok   off 4294898720 (row 8388474 col   16) pitch   512  free 3074 KB
+   25  256x128  ok   off  9437312 (row  2304 col   64) pitch  4096  free 3010 KB
+   26  256x128  ok   off  9961600 (row  2432 col   64) pitch  4096  free 2946 KB
+   27  256x128  ok   off 10485888 (row  2560 col   64) pitch  4096  free 2882 KB
+   28  256x128  ok   off 11010176 (row  2688 col   64) pitch  4096  free 2818 KB
+   29  256x128  ok   off 11534464 (row  2816 col   64) pitch  4096  free 2754 KB
+   30  256x128  ok   off 12058752 (row  2944 col   64) pitch  4096  free 2690 KB
+   31  256x128  ok   off  9437824 (row  2304 col  320) pitch  4096  free 2626 KB
+   32  256x128  ok   off  9962112 (row  2432 col  320) pitch  4096  free 2562 KB
+   33  256x128  ok   off 10486400 (row  2560 col  320) pitch  4096  free 2498 KB
+   34  256x128  ok   off 11010688 (row  2688 col  320) pitch  4096  free 2434 KB
+   35  256x128  ok   off 11534976 (row  2816 col  320) pitch  4096  free 2370 KB
+   36  256x128  ok   off 12059264 (row  2944 col  320) pitch  4096  free 2306 KB
+   37  256x128  ok   off  9438336 (row  2304 col  576) pitch  4096  free 2242 KB
+   38  256x128  ok   off  9438848 (row  2304 col  832) pitch  4096  free 2178 KB
+   39  256x128  ok   off  9962624 (row  2432 col  576) pitch  4096  free 2114 KB
+   40  256x128  ok   off  9963136 (row  2432 col  832) pitch  4096  free 2050 KB
+   41  256x128  ok   off 10486912 (row  2560 col  576) pitch  4096  free 1986 KB
+   42  256x128  ok   off 11011200 (row  2688 col  576) pitch  4096  free 1922 KB
+   43  256x128  ok   off 11535488 (row  2816 col  576) pitch  4096  free 1858 KB
+   44  256x128  ok   off 12059776 (row  2944 col  576) pitch  4096  free 1794 KB
+   45  256x128  ok   off 10487424 (row  2560 col  832) pitch  4096  free 1730 KB
+   46  256x128  ok   off 11011712 (row  2688 col  832) pitch  4096  free 1666 KB
+   47  256x128  ok   off 11536000 (row  2816 col  832) pitch  4096  free 1602 KB
+   48  256x128  ok   off 12060288 (row  2944 col  832) pitch  4096  free 1538 KB
+   49  256x128  ok   off  6291456 (row  1536 col    0) pitch  4096  free 1474 KB
+   50  256x128  ok   off  6815744 (row  1664 col    0) pitch  4096  free 1410 KB
+   51  256x128  ok   off  7340032 (row  1792 col    0) pitch  4096  free 1346 KB
+   52  256x128  ok   off  7864320 (row  1920 col    0) pitch  4096  free 1282 KB
+   53  256x128  ok   off  8388608 (row  2048 col    0) pitch  4096  free 1218 KB
+   54  256x128  ok   off  8912896 (row  2176 col    0) pitch  4096  free 1154 KB
+   55  256x128  ok   off  6291968 (row  1536 col  256) pitch  4096  free 1090 KB
+   56  256x128  ok   off  6816256 (row  1664 col  256) pitch  4096  free 1026 KB
+   57  256x128  ok   off  7340544 (row  1792 col  256) pitch  4096  free 962 KB
+   58  256x128  ok   off  7864832 (row  1920 col  256) pitch  4096  free 898 KB
+   59  256x128  ok   off  8389120 (row  2048 col  256) pitch  4096  free 834 KB
+   60  256x128  ok   off  8913408 (row  2176 col  256) pitch  4096  free 770 KB
+   61  256x128  ok   off  6292480 (row  1536 col  512) pitch  4096  free 706 KB
+   62  256x128  ok   off  6292992 (row  1536 col  768) pitch  4096  free 642 KB
+   63  256x128  ok   off  6816768 (row  1664 col  512) pitch  4096  free 578 KB
+   64  256x128  ok   off  6817280 (row  1664 col  768) pitch  4096  free 514 KB
+   65  256x128  ok   off  7341056 (row  1792 col  512) pitch  4096  free 450 KB
+   66  256x128  ok   off  7865344 (row  1920 col  512) pitch  4096  free 386 KB
+   67  256x128  ok   off  8389632 (row  2048 col  512) pitch  4096  free 322 KB
+   68  256x128  ok   off  8913920 (row  2176 col  512) pitch  4096  free 258 KB
+   69  256x128  ok   off  7341568 (row  1792 col  768) pitch  4096  free 194 KB
+   70  256x128  ok   off  7865856 (row  1920 col  768) pitch  4096  free 130 KB
+   71  256x128  ok   off  8390144 (row  2048 col  768) pitch  4096  free 66 KB
+   72  256x128  ok   off  8914432 (row  2176 col  768) pitch  4096  free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+   73  256x128  FAIL hr=8876017c free 2 KB
+  -- freed all, free 12162 KB
+640x512*30
+    0  640x512  ok   off 4285658144 (row 3348170 col  272) pitch  1280  free 11522 KB
+    1  640x512  ok   off 4286313504 (row 3348682 col  272) pitch  1280  free 10882 KB
+    2  640x512  ok   off 4286968864 (row 3349194 col  272) pitch  1280  free 10242 KB
+    3  640x512  ok   off 4287624224 (row 3349706 col  272) pitch  1280  free 9602 KB
+    4  640x512  ok   off 4288279584 (row 3350218 col  272) pitch  1280  free 8962 KB
+    5  640x512  ok   off 4288934944 (row 3350730 col  272) pitch  1280  free 8322 KB
+    6  640x512  ok   off 4289590304 (row 3351242 col  272) pitch  1280  free 7682 KB
+    7  640x512  ok   off 4290245664 (row 3351754 col  272) pitch  1280  free 7042 KB
+    8  640x512  ok   off 4290901024 (row 3352266 col  272) pitch  1280  free 6402 KB
+    9  640x512  ok   off 4291556384 (row 3352778 col  272) pitch  1280  free 5762 KB
+   10  640x512  ok   off 4292211744 (row 3353290 col  272) pitch  1280  free 5122 KB
+   11  640x512  ok   off 4292867104 (row 3353802 col  272) pitch  1280  free 4482 KB
+   12  640x512  ok   off 4293522464 (row 3354314 col  272) pitch  1280  free 3842 KB
+   13  640x512  ok   off 4294177824 (row 3354826 col  272) pitch  1280  free 3202 KB
+   14  640x512  ok   off  9437312 (row  2304 col   64) pitch  4096  free 2562 KB
+   15  640x512  ok   off  6291456 (row  1536 col    0) pitch  4096  free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+   16  640x512  FAIL hr=8876017c free 1922 KB
+256x128*80
+   16  256x128  ok   off 4294833184 (row 8388346 col   16) pitch   512  free 1858 KB
+   17  256x128  ok   off 4294898720 (row 8388474 col   16) pitch   512  free 1794 KB
+   18  256x128  ok   off  9438592 (row  2304 col  704) pitch  4096  free 1730 KB
+   19  256x128  ok   off  9962880 (row  2432 col  704) pitch  4096  free 1666 KB
+   20  256x128  ok   off 10487168 (row  2560 col  704) pitch  4096  free 1602 KB
+   21  256x128  ok   off 11011456 (row  2688 col  704) pitch  4096  free 1538 KB
+   22  256x128  ok   off 11535744 (row  2816 col  704) pitch  4096  free 1474 KB
+   23  256x128  ok   off 12060032 (row  2944 col  704) pitch  4096  free 1410 KB
+   24  256x128  ok   off 11534464 (row  2816 col   64) pitch  4096  free 1346 KB
+   25  256x128  ok   off 12058752 (row  2944 col   64) pitch  4096  free 1282 KB
+   26  256x128  ok   off 11534976 (row  2816 col  320) pitch  4096  free 1218 KB
+   27  256x128  ok   off 12059264 (row  2944 col  320) pitch  4096  free 1154 KB
+   28  256x128  ok   off  6292736 (row  1536 col  640) pitch  4096  free 1090 KB
+   29  256x128  ok   off  6817024 (row  1664 col  640) pitch  4096  free 1026 KB
+   30  256x128  ok   off  7341312 (row  1792 col  640) pitch  4096  free 962 KB
+   31  256x128  ok   off  7865600 (row  1920 col  640) pitch  4096  free 898 KB
+   32  256x128  ok   off  8389888 (row  2048 col  640) pitch  4096  free 834 KB
+   33  256x128  ok   off  8914176 (row  2176 col  640) pitch  4096  free 770 KB
+   34  256x128  ok   off  8388608 (row  2048 col    0) pitch  4096  free 706 KB
+   35  256x128  ok   off  8912896 (row  2176 col    0) pitch  4096  free 642 KB
+   36  256x128  ok   off  8389120 (row  2048 col  256) pitch  4096  free 578 KB
+   37  256x128  ok   off  8913408 (row  2176 col  256) pitch  4096  free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+   38  256x128  FAIL hr=8876017c free 514 KB
+  -- freed all, free 12162 KB
+512x512*40
+    0  512x512  ok   off 4285658144 (row 4185213 col   16) pitch  1024  free 11650 KB
+    1  512x512  ok   off 4286182432 (row 4185725 col   16) pitch  1024  free 11138 KB
+    2  512x512  ok   off 4286706720 (row 4186237 col   16) pitch  1024  free 10626 KB
+    3  512x512  ok   off 4287231008 (row 4186749 col   16) pitch  1024  free 10114 KB
+    4  512x512  ok   off 4287755296 (row 4187261 col   16) pitch  1024  free 9602 KB
+    5  512x512  ok   off 4288279584 (row 4187773 col   16) pitch  1024  free 9090 KB
+    6  512x512  ok   off 4288803872 (row 4188285 col   16) pitch  1024  free 8578 KB
+    7  512x512  ok   off 4289328160 (row 4188797 col   16) pitch  1024  free 8066 KB
+    8  512x512  ok   off 4289852448 (row 4189309 col   16) pitch  1024  free 7554 KB
+    9  512x512  ok   off 4290376736 (row 4189821 col   16) pitch  1024  free 7042 KB
+   10  512x512  ok   off 4290901024 (row 4190333 col   16) pitch  1024  free 6530 KB
+   11  512x512  ok   off 4291425312 (row 4190845 col   16) pitch  1024  free 6018 KB
+   12  512x512  ok   off 4291949600 (row 4191357 col   16) pitch  1024  free 5506 KB
+   13  512x512  ok   off 4292473888 (row 4191869 col   16) pitch  1024  free 4994 KB
+   14  512x512  ok   off 4292998176 (row 4192381 col   16) pitch  1024  free 4482 KB
+   15  512x512  ok   off 4293522464 (row 4192893 col   16) pitch  1024  free 3970 KB
+   16  512x512  ok   off 4294046752 (row 4193405 col   16) pitch  1024  free 3458 KB
+   17  512x512  ok   off  9437312 (row  2304 col   64) pitch  4096  free 2946 KB
+   18  512x512  ok   off  9438336 (row  2304 col  576) pitch  4096  free 2434 KB
+   19  512x512  ok   off  6291456 (row  1536 col    0) pitch  4096  free 1922 KB
+   20  512x512  ok   off  6292480 (row  1536 col  512) pitch  4096  free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+   21  512x512  FAIL hr=8876017c free 1410 KB
+256x128*80
+   21  256x128  ok   off 4294571040 (row 8387834 col   16) pitch   512  free 1346 KB
+   22  256x128  ok   off 4294636576 (row 8387962 col   16) pitch   512  free 1282 KB
+   23  256x128  ok   off 4294702112 (row 8388090 col   16) pitch   512  free 1218 KB
+   24  256x128  ok   off 4294767648 (row 8388218 col   16) pitch   512  free 1154 KB
+   25  256x128  ok   off 4294833184 (row 8388346 col   16) pitch   512  free 1090 KB
+   26  256x128  ok   off 4294898720 (row 8388474 col   16) pitch   512  free 1026 KB
+   27  256x128  ok   off 11534464 (row  2816 col   64) pitch  4096  free 962 KB
+   28  256x128  ok   off 12058752 (row  2944 col   64) pitch  4096  free 898 KB
+   29  256x128  ok   off 11534976 (row  2816 col  320) pitch  4096  free 834 KB
+   30  256x128  ok   off 12059264 (row  2944 col  320) pitch  4096  free 770 KB
+   31  256x128  ok   off 11535488 (row  2816 col  576) pitch  4096  free 706 KB
+   32  256x128  ok   off 12059776 (row  2944 col  576) pitch  4096  free 642 KB
+   33  256x128  ok   off 11536000 (row  2816 col  832) pitch  4096  free 578 KB
+   34  256x128  ok   off 12060288 (row  2944 col  832) pitch  4096  free 514 KB
+   35  256x128  ok   off  8388608 (row  2048 col    0) pitch  4096  free 450 KB
+   36  256x128  ok   off  8912896 (row  2176 col    0) pitch  4096  free 386 KB
+   37  256x128  ok   off  8389120 (row  2048 col  256) pitch  4096  free 322 KB
+   38  256x128  ok   off  8913408 (row  2176 col  256) pitch  4096  free 258 KB
+   39  256x128  ok   off  8389632 (row  2048 col  512) pitch  4096  free 194 KB
+   40  256x128  ok   off  8913920 (row  2176 col  512) pitch  4096  free 130 KB
+   41  256x128  ok   off  8390144 (row  2048 col  768) pitch  4096  free 66 KB
+   42  256x128  ok   off  8914432 (row  2176 col  768) pitch  4096  free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+   43  256x128  FAIL hr=8876017c free 2 KB
+  -- freed all, free 12162 KB

@@ -276,24 +276,66 @@ static int lv_terms(int cx, int cy, Term *terms, int max)
     return n;
 }
 
+/* PL4: the sum of lv_terms(cx, cy, .., MAX_TERMS) amounts without the term records: same terms, same order,
+   same MAX_TERMS cut; the per-step constants (politics mods, coverage/commute maps) are read once by the caller.
+   Cells of the land-value loop always lie inside the map (tx = 2 cx <= w - 1), so the world_in checks of the
+   query functions always pass there. Keep in step with lv_terms. */
+typedef struct { const u8 *cq[SVC_COUNT]; const u8 *commute; int school_w, crime_k; } LvConst;
+static int lv_sum(int cx, int cy, const LvConst *K)
+{
+    int c = CELL_IDX(cx, cy), tx = cx << FIELD_SHIFT, ty = cy << FIELD_SHIFT, n = 1, k, svc = 0, parks;
+    int access = 0, ab = 0, i, j, jd, v = 15, a;
+    const int max = MAX_TERMS;
+    if (s_lake[c] && n < max) { v += s_lake[c]; n++; }
+    if (s_fedge[c] && n < max) { v += s_fedge[c]; n++; }
+    if (s_rockc[c] && n < max) { v += s_rockc[c]; n++; }
+    for (k = 0; k < SVC_COUNT; k++) svc += K->cq[k][c] * (k == SVC_SCHOOL ? K->school_w : s_svc_lv_w[k]);
+    svc = IMIN(30, svc / 100);
+    if (svc && n < max) { v += svc; n++; }
+    parks = ICLAMP(s_lotlv[c], -30, 20);
+    if (parks && n < max) { v += parks; n++; }
+    if (net_road_reach(tx, ty) <= ZONE_ROAD_REACH || net_road_reach(tx + 1, ty + 1) <= ZONE_ROAD_REACH) access += 8;
+    jd = K->commute[c];
+    if (jd != 255) access += jd <= 20 ? 7 : jd <= 40 ? 4 : 1;
+    if (access && n < max) { v += access; n++; }
+    if (s_f[FLD_POLLUTION][c] >= 4 && n < max) { v += -(s_f[FLD_POLLUTION][c] / 4); n++; }
+    if (s_f[FLD_CRIME][c] >= 4 && n < max) { v += -(s_f[FLD_CRIME][c] / 4); n++; }
+    if (K->crime_k > 100 && n < max) {
+        int cr = -((K->crime_k - 100) * (100 - K->cq[SVC_POLICE][c]) / 100 + 1) / 2;
+        if (cr) { v += cr; n++; }
+    }
+    if (s_f[FLD_NOISE][c] >= 4 && n < max) { v += -(s_f[FLD_NOISE][c] / 4); n++; }
+    for (j = cy - 1; j <= cy + 1; j++)
+        for (i = cx - 1; i <= cx + 1; i++)
+            if (i >= 0 && j >= 0 && i < FIELD_MAX_W && j < FIELD_MAX_H) ab += s_aband[CELL_IDX(i, j)];
+    if (ab && n < max) { v += -IMIN(30, ab * 3); n++; }
+    a = civic_lv_lake_term(cx, cy);
+    if (a && n < max) { v += a; n++; }
+    return v;
+}
+
 void fields_step_land_value(int quarter)
 {
-    int cx, cy, cw = cells_w(), ch = cells_h(), y0, y1, changed = 0, k, n;
-    Term terms[MAX_TERMS];
+    int cx, cy, cw = cells_w(), ch = cells_h(), y0, y1, changed = 0, k, growth;
+    LvConst K;
     if (s_dirty_terrain) recalc_terrain();
     if (s_dirty_lots) recalc_lots();
+    for (k = 0; k < SVC_COUNT; k++) K.cq[k] = net_cov_q_map(k);          /* PL4: per-step constants */
+    K.commute = traffic_commute_map();
+    K.school_w = POL_PCT(s_svc_lv_w[SVC_SCHOOL], politics_mod(PM_SCHOOL_LV_PCT));
+    K.crime_k = politics_mod(PM_CRIME_PCT);
+    growth = politics_mod(PM_LV_GROWTH_PCT);
     quarter &= 3;
     y0 = quarter * ch / 4; y1 = (quarter + 1) * ch / 4;
     for (cy = y0; cy < y1; cy++)
         for (cx = 0; cx < cw; cx++) {
-            int c = CELL_IDX(cx, cy), v = 0, old = s_f[FLD_LAND_VALUE][c], nv;
-            n = lv_terms(cx, cy, terms, MAX_TERMS);
-            for (k = 0; k < n; k++) v += terms[k].amount;
+            int c = CELL_IDX(cx, cy), v, old = s_f[FLD_LAND_VALUE][c], nv;
+            v = lv_sum(cx, cy, &K);
             v = ICLAMP(v, 0, 255);
             nv = (3 * old + v + 2) >> 2;
             if (nv == old && v != old) nv += v > old ? 1 : -1;    /* converge despite rounding */
-            if (nv > old && politics_mod(PM_LV_GROWTH_PCT) != 100)  /* M1: rent regulation slows rises */
-                nv = old + IMAX(1, (nv - old) * politics_mod(PM_LV_GROWTH_PCT) / 100);
+            if (nv > old && growth != 100)                          /* M1: rent regulation slows rises */
+                nv = old + IMAX(1, (nv - old) * growth / 100);
             if (nv != old) {
                 int i, j;
                 s_f[FLD_LAND_VALUE][c] = (u8)nv;

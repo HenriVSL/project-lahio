@@ -114,37 +114,39 @@ build well 74 76
 wait 3
 bulldoze 100 77 100 77
 build well 100 77
-wait 2
+wait 1
 bulldoze 86 81 86 81
 build well 86 81
 wait 1
 bulldoze 74 58 74 58
 build well 74 58
-wait 6
+wait 2
 bulldoze 86 65 86 65
 build well 86 65
-wait 1
-build coal_plant 110 75
-wait 3
-bulldoze 88 58 88 58
-build post 88 58
 wait 3
 bulldoze 100 60 100 60
 build sauna 100 60
 wait 1
-bulldoze 74 55 74 55
-build well 74 55
 bulldoze 74 70 74 70
 build sauna 74 70
-wait 3
-build coal_plant 112 75
-wait 6
-bulldoze 88 79 88 79
-build post 88 79
-wait 3
+wait 2
+build coal_plant 110 75
+wait 2
+bulldoze 74 55 74 55
+build well 74 55
+wait 1
 bulldoze 100 56 100 56
 build well 100 56
-wait 3
+bulldoze 88 58 88 58
+build post 88 58
+wait 2
+build coal_plant 112 75
+wait 4
+build coal_plant 114 75
+wait 2
+bulldoze 88 79 88 79
+build post 88 79
+wait 12
 road 46 31 74 31 street straight
 road 46 38 74 38 street straight
 road 46 45 74 45 street straight
@@ -167,43 +169,40 @@ zone 47 32 73 51 houses
 zone 61 49 73 51 commercial
 wait 1
 build clinic 61 39
-zone 61 46 73 48 commercial
-wait 2
+wait 3
+bulldoze 47 46 47 46
 build fire_station 47 46
-wait 3
-bulldoze 61 46 62 47
-build school 61 46
-wait 3
-build coal_plant 114 75
 wait 3
 bulldoze 86 60 86 60
 build well 86 60
+bulldoze 61 46 62 47
+build school 61 46
+zone 61 46 73 48 commercial
 wait 1
 bulldoze 47 37 47 37
 build well 47 37
-wait 2
-build coal_plant 104 82
-wait 3
+wait 1
 bulldoze 73 39 73 39
 build sauna 73 39
 wait 1
-bulldoze 47 49 47 49
-build sauna 47 49
+build coal_plant 104 82
 wait 1
 bulldoze 59 44 59 44
 build well 59 44
-wait 4
+wait 5
 bulldoze 61 37 61 37
 build post 61 37
-wait 4
+wait 2
+build coal_plant 106 82
 bulldoze 47 34 47 34
 build well 47 34
 wait 1
-build coal_plant 106 82
-wait 6
 bulldoze 73 35 73 35
 build well 73 35
 wait 1
+bulldoze 47 49 47 49
+build sauna 47 49
+wait 5
 road 74 31 102 31 street straight
 road 74 38 102 38 street straight
 road 74 45 102 45 street straight
@@ -225,31 +224,38 @@ build well 101 46
 zone 75 32 101 51 houses
 zone 89 49 101 51 commercial
 wait 1
+bulldoze 89 39 89 39
 build clinic 89 39
+bulldoze 75 46 75 46
 build fire_station 75 46
-zone 89 46 101 48 commercial
-wait 4
+wait 1
+bulldoze 101 39 101 39
+build sauna 101 39
+bulldoze 89 46 90 47
+build school 89 46
+wait 1
 build coal_plant 108 82
-wait 5
+wait 2
 bulldoze 59 39 59 39
 build well 59 39
-wait 1
 bulldoze 89 37 89 37
 build post 89 37
 wait 1
+build coal_plant 110 82
 bulldoze 75 37 75 37
 build well 75 37
 wait 1
-build coal_plant 110 82
-wait 1
 bulldoze 87 44 87 44
 build well 87 44
-bulldoze 89 46 90 47
-build school 89 46
-wait 3
+zone 89 46 101 48 commercial
+wait 1
+build coal_plant 112 82
 bulldoze 75 34 75 34
 build well 75 34
-wait 5
+wait 1
+bulldoze 101 35 101 35
+build well 101 35
+wait 11
 bulldoze 86 93 86 93
 build police 86 93
 wait 1
@@ -266,7 +272,7 @@ bulldoze 88 86 88 86
 build library 88 86
 wait 1
 build library 88 65
-wait 13
+wait 12
 bulldoze 86 74 86 74
 build park 86 74
 wait 1
@@ -278,7 +284,9 @@ build park 59 32
 wait 1
 bulldoze 87 32 87 32
 build park 87 32
-wait 21
+wait 22
 build concert_hall 67 83 0
-wait 240
+wait 36
+build tv_tower 87 103 0
+wait 216
 dump report bal_planner_s7_era_report.txt

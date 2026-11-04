@@ -17,6 +17,8 @@ The general rules of `docs/TASKS.md` ("Rules for every task") apply unchanged: o
 - **lahio (was kaupunki) uses its own VM: "VM B" (2026-11-03).** Use only `~/Documents/86box/samba/vmb/` wrappers: `vmb/w98 ...`,
   `vmb/vmlock wait|acquire|release|touch|status <task> ...`, `vmb/shot86.sh`, `vmb/vnc98.sh` (Mac ports 9899/5999). Never the
   plain `samba/w98`/`vmlock`/`shot86.sh` (VM A = SIROCCO). Same M: share. B down? See CLAUDE.md section 7.
+- **VC6 reserved names:** never use `near`, `far`, `small`, `huge`, `pascal`, `cdecl` or Win32 macro names (e.g. `LB_MAX`)
+  as identifiers, even in portable files: clang accepts them, VC6 doesn't.
 - **VM rule (WIN98-LINK.md, 2026-11-03):** while anyone else holds the VM lock, run **no agent98 work at all**,
   including `w98 build` and headless `-fast` runs (they make others' benchmarks/play-tests stutter). Take the lock
   for builds and headless runs too (`vmlock wait <task> ...` → work → `vmlock release <task>`) unless it is FREE or yours.

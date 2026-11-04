@@ -50,7 +50,9 @@ void uipol_on_open(void)
     if (!politics_enabled()) { s_view = V_TABS; return; }
     if (election_unseen()) s_view = V_ELECTION;
     else if (politics_pending_event() >= 0) s_view = V_EVENT;
-    else s_view = V_TABS;
+    else if (politics_decree_state(DEC_TOWN_RIGHTS) != DS_HIDDEN && !politics_decree_active(DEC_TOWN_RIGHTS)) {
+        s_view = V_TABS; uix_set_tab(1); s_sel_dec = DEC_TOWN_RIGHTS;   /* PL1: the waiting town-rights decree (\xa7 on Approval) */
+    } else s_view = V_TABS;
 }
 
 void uipol_title(char *buf, int size)

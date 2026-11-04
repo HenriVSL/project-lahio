@@ -16,8 +16,9 @@
 #include "art_world.h"
 #include "art_ui.h"
 
-#define ART_MAX_SHEETS 16
+#define ART_MAX_SHEETS 64          /* PL4: world pages (<= 512x256) of both zooms + UI sheets */
 #define ART_MAX_IDS    2048
+#define ART_MAX_PIECES 6144        /* PL4: runtime pieces (world pieces of both zooms + one per UI sprite) */
 #define ART_HASH       4096          /* power of two, > 2 * ids */
 #define ART_LOGGED     256
 
@@ -41,6 +42,24 @@ static Img    s_missImg;
 static u32    s_logged[ART_LOGGED];
 static int    s_nlogged;
 static int    s_maxUp[ZOOM_COUNT], s_maxHalfW[ZOOM_COUNT];
+
+/* PL4: runtime pieces. Every sprite draws through its pieces (UI sprites and the placeholder have one piece at
+   0,0 covering the whole box; world sprites 0..n trimmed pieces on the pages, art.h ArtPiece). */
+typedef struct { const Img *img; s16 x, y, w, h, dx, dy; } RtPiece;
+static RtPiece s_pc[ART_MAX_PIECES];
+static int    s_npc;
+static int    s_pageSlot[ART_MAX_SHEETS];   /* art_world_sheets index -> s_sheets slot */
+static PIX   *s_cbuf;                      /* art_pixels scratch for multi-piece sprites */
+static int    s_cbufN;
+
+static int add_piece(const Img *img, int x, int y, int w, int h, int dx, int dy)
+{
+    RtPiece *p;
+    if (s_npc >= ART_MAX_PIECES) { log_printf("art: error: more than %d pieces", ART_MAX_PIECES); return -1; }
+    p = &s_pc[s_npc];
+    p->img = img; p->x = (s16)x; p->y = (s16)y; p->w = (s16)w; p->h = (s16)h; p->dx = (s16)dx; p->dy = (s16)dy;
+    return s_npc++;
+}
 
 static u32 name_hash(const char *s)
 {
@@ -105,6 +124,7 @@ static void set_missing(void)
         s->img = &s_missImg;
         s->x = (s16)(z ? 64 : 0); s->y = 0; s->w = (s16)TILE_W(z); s->h = (s16)TILE_H(z);
         s->ax = (s16)(TILE_W(z) / 2); s->ay = (s16)TILE_H(z); s->hx = s->hy = -1;
+        s->piece0 = (s16)add_piece(&s_missImg, s->x, 0, s->w, s->h, 0, 0); s->npieces = 1;   /* PL4 */
         s_sheetOf[z][0] = -2;
     }
 }
@@ -125,6 +145,8 @@ static int register_sheet(int si)
             s->img = &s_sheets[si].img;
             s->x = a->x; s->y = a->y; s->w = a->w; s->h = a->h;
             s->ax = a->ax; s->ay = a->ay; s->hx = a->hx; s->hy = a->hy;
+            s->piece0 = (s16)add_piece(&s_sheets[si].img, a->x, a->y, a->w, a->h, 0, 0); s->npieces = 1;   /* PL4 */
+            if (s->piece0 < 0) return 0;
             s_sheetOf[z][id] = (s8)si;
             if (sh->zoom != ART_ZOOM_ANY) {
                 if (a->ay > s_maxUp[z]) s_maxUp[z] = a->ay;
@@ -136,7 +158,38 @@ static int register_sheet(int si)
     return 1;
 }
 
-static int evict(Sheet *S);
+/* PL4: one zoom's world sprites from their piece set (pages already loaded: s_pageSlot) */
+static int register_set(const ArtPieceSet *set)
+{
+    int i, k, z = set->zoom, dup = 0, anySlot = -1;
+    for (i = 0; i < ART_WORLD_SHEET_COUNT; i++)
+        if (art_world_sheets[i].zoom == z && s_pageSlot[i] >= 0) { anySlot = s_pageSlot[i]; break; }
+    if (z < 0 || z >= ZOOM_COUNT || anySlot < 0) { log_printf("art: error: piece set for zoom %d has no pages", z); return 0; }
+    for (i = 0; i < set->count; i++) {
+        const ArtPSpr *a = &set->spr[i];
+        ArtSprite *s;
+        int id = add_name(a->name), slot = anySlot;
+        if (id < 0) { log_printf("art: error: more than %d sprite names", ART_MAX_IDS); return 0; }
+        if (s_sheetOf[z][id] >= 0) { if (dup++ < 5) log_printf("art: warning: duplicate sprite \"%s\" (zoom %d)", a->name, z); continue; }
+        if (a->first < 0 || a->first + a->count > set->npieces) { log_printf("art: error: %s: bad piece range", a->name); return 0; }
+        s = &s_spr[z][id];
+        s->w = a->w; s->h = a->h; s->ax = a->ax; s->ay = a->ay; s->hx = a->hx; s->hy = a->hy;
+        s->piece0 = (s16)s_npc; s->npieces = a->count;
+        s->img = NULL; s->x = s->y = 0;
+        for (k = 0; k < a->count; k++) {
+            const ArtPiece *p = &set->pieces[a->first + k];
+            int ps = p->page < ART_WORLD_SHEET_COUNT ? s_pageSlot[p->page] : -1;
+            if (ps < 0) { log_printf("art: error: %s: piece on unknown page %d", a->name, p->page); return 0; }
+            if (add_piece(&s_sheets[ps].img, p->x, p->y, p->w, p->h, p->dx, p->dy) < 0) return 0;
+            if (k == 0) { s->img = &s_sheets[ps].img; s->x = p->x; s->y = p->y; slot = ps; }
+        }
+        s_sheetOf[z][id] = (s8)slot;
+        if (a->ay > s_maxUp[z]) s_maxUp[z] = a->ay;
+        if (a->ax > s_maxHalfW[z]) s_maxHalfW[z] = a->ax;
+        if (a->w - a->ax > s_maxHalfW[z]) s_maxHalfW[z] = a->w - a->ax;
+    }
+    return 1;
+}
 
 static int evict(Sheet *S);              /* F3: used by art_init's 32-zoom fallback */
 static int reload(Sheet *S);
@@ -147,6 +200,8 @@ int art_init(void)
     double t0 = time_ms();
     if (s_inited) return 1;
     memset(s_hash, 0, sizeof(s_hash));
+    s_npc = 0;                                         /* PL4 */
+    for (i = 0; i < ART_MAX_SHEETS; i++) s_pageSlot[i] = -1;
     make_missing();
     set_missing();
     s_nsheets = 0;
@@ -180,11 +235,14 @@ int art_init(void)
                 }
             }
             S->loaded = 1; S->w = S->img.w; S->h = S->img.h;
+            if (i < ART_WORLD_SHEET_COUNT) s_pageSlot[i] = s_nsheets;      /* PL4: a world page (pieces below) */
             if (!register_sheet(s_nsheets)) return 0;
             if (other) S->loaded = 0;                  /* F3: never in VRAM (was: evict(S)) */
             s_nsheets++;
         }
     }
+    for (i = 0; i < ART_WORLD_SET_COUNT; i++)          /* PL4: world sprites = pieces on the pages */
+        if (!register_set(&art_world_sets[i])) return 0;
     s_resident = ZOOM_64;
     if (s_blocked[ZOOM_64]) {                      /* F3: 32 zoom resident instead (degraded, but playable) */
         for (i = 0; i < s_nsheets; i++) if (s_sheets[i].def->zoom == ZOOM_64) evict(&s_sheets[i]);
@@ -199,8 +257,8 @@ int art_init(void)
     }
     s_inited = 1;                                      /* DESIGN 14.5: s_resident set above (64, or 32 when blocked) */
     for (z = 0, n = 0; z < ZOOM_COUNT; z++) n += s_maxUp[z];
-    log_printf("art: %d sheets, %d names (%d in one zoom only), %d fonts, VRAM %d KB (world 64: %d KB, 32: %d KB), "
-               "max sprite up %d/%d px, %.0f ms", s_nsheets, s_nids, missing1, ART_UI_FONT_COUNT, art_vram_kb(),
+    log_printf("art: %d sheets, %d names (%d in one zoom only), %d pieces, %d fonts, VRAM %d KB (world 64: %d KB, 32: %d KB), "
+               "max sprite up %d/%d px, %.0f ms", s_nsheets, s_nids, missing1, s_npc, ART_UI_FONT_COUNT, art_vram_kb(),
                art_world_vram_kb(ZOOM_64), art_world_vram_kb(ZOOM_32), s_maxUp[0], s_maxUp[1], time_ms() - t0);
     gfx_log_vram("art loaded");
     return 1;
@@ -215,6 +273,8 @@ void art_shutdown(void)
         memset(&s_sheets[i], 0, sizeof(Sheet));
     }
     s_nsheets = 0;
+    s_npc = 0;                                         /* PL4 */
+    if (s_cbuf) { free(s_cbuf); s_cbuf = NULL; s_cbufN = 0; }
     gfx_free_img(&s_missImg);
     memset(s_hash, 0, sizeof(s_hash));
     s_nids = 0; s_inited = 0; s_nlogged = 0; s_resident = -1;
@@ -382,7 +442,23 @@ int art_variants(const char *key)
 void art_draw(int zoom, int id, int x, int y)
 {
     const ArtSprite *s = art_get(zoom, id);
-    gfx_blit_part(s->img, s->x, s->y, s->w, s->h, x - s->ax, y - s->ay);
+    const RtPiece *p = &s_pc[s->piece0];
+    int k;
+    x -= s->ax; y -= s->ay;
+    for (k = 0; k < s->npieces; k++, p++) gfx_blit_part(p->img, p->x, p->y, p->w, p->h, x + p->dx, y + p->dy);   /* PL4 */
+}
+
+/* PL4: the sprite-local rect (sx, sy, w, h) at (dx, dy): one blit per overlapping piece */
+void art_blit_part(int zoom, int id, int sx, int sy, int w, int h, int dx, int dy)
+{
+    const ArtSprite *s = art_get(zoom, id);
+    const RtPiece *p = &s_pc[s->piece0];
+    int k, x1 = sx + w, y1 = sy + h;
+    for (k = 0; k < s->npieces; k++, p++) {
+        int ix0 = IMAX(sx, p->dx), iy0 = IMAX(sy, p->dy), ix1 = IMIN(x1, p->dx + p->w), iy1 = IMIN(y1, p->dy + p->h);
+        if (ix0 >= ix1 || iy0 >= iy1) continue;
+        gfx_blit_part(p->img, p->x + ix0 - p->dx, p->y + iy0 - p->dy, ix1 - ix0, iy1 - iy0, dx + ix0 - sx, dy + iy0 - sy);
+    }
 }
 
 void art_draw_cols(int zoom, int id, int x, int y, int col0, int col1)
@@ -391,37 +467,50 @@ void art_draw_cols(int zoom, int id, int x, int y, int col0, int col1)
     if (col0 < 0) col0 = 0;
     if (col1 > s->w) col1 = s->w;
     if (col1 <= col0) return;
-    gfx_blit_part(s->img, s->x + col0, s->y, col1 - col0, s->h, x - s->ax + col0, y - s->ay);
+    art_blit_part(zoom, id, col0, 0, col1 - col0, s->h, x - s->ax + col0, y - s->ay);   /* PL4 */
 }
 
-/* pixels of exactly the record art_get returns (which may be the other zoom's copy when not resident) */
+/* pixels of exactly the record art_get returns (which may be the other zoom's copy when not resident).
+   PL4: a sprite whose single piece is its whole box points into the page; others are assembled into s_cbuf. */
 const PIX *art_pixels(int zoom, int id, int *pitch)
 {
     const ArtSprite *s = art_get(zoom, id);
-    const PIX *base;
-    int w, si = -1;
-    if (zoom < 0 || zoom >= ZOOM_COUNT) zoom = 0;
-    if (id > 0 && id < s_nids) {
-        if (s == &s_spr[zoom][id]) si = s_sheetOf[zoom][id];
-        else if (s == &s_spr[zoom ^ 1][id]) si = s_sheetOf[zoom ^ 1][id];
+    const RtPiece *p = &s_pc[s->piece0];
+    int k, n = s->w * s->h, i, y;
+    PIX key = gfx_key();
+    if (s->npieces == 1 && p->dx == 0 && p->dy == 0 && p->w == s->w && p->h == s->h) {
+        if (!p->img || !p->img->px) return NULL;
+        *pitch = p->img->w;
+        return p->img->px + p->y * p->img->w + p->x;
     }
-    if (si < 0) { base = s_missImg.px; w = s_missImg.w; s = (s == &s_spr[0][0] || s == &s_spr[1][0]) ? s : &s_spr[zoom][0]; }
-    else if (s_sheets[si].loaded) { base = s_sheets[si].img.px; w = s_sheets[si].img.w; }
-    else { base = s_sheets[si].saved; w = s_sheets[si].w; }
-    if (!base) return NULL;
-    *pitch = w;
-    return base + s->y * w + s->x;
+    if (n <= 0) return NULL;
+    if (n > s_cbufN) {
+        PIX *nb = (PIX *)realloc(s_cbuf, n * sizeof(PIX));
+        if (!nb) return NULL;
+        s_cbuf = nb; s_cbufN = n;
+    }
+    for (i = 0; i < n; i++) s_cbuf[i] = key;
+    for (k = 0; k < s->npieces; k++, p++) {
+        if (!p->img || !p->img->px) continue;
+        for (y = 0; y < p->h; y++)
+            memcpy(s_cbuf + (p->dy + y) * s->w + p->dx, p->img->px + (p->y + y) * p->img->w + p->x, p->w * sizeof(PIX));
+    }
+    *pitch = s->w;
+    return s_cbuf;
 }
 
 int art_opaque(int zoom, int id, int px, int py)
 {
     const ArtSprite *s = art_get(zoom, id);
-    const PIX *p;
-    int pitch;
+    const RtPiece *p = &s_pc[s->piece0];
+    int k;
     if (px < 0 || py < 0 || px >= s->w || py >= s->h) return 0;
-    p = art_pixels(zoom, id, &pitch);
-    if (!p) return 1;
-    return p[py * pitch + px] != gfx_key();
+    for (k = 0; k < s->npieces; k++, p++) {             /* PL4: the piece holding the pixel (pieces don't overlap) */
+        if (px < p->dx || py < p->dy || px >= p->dx + p->w || py >= p->dy + p->h) continue;
+        if (!p->img || !p->img->px) return 1;
+        return p->img->px[(p->y + py - p->dy) * p->img->w + p->x + px - p->dx] != gfx_key();
+    }
+    return 0;
 }
 
 int art_max_up(int zoom) { return s_maxUp[zoom & 1] > 0 ? s_maxUp[zoom & 1] : (256 >> zoom); }
@@ -534,7 +623,7 @@ int art_selftest(void)
         }
         if (art_variants(d->key) < d->variants)
             log_printf("art: selftest: %s: defs variants %d, art has %d", d->key, d->variants, art_variants(d->key));
-        if (d->cat != BCAT_ZONE) need("icon_b_%s", d->key);
+        if (d->cat != BCAT_ZONE && !(d->flags & BDF_MODULE)) need("icon_b_%s", d->key);   /* PL3: modules use the complex's icon */
     }
     for (b = ROAD_GRAVEL; b < ROAD_CLASS_COUNT; b++) need("icon_r_%s", g_roads[b].key);
     for (i = 0; icons_extra[i]; i++) need("%s", icons_extra[i]);
