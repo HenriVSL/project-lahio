@@ -517,8 +517,8 @@ TEST(water_old_save_migration)
              net_stats(NET_WATER)->lots_served, net_stats(NET_WATER)->lots_short, net_stats(NET_WATER)->lots_unconnected);
     wdump("auto1", 0, 0, g_world.w - 1, g_world.h - 1);
     CHECK(roads > 0);
-    if (other > 0) {   /* PL2: AUTO1.KAU is now the user's play-test autosave (pipes off the roads: a post-F1 save, no migration) */
-        test_log("AUTO1 is a post-F1 save (%d pipes off roads): migration check skipped", other);
+    if (other > 0 || world_last_tile_version() >= 2) {   /* AUTO1.KAU is usually the user's own autosave: only a TILE v1 save is migrated */
+        test_log("AUTO1 is a post-F1 save (TILE v%d, %d pipes off roads): migration check skipped", world_last_tile_version(), other);
         CHECK(net_stats(NET_WATER)->lots_served > 0);
         return;
     }

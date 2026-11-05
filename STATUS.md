@@ -40,6 +40,7 @@ Owner session: 86box-86. Started 2026-11-02.
 - Done also: F3 UX fixes, M3 industry kinds + forestry/farms, M2 traffic + buses + station, R1 rename to Project Lähiö.
 - Done: M5 services & housing, M6 paper mill + Valtion Metalli, M7 trade & eras (trimmed, DESIGN 14.7). **Feature freeze.**
 - P1 pre-play-test integration done. **User play-test 2 done (2026-11-04)**: reached 1992, Town, 12,933 pop; 11 findings in PLAYTEST.md.
+- **Version 1.0 released (2026-11-05)**, tag v1.0, GitHub release with lahio-1.0.zip.
 - **Polish wave done (2026-11-04, version 0.9)**: PL1 guidance (newspaper advisor/hindsight, progression, Guide F4, power UI,
   Services key E), PL2 gameplay (Church-village apartment gate, railways + road fallback, human pacing, debt), PL3 bugs/UX,
   PL4 performance (1024 close zoom via 512x256 art pages, VRAM headroom, spikes halved). Next: user's morning look.

@@ -11,9 +11,13 @@ Classic grid building (roads, zones, power, water pipes, services, budget) desig
 builders: every number is explained, effects are previewed before you build, undo works within the month, and the
 simulation is aggregate and deterministic, with cosmetic traffic and smoke on top.
 
-Status: **Version 0.9** (feature-complete pre-release: one presidency 1955-1990 with politics, industry kinds,
-forestry and farms, traffic congestion and buses, element-built apartment blocks, clearing trade and eras; polish and
-balance pass in progress toward 1.0).
+Status: **Version 1.0** (2026-11-05). One presidency from 1955 to 1990 (about 30 minutes at speed 3, 2.5 hours at
+speed 1), ending with the 1990 newsreel; the sandbox continues afterwards. Includes politics (decrees, letters, event
+cards, elections), industry kinds with forestry and farms, the paper mill and Valtion Metalli, traffic congestion and
+buses, water pipes and district heating, element-built apartment blocks, clearing trade and the oil shocks, and a
+newspaper that quietly advises the President.
+
+**Download:** see the GitHub Releases page for `lahio-1.0.zip` (unzip anywhere on a Win98 machine and run `lahio.exe`).
 
 ## System requirements
 

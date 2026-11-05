@@ -192,4 +192,6 @@ struct SaveFile;
 int   world_save(struct SaveFile *sf);
 int   world_load(struct SaveFile *sf);  /* then world_recalc + notify_all inside */
 
+int   world_last_tile_version(void);   /* TILE chunk version of the last world_load (1 = pre-pipes save) */
+
 #endif

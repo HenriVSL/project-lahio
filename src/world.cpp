@@ -710,10 +710,14 @@ int world_save(struct SaveFile *sf)
     return 1;
 }
 
+static int s_last_tile_ver;                       /* 1.0: TILE chunk version of the last load (tests) */
+int world_last_tile_version(void) { return s_last_tile_ver; }
+
 int world_load(struct SaveFile *sf)
 {
     int ver, y, i, n, w, h;
     if (!load_find_chunk(sf, "TILE", &ver)) return 0;
+    s_last_tile_ver = ver;
     w = (int)load_u16(sf); h = (int)load_u16(sf);
     if (w < 8 || h < 8 || w > MAP_MAX_W || h > MAP_MAX_H) return 0;
     memset(g_world.t, 0, sizeof(g_world.t));
