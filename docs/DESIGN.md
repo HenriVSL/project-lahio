@@ -710,3 +710,18 @@ Binding; wins over every earlier section.
 - **1.0 = one presidency 1955-1990** (~30 min at speed 3, ~2.5 h at speed 1) ending with the 1990 newsreel; sandbox continues.
 - **Feature freeze after M5-M7.** Then a user play-test, then polish (SCOPE_REVIEW section 3 checklist) and balance.
   New ideas go to a post-1.0 list.
+
+---
+
+## 15. Version 1.1 "Harder times" (2026-11-08) — full spec: `docs/DESIGN_1_1.md` (binding for 1.1)
+- **Difficulty** chosen at New Game (default Normal, fixed per game): **Easy = 1.0 bit for bit** (regression test), Normal and
+  Hard tighten named levers (upkeep, tax yield/tolerance, overtime threshold, emigration, decline speed, card severity,
+  authority income, Eastern drift, oil shocks, fire). Death-spiral guards stay on at every level.
+- **Threats:** announced hard winters; 1969-70 Sweden migration (Normal/Hard; jobs/homes/contentment each cancel a third);
+  faster decline. **Anti-coasting:** upkeep cap, Eastern drift, winter peaks growing with the town, era expectations (1975:
+  tier-3 homes need library cover; 1980: apartments T2+ need clinic cover; announced a year ahead + 12-month grace).
+- **Winter** Dec-Mar: power/heat demand peaks (+15/20%), hard winters (forecast 1 Nov; 1986-87 fixed) add more and cut water
+  sources (frozen pipes); T3 heat checks use the winter peak; ploughing = winter road-upkeep surcharge on a "Winter" ledger line.
+  Easy: winter cosmetic only.
+- **Winter art:** snow pass in the G-buffer generator using the summer page layout exactly; only the active season resident;
+  **0 KB extra VRAM**; swap at the 1 Dec / 1 Apr month tick (~140 ms); INI `winter_art=0` fallback. Mockups to the user first.
