@@ -13,6 +13,8 @@
 #include "budget.h"
 #include "fields.h"
 #include "advice.h"     /* PL1: building purposes in the unlock line */
+#include "season.h"     /* 1.1 W1: winter shortage lines */
+#include "hard.h"       /* 1.1 D1: the Sweden recruiters */
 
 static const char *const s_months[MONTHS_PER_YEAR] = { "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December" };
@@ -113,7 +115,7 @@ const char *text_req_label(int req)
 {
     static const char *const n[REQ_COUNT] = { "Road", "Power", "Water", "Water tower", "Precast elements",
         "School", "Sauna", "Health care", "Shop", "Telephone", "Land value", "Clean air", "Customers",
-        "Workers", "Main road", "District heating", "Wood", "Milk", "Route to jobs" };   /* M3: wood, milk; M2: route */
+        "Workers", "Main road", "District heating", "Wood", "Milk", "Route to jobs", "Library" };   /* M3: wood, milk; M2: route; 1.1 D1 */
     return (req >= 0 && req < REQ_COUNT) ? n[req] : "?";
 }
 
@@ -122,7 +124,7 @@ const char *text_term_label(int kind, int id)
     static const char *const dt[DT_COUNT] = { "Open jobs", "Rural migrants", "Attractiveness", "Vacant homes",
         "Unemployed", "Shoppers' spending", "Existing shops", "Clearing trade (East)", "Western orders",
         "Local need", "Existing industry", "Taxes", "Decrees and events", "Regional migrants (railway)",
-        "Rail freight" };   /* M2: station */
+        "Rail freight", "Sweden is hiring" };   /* M2: station; 1.1 D1: 1969-70 */
     static const char *const st[ST_COUNT] = { "Demand", "Land value", "Services", "Pollution", "Commute",
         "Noise", "Luck", "Decrees" };
     static const char *const lvt[LVT_COUNT] = { "Base value", "Lakeside", "Forest edge", "Rock", "Services",
@@ -150,6 +152,7 @@ const char *text_term_label(int kind, int id)
         case BL_POLITICS:     return "Decrees and diplomacy";
         case BL_COMPANY:      return "Company contribution";     /* M6 */
         case BL_FUEL:         return "Fuel (oil, coal)";         /* M7 */
+        case BL_WINTER:       return "Winter: ploughing and frost repairs";   /* 1.1 W1 */
         }
         return "?";
     }
@@ -300,7 +303,10 @@ int text_req_line(char *buf, int size, const ReqItem *it)
         text_fmt_int(a, sizeof(a), it->have);
         text_fmt_int(b, sizeof(b), it->need);
         return str_printf(buf, size, "%s Precast elements: this month's are used up (%s left, needs %s)", g, a, b);
-    case REQ_SCHOOL: case REQ_SAUNA: case REQ_HEALTH: case REQ_PHONE:
+    case REQ_SCHOOL: case REQ_SAUNA: case REQ_HEALTH: case REQ_PHONE: case REQ_LIBRARY:
+        if ((it->why == 3 || it->why == 4) && it->req != REQ_PHONE)   /* 1.1 D1: era expectation announced / in its grace */
+            return str_printf(buf, size, it->why == 3 ? "%s %s (expected from %d)" : "%s %s (expected since %d; a year's grace)",
+                              g, lab, (int)it->need);
         if (it->req == REQ_PHONE && it->why == 2)               /* M5: before the telephone age */
             return str_printf(buf, size, "%s Telephone (needed from %d)", g, (int)it->need);
         if (it->req == REQ_PHONE && !it->met && !it->lot)       /* M5: the phone queue */
@@ -429,13 +435,22 @@ int text_event(char *buf, int size, const SimEvent *e, int *severity)
     case SE_EMIGRATION:
         text_fmt_int(a, sizeof(a), e->a);
         text_fmt_int(b, sizeof(b), e->b);
+        if (hard_sweden()->active && hard_sweden()->month > 0) {   /* 1.1 D1: the 1969-70 recruiters */
+            char c[24];
+            text_fmt_int(c, sizeof(c), hard_sweden()->month);
+            return str_printf(buf, size, "%s residents left for Sweden this month, %s of them with the recruiters. %s", a, c,
+                              hard_sweden()->reasons >= 2 ? "The rest, says the co-op, had cousins there anyway."
+                                                          : "The recruiters have ordered more tickets.");
+        }
         if (e->a >= 100) return str_printf(buf, size, "%s residents left for Sweden this month (%s in all). Volvo is hiring.", a, b);
         return str_printf(buf, size, "%s residents left for Sweden this month (%s in all).", a, b);
     case SE_POWER_SHORTAGE:
+        if (season_suppress_event(e->type)) return 0;      /* 1.1 W1: the winter's candles line said it this month */
         text_fmt_int(a, sizeof(a), e->a);
         if (e->b > 0) return str_printf(buf, size, "Power shortage: %s buildings in the dark. The plants are %d units short.", a, (int)e->b);
         return str_printf(buf, size, "Power shortage: %s buildings in the dark.", a);
     case SE_WATER_SHORTAGE:
+        if (season_suppress_event(e->type)) return 0;      /* 1.1 W1: the frozen-pipes line said it this month */
         text_fmt_int(a, sizeof(a), e->a);
         if (e->b > 0) return str_printf(buf, size, "Water shortage: %s buildings have dry taps. %d units short.", a, (int)e->b);
         return str_printf(buf, size, "Water shortage: %s buildings have dry taps.", a);
@@ -483,6 +498,7 @@ static const char *problem_phrase(int req)
     case REQ_WOOD:          return "short of wood";
     case REQ_MILK:          return "short of milk";
     case REQ_ROUTE:         return "with no road to the jobs";   /* M2 */
+    case REQ_LIBRARY:       return "without a library";          /* 1.1 D1 */
     }
     return "with a problem";
 }

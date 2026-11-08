@@ -11,6 +11,8 @@ python3 art/gen_art.py --check            # check the written files only (exit 1
 python3 art/gen_art.py --only house_t2,road_   # re-render names starting with these prefixes, reuse the rest
                                           # from art/.cache/sprites.pickle (fast iteration on one family)
 python3 art/gen_art.py -j 1 --nopreview   # single process, skip previews
+python3 art/gen_art.py --mockups          # 1.1 W2: render both seasons + write only the winter mockups (no pages)
+python3 art/gen_art.py --cached --mockups # the same from art/.cache (no rendering)
 ```
 
 ## 1. Files
@@ -21,6 +23,7 @@ python3 art/gen_art.py -j 1 --nopreview   # single process, skip previews
 | `artlib.py` | core: solids, ray-cast G-buffer, palette + style C, shading passes (`normal`, `ab` = abandoned), BMP writer, skyline packer |
 | `art_terrain.py` | ground materials: grass/meadow, water + shimmer frames, shores (with islet cleanup), fields, marsh, road/rail autotile geometry, lot grounds |
 | `art_models.py` | materials, trees, props, the Lada, every building builder, construction stage, lot ground, bridges, power poles |
+| `world<k>_<z>w.bmp` | 1.1 W2 **winter pages**: the winter copy of page k, same size, same alpha, same piece rects (section 9) |
 | `world<k>_64.bmp`, `world<k>_32.bmp` | **pages** (PL4): 24-bit BI_RGB, <= 512 x 256, key RGB(255,0,255), all colours pre-rounded to RGB565; hold trimmed sprite **pieces** (section 8) |
 | `sheet_world_<z>.h` | per zoom: `art_pieces_<z>[]` (ArtPiece: page, x, y, w, h, dx, dy) + `art_sprites_<z>[]` (ArtPSpr: name, w, h, ax, ay, hx, hy, first piece, count) |
 | `art_world.h` | the index: includes the two headers, `art_world_sheets[]` (the pages, `spr` NULL), `ART_WORLD_SHEET_COUNT`, `art_world_sets[]` (one ArtPieceSet per zoom) (src/art.h convention) |
@@ -261,8 +264,7 @@ static const ArtPSpr art_sprites_64[] = {
   See `preview/town_64_zones.png` (gen_art.py `zone_layer()` is the reference implementation).
 - **Smoke**: spawn `smoke0` at the hotspot, advance frames while rising ~6 px (64 zoom) per frame and drifting right.
 - **Strip sorting**: everything stays inside its lot; tall chimneys/towers sit inside the footprint columns.
-- **Winter later**: `render_gbuffer` keeps per pixel the face normal, material key and world point; a snow pass is a
-  new `shade()` mode that maps up-facing roof/ground pixels to snow ramps and water to ice. No new models needed.
+- **Winter** (1.1 W2): done, see section 9.
 
 ## 7. VRAM report (16-bit; `--check` prints the current numbers)
 
@@ -301,3 +303,42 @@ the heat plant, no abandoned art for industry kinds/services/complexes, only exi
 - **Iteration.** `python3 art/gen_art.py --repack` re-cuts and re-packs the cached sprites (art/.cache) in ~15 s and
   runs the check. The PL4 switch was verified pixel-exact: every one of the 2,320 sprites (both zooms) re-assembled
   from its pieces equals the old sheet rect, with the same w, h, ax, ay, hx, hy.
+
+## 9. Winter art (1.1 W2, DESIGN_1_1 section 4)
+
+- **One G-buffer, two shades.** Every job is shaded twice: `normal`/`ab` and `winter`/`ab_winter` (artlib `shade()`).
+  The winter pass only recolours, so the alpha mask is identical (run_job raises if not): every sprite keeps its box,
+  anchor, pieces and picking, and **one piece table serves both seasons**. Cars are season-invariant (no winter copy).
+  Caches: `art/.cache/sprites.pickle` (summer, unchanged format) + `sprites_winter.pickle`.
+- **Pieces and pages.** `write_sheets` shares a piece only when it is identical in both seasons, packs once, and writes
+  `world<k>_<z>.bmp` + `world<k>_<z>w.bmp` (winter pixels at exactly the summer rects; a page identical in both seasons
+  gets no winter file). `art_world.h` lists `art_world_winter[]` (per page: winter BMP or NULL) and
+  `ART_WORLD_HAS_WINTER`. Summer pixels are bit-identical to 1.0 (only one 32-zoom piece split; page sizes unchanged).
+- **Look** (THEME 3.2, user-approved mockups 2026-11-08): `CUSTOM_RAMPS` snow `#F4F6F8`..`#8597AE` (flat ground one tone
+  below a lit flat roof, `SNOW_GROUND_D`; ground shadows lifted to the blue `#BCC8D8`), ice (blue-grey, drift patches,
+  all shimmer frames identical), packed snow with grit (gravel roads, yards, paths, rail bed). Solids: up-facing
+  (normal z > 0.5) non-glass pixels -> snow, walls unchanged (outlines stay); spruce `spruce_w` with snow bands, pine
+  caps, deciduous crowns -> bare twigs with light gaps + snow dabs (rowan berries kept), rock flanks dark with snowy
+  tops, ~16 % of plain glass windows lit (`WINTER_LIT_WINDOWS`), power wires dark (`wire_w`). Ground functions read
+  `st.winter`: ploughed roads (asphalt `asph_w`, markings hidden, slush ridge, packed edges, snow banks from the road
+  distance, so autotiles still match), gravel = packed snow with ruts, rails dark on a grey bed, fields white with
+  furrows and frozen ditches, marsh with sedge tussocks, shores with dry reeds in the ice, car parks ploughed with
+  banks. Rivers/rapids stay open (dark water, shimmer kept); bridge water is ice. Generic fallback `winter_ground()`:
+  `SNOW_GROUND` / `PACKED_GROUND` / `KEEP_GROUND` tables (unknown summer ground keys are listed by the render).
+- **Flat marks** (procedural): winter copies with darker colours (same pixels drawn): cursors (`CUR_COLS_W`), zone
+  tints (`ZONE_TINTS_W`), zone-view dashes (`ZONEV_COLS_W`), overlay dither colours (`_ovr_winter`, NETC_WET darker).
+  Pipes, smoke, fire unchanged.
+- **Check** (`--check`): per zoom x season page count/sizes, 24-bit, 565, no near-key, winter alpha == summer alpha per
+  page, every sprite re-assembled from the winter pages == its winter render (with the cache), VRAM per zoom x season
+  (summer = winter: 64-zoom 7,691 KB, 32-zoom 1,918 KB; the winter copies need the same again in system memory).
+- **Mockups** (`preview/`): `*_winter.png` for every town view, overlays (pollution, land value, water), zone view,
+  `cursors_<z>_winter.png` (cursor marks + lot ghosts on snow), the M2 towns, review sheets; `cmp_*.png` summer|winter.
+- **Engine** (src/art.cpp): `art_set_season()` re-uses the same surfaces. Plan A keeps the other season as a per-page
+  delta (runs of differing pixels: 3,887 KB instead of 9,609 KB); step 1 swaps the resident pages' px (VM B 37 ms),
+  step 2 on the next frame uploads them (31 pages at z64: 128-141 ms; 8 at z32: 32 ms); the other zoom's pages catch
+  up when they become resident. Plan B (process memory over `ART_HEAP_BUDGET_KB` = 40 MB) reads pages from disk
+  (~850 ms on VM B); Plan C = INI `winter_art=0` or missing pages. Process memory on VM B: 19.8 MB before the art,
+  30.0 MB with it (1.0), 34.0 MB with the winter delta. render.cpp polls `season_is_winter()` (or `-winter` /
+  `-summer`, script `artseason 1|0|-1`) each frame and flushes chunks, ghost copies and minimap colours after a swap
+  (ui.cpp rebuilds the minimap); lakes/shores do not shimmer in winter. VM test: `scripts/w2_shots.txt`,
+  results in `tests/out/w2/`.

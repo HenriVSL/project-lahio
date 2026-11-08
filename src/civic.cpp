@@ -16,6 +16,7 @@
 #include "tools.h"
 #include "text.h"
 #include "util.h"
+#include "season.h"         /* 1.1 W1: winter heat load, the T3 check against the winter peak */
 
 #define NTILES      (MAP_MAX_W * MAP_MAX_H)
 #define NCELLS      (FIELD_MAX_W * FIELD_MAX_H)
@@ -218,6 +219,7 @@ static void util_solve(int ut)
         memset(&S[ns], 0, sizeof(USrc));
         S[ns].lot = (u16)i; S[ns].cut = DIST_NONE;
         S[ns].output = S[ns].left = g_bdefs[l->def].capacity;
+        if (ut == UT_HEAT) S[ns].left = season_eff_supply(S[ns].output, season_heat_pct());   /* 1.1 W1: winter heat load */
         s_uf[ns] = (u16)ns;
         lot_rect_q(l, &lx0, &ly0, &lx1, &ly1);
         for (y = ly0; y <= ly1; y++)
@@ -320,6 +322,7 @@ static void util_solve(int ut)
         if (S[i].net == i) sum->networks++;
     }
     sum->sources = ns;
+    if (ut == UT_HEAT) { sum->demand = season_scale(sum->demand, season_heat_pct()); sum->used = season_scale(sum->used, season_heat_pct()); }   /* 1.1 W1 */
 }
 
 /* heat: LF_HEAT on served lots, ZF_HEAT on lot tiles of served lots and on graph tiles where a new building
@@ -581,6 +584,11 @@ int civic_util_source(int ut, int lot, UtilSrcInfo *out)
         if (s->lot != lot) continue;
         out->lot = lot; out->output = s->output; out->own_used = s->own_used; out->shared_used = s->shared_used;
         out->used = s->own_used + s->shared_used; out->spare = s->output - out->used;
+        if (ut == UT_HEAT && season_heat_pct() != 100) {   /* 1.1 W1: the winter use shown against the plant's output */
+            int hp = season_heat_pct();
+            out->own_used = season_scale(out->own_used, hp); out->shared_used = season_scale(out->shared_used, hp);
+            out->used = out->own_used + out->shared_used; out->spare = s->output - out->used;
+        }
         out->lots = s->lots; out->lots_short = s->lots_short; out->short_units = s->short_units;
         out->reach = s->reach; out->at_capacity = s->lots_short > 0; out->network = s->net;
         return 1;
@@ -612,6 +620,21 @@ s32 civic_heat_spare_for(int lot)
     si = s_lsi[UT_HEAT][lot];
     if (!si || si > s_nus[UT_HEAT]) return 0;
     return s_pool[UT_HEAT][s_us[UT_HEAT][si].net];
+}
+
+/* 1.1 W1: the spare at this winter's peak (all year), so a block upgraded in July is not short in January: the network's
+   allocation budget shrinks from supply x 100 / now% to supply x 100 / peak% (Easy, or in winter: = civic_heat_spare_for) */
+s32 civic_heat_spare_peak(int lot)
+{
+    int si, net, now = season_heat_pct(), pk = season_peak_pct();
+    s32 sup;
+    if (lot <= 0 || lot >= MAX_LOTS) return 0;
+    si = s_lsi[UT_HEAT][lot];
+    if (!si || si > s_nus[UT_HEAT]) return 0;
+    net = s_us[UT_HEAT][si].net;
+    if (pk <= now) return s_pool[UT_HEAT][net];
+    sup = s_nsup[UT_HEAT][net];
+    return s_pool[UT_HEAT][net] - (season_eff_supply(sup, now) - season_eff_supply(sup, pk));
 }
 
 void civic_util_summary(int ut, UtilSummary *out)

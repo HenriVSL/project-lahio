@@ -28,6 +28,8 @@
 #include "complex.h"
 #include "civic.h"
 #include "era.h"           /* M7 */
+#include "hard.h"          /* 1.1 D1 */
+#include "season.h"        /* 1.1 W1 */
 #include "util.h"
 #include "world.h"
 #include "sim.h"
@@ -550,6 +552,8 @@ int save_game_to(SaveFile *sf, const SaveMeta *meta)
     complex_save(sf);                        /* M6: chunk CPLX */
     civic_save(sf);                          /* M5: chunk CIVC */
     era_save(sf);                            /* M7: chunks ERA + TRAD */
+    hard_save(sf);                           /* 1.1 D1: chunk HARD (Sweden 1969-70) */
+    season_save(sf);                         /* 1.1 W1: chunk SEAS (forecast, hard winter, winter costs) */
     save_end_chunk(sf);                      /* in case a module left one open */
     end_off = sf->size;
     save_begin_chunk(sf, "END ", 1);
@@ -600,6 +604,8 @@ int load_game_from(SaveFile *sf, SaveMeta *meta_out)
     complex_after_load(complex_load(sf));    /* M6: chunk CPLX; missing = no complexes */
     civic_load(sf);                          /* M5: chunk CIVC; missing = fresh (solved on schedule) */
     era_load(sf);                            /* M7: chunks ERA + TRAD; missing = fresh for the save's date */
+    hard_load(sf);                           /* 1.1 D1: chunk HARD; missing = fresh */
+    season_load(sf);                         /* 1.1 W1: chunk SEAS; missing = fresh (no forecast) */
     if (!load_ok(sf)) {                      /* validated file whose optional chunk was malformed */
         set_err("error: an optional chunk (TRAF/NET/SIMX/BUDX) failed to load");
         world_new(MAP_DEF_W, MAP_DEF_H);

@@ -35,6 +35,7 @@ static IniKey s_keys[] = {
     { "zone_view",        &g_cfg.zone_view },        /* F3: persistent zone borders (V) */
     { "hints",            &g_cfg.hints },            /* F3: opening hints at a new game (0 = off) */
     { "newspaper",        &g_cfg.newspaper },        /* M7: January paper opens (1) or ticker only (0) */
+    { "winter_art",       &g_cfg.winter_art },       /* 1.1 W2: snow scenery Dec-Mar (0 = summer art all year) */
 };
 #define NUM_KEYS COUNTOF(s_keys)
 /* res and fps are stored as text ("800", "auto"); handled next to the table */
@@ -74,6 +75,8 @@ static void set_defaults(void)
     g_cfg.hints = 1;                                 /* F3 */
     g_cfg.pipes_with_roads = 1;                      /* user decision (M7 round): lay pipes with new roads by default */
     g_cfg.newspaper = 1;                             /* M7 */
+    g_cfg.winter_art = 1;                            /* 1.1 W2 */
+    g_cfg.force_season = -1;                         /* 1.1 W2: -winter / -summer */
 }
 
 static void snapshot(int *dst)
@@ -244,6 +247,8 @@ static void parse_cmdline(void)
         else if (is_sw(a, "flipmode") && more >= 1) g_cfg.flip_mode = arg_int(&i, 0, 2);
         else if (is_sw(a, "pacetrace") && more >= 1) g_cfg.pace_trace = arg_int(&i, 0, 100000);
         else if (is_sw(a, "repairs") && more >= 1) g_cfg.max_repairs = arg_int(&i, 1, 16);
+        else if (is_sw(a, "winter")) g_cfg.force_season = 1;      /* 1.1 W2: show this season's art regardless of */
+        else if (is_sw(a, "summer")) g_cfg.force_season = 0;      /* the date (tests, screenshots) */
         /* unknown switches are ignored (logged by main with the whole command line) */
     }
 }

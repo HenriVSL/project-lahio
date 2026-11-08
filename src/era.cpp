@@ -14,6 +14,8 @@
 #include "text.h"
 #include "save.h"
 #include "util.h"
+#include "season.h"        /* 1.1 W1: winter headline, hindsight */
+#include "hard.h"          /* 1.1 D1: Sweden 1969-70, era expectations */
 #include "advice.h"     /* PL1: the Cabinet, hindsight, the verdict */
 #include "net.h"
 
@@ -703,6 +705,9 @@ static void topic_story(NewsIssue *n, int slot, int topic, const EraYear *prev, 
         str_printf(b, sizeof(b), "The Delegation has brought the new five-year frame. Modest, standard or ambitious: the President "
                                  "decides, and the factories deliver.");
         break; }
+    case NT_WINTER:                                 /* 1.1 W1 */
+        season_news_story(h, sizeof(h), d, sizeof(d), b, sizeof(b));
+        break;
     case NT_DECREE:
         str_printf(h, sizeof(h), "THE PEN IS BUSY");
         str_printf(d, sizeof(d), "%d decrees signed so far", (int)now->decrees_signed);
@@ -803,6 +808,7 @@ void era_news_build_year(NewsIssue *n)
     if (now->apartments - prev->apartments >= 5) sc[NT_HOUSING] = 150 + (now->apartments - prev->apartments) * 5;
     if (now->decrees_signed - prev->decrees_signed >= 2) sc[NT_DECREE] = 160;
     sc[NT_QUIET] = 10;
+    sc[NT_WINTER] = season_news_score();        /* 1.1 W1: a hard winter (0 otherwise, always 0 on Easy) */
     memcpy(E.score, sc, sizeof(sc));
     while (slot < NEWS_HEADS) {
         int best = -1;
@@ -823,9 +829,24 @@ void era_news_build_year(NewsIssue *n)
                    12 + (int)(hash_u32((u32)n->year) % 9), 3 + (int)(hash_u32((u32)n->year * 7) % 5));
         put(n, k, NT_QUIET, h, d, b);
     }
+    {   /* 1.1 D1: the Sweden years and the era expectations (hard.h; never on Easy): in at its slot, the rest move down */
+        char h[64], d[96], b[240];
+        int at, j;
+        if (hard_news_story(n->year, h, sizeof(h), d, sizeof(d), b, sizeof(b), &at)) {
+            at = ICLAMP(at, 0, NEWS_HEADS - 1);
+            for (j = NEWS_HEADS - 1; j > at; j--) {
+                n->topic[j] = n->topic[j - 1];
+                memcpy(n->head[j], n->head[j - 1], sizeof(n->head[j]));
+                memcpy(n->deck[j], n->deck[j - 1], sizeof(n->deck[j]));
+                memcpy(n->body[j], n->body[j - 1], sizeof(n->body[j]));
+            }
+            put(n, at, hard_sweden_year(n->year) || n->year == SWEDEN_TO_YEAR + 1 ? NT_EMIGRATION : NT_HOUSING, h, d, b);
+        }
+    }
     filler(n);
     cabinet(n);                                 /* PL1 */
-    advice_hindsight(n->hind_head, sizeof(n->hind_head), n->hind, sizeof(n->hind));
+    if (!season_hindsight(n->hind_head, sizeof(n->hind_head), n->hind, sizeof(n->hind)))   /* 1.1 W1: a hard winter that hurt */
+        advice_hindsight(n->hind_head, sizeof(n->hind_head), n->hind, sizeof(n->hind));
 }
 
 /* PL1: special edition (urgent: in the dark, dry taps, an empty treasury); the Cabinet's column below */
@@ -967,7 +988,11 @@ int era_newsreel_lines(char lines[][96], int max)
         }
     } else if (n < max) str_printf(lines[n++], 96, "Politics was left to the ministries (politics off).");
     text_fmt_int(a1, sizeof(a1), st->emigrated_total);
-    if (n < max) str_printf(lines[n++], 96, "Emigration to Sweden: %s residents in all.", a1);
+    if (n < max && diff()->sweden_permille > 0) {   /* 1.1 D1: the 1969-70 sub-total */
+        char a4[32];
+        text_fmt_int(a4, sizeof(a4), hard_sweden()->total);
+        str_printf(lines[n++], 96, "Emigration to Sweden: %s residents in all (%s with the 1969-70 recruiters).", a1, a4);
+    } else if (n < max) str_printf(lines[n++], 96, "Emigration to Sweden: %s residents in all.", a1);
     text_fmt_int(a1, sizeof(a1), t->lost_total);
     if (n < max) str_printf(lines[n++], 96, "Clearing credit lost to surpluses: %s.", a1);
     money_str(a1, sizeof(a1), g_budget.money, y);

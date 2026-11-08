@@ -57,6 +57,7 @@ enum {
     W_N_PRES, W_N_TOWN, W_N_TOWN_REROLL, W_N_PRESET_L, W_N_PRESET_R, W_N_SEED, W_N_SEED_REROLL,
     W_N_YEAR0, W_N_YEAR3 = W_N_YEAR0 + 3, W_N_FUNDS0, W_N_FUNDS2 = W_N_FUNDS0 + 2,
     W_N_POLITICS, W_N_DISASTERS, W_N_ALLTOOLS, W_N_RAILWAY, W_N_BACK, W_N_START, W_N_PIPES /* F1 */,
+    W_N_DIFF0, W_N_DIFF2 = W_N_DIFF0 + 2,      /* 1.1 D1: Easy / Normal / Hard */
     /* load / save */
     W_L_ROW0, W_L_ROW_LAST = W_L_ROW0 + SAVE_LIST_COUNT - 1, W_L_BACK, W_L_GO,
     /* settings */
@@ -609,7 +610,7 @@ static const int s_years[4] = { 1955, 1960, 1965, 1970 };
 
 static void screen_newgame(void)
 {
-    int x, y, ix, iy, iw, ih, lx, cx, yy, k, rx, W = 520, H = 346;
+    int x, y, ix, iy, iw, ih, lx, cx, yy, k, rx, W = 520, H = 378;   /* 1.1 D1: + the difficulty row (was 346) */
     char buf[64];
     win_centre(W, H, &x, &y);
     win(x, y, W, H, "Found a new town", W_CLOSE, &ix, &iy, &iw, &ih);
@@ -654,6 +655,19 @@ static void screen_newgame(void)
         text_fmt_money(mb, sizeof(mb), m, s_ng.sim.start_year);
         str_printf(buf, sizeof(buf), "Starting funds: %s", s_ng.sim.all_unlocked ? "unlimited" : mb);
         txt(cx, yy, buf, FONT_BODY_GREY);
+    }
+    yy += 18;
+    /* 1.1 D1: difficulty, fixed for the game (DESIGN_1_1 2.1); the Guide (F4) lists every lever */
+    if (s_drawing) txt(lx, yy, "Difficulty", FONT_BODY_DARK);
+    rx = cx;
+    for (k = 0; k < DIFF_COUNT; k++) rx += w_radio(W_N_DIFF0 + k, rx, yy, s_ng.sim.difficulty == k, diff_name(k)) + 10;
+    yy += 14;
+    if (s_drawing) {
+        static const char *const dd[DIFF_COUNT] = { "The 1.0 rules: winter is scenery",
+                                                    "Winter peaks, Sweden 1969-70, expectations",
+                                                    "Dearer upkeep, faster decline, hard winters" };
+        const char *t = dd[ICLAMP(s_ng.sim.difficulty, 0, DIFF_COUNT - 1)];
+        if (ui_text_width(t, FONT_BODY_GREY) <= ix + iw - 10 - 128 - 14 - cx) txt(cx, yy, t, FONT_BODY_GREY);   /* clear of the preview */
     }
     yy += 18;
     rule(lx, yy, 326); yy += 8;
@@ -801,7 +815,7 @@ static void screen_settings(void)
 static void screen_pause(void)
 {
     static const char *const lab[6] = { "Resume", "Save town", "Load town", "Settings", "Quit to title", "Quit to Windows" };
-    int x, y, ix, iy, iw, ih, k, W = 220, H = 230;
+    int x, y, ix, iy, iw, ih, k, W = 220, H = 242;   /* 1.1 D1: + the difficulty line (was 230) */
     char buf[64], d[32];
     win_centre(W, H, &x, &y);
     win(x, y, W, H, "Paused", W_CLOSE, &ix, &iy, &iw, &ih);
@@ -810,8 +824,10 @@ static void screen_pause(void)
         text_fmt_date(d, sizeof(d), sim_date()->year, sim_date()->month);
         str_printf(buf, sizeof(buf), "%s " TEXT_DOT " President %s", d, sim_settings()->president);
         txt_c(ix, iw, iy + 21, buf, FONT_BODY_GREY);
+        str_printf(buf, sizeof(buf), "Difficulty: %s", diff()->name);     /* 1.1 D1: fixed for the game */
+        txt_c(ix, iw, iy + 33, buf, FONT_BODY_GREY);
     }
-    for (k = 0; k < 6; k++) w_button(W_P_RESUME + k, ix + 20, iy + 40 + k * 26, iw - 40, 22, lab[k], 0);
+    for (k = 0; k < 6; k++) w_button(W_P_RESUME + k, ix + 20, iy + 52 + k * 26, iw - 40, 22, lab[k], 0);
 }
 
 /* ---- dialog (drawn last; while open only its widgets are hot) */
@@ -875,9 +891,10 @@ static void start_new_game(void)
     str_copy(g_cfg.president, s_ng.sim.president, NAME_LEN);
     g_cfg.disasters = s_ng.sim.disasters;
     config_save();
-    log_printf("menu: new game: president \"%s\", town \"%s\", %s seed %u, %d, funds %d, disasters %d, all %d, railway %d",
+    log_printf("menu: new game: president \"%s\", town \"%s\", %s seed %u, %d, funds %d, disasters %d, all %d, railway %d, %s",
                s_ng.sim.president, s_ng.sim.town, mapgen_preset_name(s_ng.map.preset), s_ng.map.seed,
-               s_ng.sim.start_year, s_ng.sim.funds, s_ng.sim.disasters, s_ng.sim.all_unlocked, s_ng.map.railway);
+               s_ng.sim.start_year, s_ng.sim.funds, s_ng.sim.disasters, s_ng.sim.all_unlocked, s_ng.map.railway,
+               diff_name(s_ng.sim.difficulty));
     s_result = MR_NEW_GAME;              /* s_ingame is re-derived from game_state() at the next menu_enter */
 }
 
@@ -986,6 +1003,7 @@ static void activate(int id)
     default:
         if (id >= W_N_YEAR0 && id <= W_N_YEAR3) s_ng.sim.start_year = s_years[id - W_N_YEAR0];
         else if (id >= W_N_FUNDS0 && id <= W_N_FUNDS2) s_ng.sim.funds = id - W_N_FUNDS0;
+        else if (id >= W_N_DIFF0 && id <= W_N_DIFF2) s_ng.sim.difficulty = id - W_N_DIFF0;   /* 1.1 D1 */
         else if (id >= W_S_RES0 && id <= W_S_RES2) set_cfg(&g_cfg.res, id - W_S_RES0);
         else if (id >= W_S_TICK0 && id <= W_S_TICK2) set_cfg(&g_cfg.ticker_verbosity, id - W_S_TICK0);
         else if (id >= W_L_ROW0 && id <= W_L_ROW_LAST) {
@@ -1048,6 +1066,7 @@ void menu_init(void)
     str_printf(s_seed_txt, sizeof(s_seed_txt), "%u", s_ng.map.seed ? s_ng.map.seed : 1);
     s_ng.sim.disasters = g_cfg.disasters;
     s_ng.sim.politics = 1;                     /* M1: politics on by default in the New Game panel */
+    s_ng.sim.difficulty = DIFF_NORMAL;         /* 1.1 D1: Normal by default in the New Game panel (direct starts: Easy) */
     /* art */
     slice9_init(&s9_win, "win"); slice9_init(&s9_inset, "inset"); slice9_init(&s9_mmap, "mmap"); slice9_init(&s9_plaque, "plaque");
     for (i = 0; i < BS_COUNT; i++) { char b[24]; str_printf(b, sizeof(b), "btn_%s", s_bs_name[i]); slice9_init(&s9_btn[i], b); }

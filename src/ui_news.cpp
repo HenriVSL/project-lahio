@@ -17,6 +17,7 @@
 #include "util.h"
 #include "advice.h"     /* PL1: the Cabinet's lines (AGO_*), progression, purposes */
 #include "defs.h"
+#include "hard.h"       /* 1.1 D1: the Presidency page (difficulty levers) */
 
 #define C_PAPER   236, 228, 204
 #define C_INK      41,  36,  32
@@ -29,6 +30,7 @@ static int s_open, s_kind, s_ids_ok;
 static s16 s_cabr[NEWS_CAB][4];
 static int s_ncabr, s_mx = -1, s_my = -1;
 static int s_guide;                       /* the Guide page is open */
+static int s_guide_page;                  /* 1.1 D1: 0 = the handbook, 1 = the Presidency (difficulty) */
 static int s_masthead, s_rule, s_seal, s_decree;
 static NewsIssue s_issue;                 /* a copy: the era may build the next issue while this one is shown */
 static char s_reel[12][96];
@@ -330,7 +332,7 @@ void uinews_draw(void)
 /* ================================================================== PL1: the Guide ("The President's Handbook")
    One page in the newspaper's style (PLAYTEST 2 item 2d): the town ladder (population, what each status brings, where
    the town stands), what each system is for, the keys. F4 or the Guide key; the game pauses while it is open. */
-void uiguide_open(void) { s_guide = 1; }
+void uiguide_open(void) { s_guide = 1; s_guide_page = 0; }
 int  uiguide_active(void) { return s_guide; }
 void uiguide_close(void) { s_guide = 0; }
 int  uiguide_input(const InputState *in)
@@ -343,6 +345,7 @@ int  uiguide_key(int vk)
 {
     if (!s_guide) return 0;
     if (vk == VK_ESCAPE || vk == VK_RETURN || vk == VK_SPACE || vk == VK_F4) s_guide = 0;
+    if (vk == VK_TAB || vk == VK_RIGHT || vk == VK_LEFT || vk == VK_NEXT || vk == VK_PRIOR) s_guide_page ^= 1;   /* 1.1 D1 */
     return 1;
 }
 
@@ -379,6 +382,22 @@ void uiguide_draw(void)
     y += 14;
     uix_text_c(X, W, y, "Issued by the Cabinet. For the President's eyes only; the President, naturally, knows all this already.", FONT_BODY_GREY);
     y += 12; hrule(X + 10, y, W - 20); y += 8;
+    if (s_guide_page) {     /* 1.1 D1: "Presidency: Normal" - the level's table (DESIGN_1_1 2.1), every lever named */
+        char ln[20][100];
+        int n = hard_level_lines(ln, 20), i;
+        str_printf(a, sizeof(a), "THE PRESIDENCY: %s", diff()->name);
+        for (k = 0; a[k]; k++) if (a[k] >= 'a' && a[k] <= 'z') a[k] = (char)(a[k] - 32);
+        uix_text(X + 14, y, a, FONT_HEAD); y += 15;
+        uix_text_fit(X + 14, y, "Chosen at New Game and fixed for the term. The numbers in brackets are Easy's (the 1.0 rules).",
+                     FONT_BODY_GREY, W - 28);
+        y += 14;
+        for (i = 1; i < n && y + 11 <= Y + H - 30; i++, y += 12) {
+            str_printf(b, sizeof(b), "%s %s", GLYPH_BULLET, ln[i]);
+            uix_text_fit(X + 14, y, b, FONT_BODY_DARK, W - 28);
+        }
+        uix_text_c(X, W, Y + H - 14, "Tab: back to the handbook  " TEXT_DOT "  Click or Esc to put it down", FONT_BODY_GREY);
+        return;
+    }
     ybot = Y + H - 18 - 4 * 11 - 10;
     cw = (W - 28 - 20) / 2;
     /* ---- left: the ladder */
@@ -427,5 +446,6 @@ void uiguide_draw(void)
     y = ybot + 4;
     hrule(X + 10, y, W - 20); y += 6;
     for (k = 0; k < 4; k++, y += 11) uix_text_fit(X + 14, y, keys[k], FONT_BODY_DARK, W - 28);
-    uix_text_c(X, W, Y + H - 14, "Click or press Esc to put the handbook down", FONT_BODY_GREY);
+    str_printf(a, sizeof(a), "Tab: the Presidency (%s)  " TEXT_DOT "  Click or press Esc to put the handbook down", diff()->name);   /* 1.1 D1 */
+    uix_text_c(X, W, Y + H - 14, a, FONT_BODY_GREY);
 }

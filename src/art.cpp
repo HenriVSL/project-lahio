@@ -7,7 +7,19 @@
 
    Zoom residency (T05 addition, art.h): art_set_resident_zoom(z) evicts the world sheets of the other
    zoom from VRAM (their pixels move into a heap buffer) and uploads the wanted ones. render.cpp uses it
-   only when VRAM is too short for both zooms + the chunk pool (1024x768 on the 14 MB Voodoo3). */
+   only when VRAM is too short for both zooms + the chunk pool (1024x768 on the 14 MB Voodoo3).
+
+   Seasons (1.1 W2, DESIGN_1_1 4.3-4.5): every world page may have a winter copy (art_world_winter[], same size, same
+   alpha, the same piece rects), so the piece table, sprite boxes and picking are season-independent and winter costs
+   0 KB of VRAM: art_set_season() puts the other season's pixels into the SAME Img (its px) and re-uploads the
+   resident pages into their existing surfaces (Lock, copy, Unlock once per page). Plan A keeps the other season in
+   system memory as a per-page DELTA (runs of the pixels that differ; a third of the pixels are identical in both
+   seasons, 42 % are transparent in both): ~3.9 MB instead of 9.6 MB, and the swap exchanges the runs in place;
+   Plan B (process memory over ART_HEAP_BUDGET_KB) reads the pages from disk at the swap; Plan C
+   (INI winter_art=0, or a missing/corrupt winter page) keeps summer art all year. Evicted (other zoom) pages only
+   swap their pixels; gfx_img_restore uploads whatever season px holds, and so does a lost-surface restore. */
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>                 /* 1.1 W2: VirtualQuery (memory use of the process) */
 #include "common.h"
 #include "art.h"
 #include "util.h"
@@ -28,7 +40,22 @@ typedef struct {
     int   loaded;                    /* img holds a VRAM surface + px */
     PIX  *saved;                     /* evicted: pixels kept here (pitch = w) */
     int   w, h;
+    const char *wbmp;                /* 1.1 W2: the winter copy of this world page (NULL = season-invariant) */
+    u32  *wrun;                      /* 1.1 W2 Plan A: runs where the seasons differ: offset (bits 0-16) | length << 17 */
+    PIX  *wpx;                       /*   the pixels of the season NOT shown for those runs, concatenated */
+    int   nrun;
+    int   pxSeason;                  /* 1.1 W2: season px holds (an evicted page catches up when it becomes resident) */
+    int   vramStale;                 /* 1.1 W2: px swapped, surface not uploaded yet (two-step season change) */
 } Sheet;
+
+/* 1.1 W2 Plan A/B limit on the process's committed private memory (VirtualQuery). Measured on VM B (800x600): 19.8 MB
+   before any art (CRT, DirectX, sound, world), 30.0 MB with the art pages (1.0 as shipped), 34.0 MB with the winter
+   delta. The README's "game heap <= 32 MB" predates this measure (1.0 itself is at 30 MB), so the limit is 40 MB
+   (under a third of the 128 MB minimum machine); over it the winter pages are read from disk at the swap (Plan B,
+   ~0.85 s on the VM instead of ~0.13 s). */
+#define ART_HEAP_BUDGET_KB 40960
+static int    s_season;              /* 1.1 W2: 0 = summer art shown, 1 = winter */
+static int    s_winterPlan;          /* 0 = no winter art (Plan C), 'A' = both seasons in memory, 'B' = from disk */
 
 static Sheet  s_sheets[ART_MAX_SHEETS];
 static int    s_nsheets, s_inited, s_resident = -1;
@@ -194,11 +221,175 @@ static int register_set(const ArtPieceSet *set)
 static int evict(Sheet *S);              /* F3: used by art_init's 32-zoom fallback */
 static int reload(Sheet *S);
 
+/* KB of committed private memory of the process (heaps, stacks, our pixel buffers; not the exe/DLL images). One
+   VirtualQuery walk over the private arena (works on Win98; the CRT's _heapwalk sees nothing there). */
+static int heap_used_kb(void)
+{
+    MEMORY_BASIC_INFORMATION mi;
+    char *p = (char *)0x10000;
+    double kb = 0;
+    while ((unsigned long)p < 0x7FFE0000ul && VirtualQuery(p, &mi, sizeof(mi)) == sizeof(mi)) {
+        if (mi.State == MEM_COMMIT && mi.Type == MEM_PRIVATE) kb += mi.RegionSize / 1024.0;
+        if (!mi.RegionSize) break;
+        p = (char *)mi.BaseAddress + mi.RegionSize;
+    }
+    return (int)kb;
+}
+
+/* read a page BMP into system memory only; its pixels must have the size of the summer page */
+static PIX *load_page_px(const char *bmp, int w, int h, int keyed)
+{
+    Img t;
+    PIX *px;
+    if (!gfx_load_bmp_sys(data_path(bmp), &t, keyed)) return NULL;
+    if (t.w != w || t.h != h) {
+        log_printf("art: error: %s is %dx%d, the summer page %dx%d", bmp, t.w, t.h, w, h);
+        gfx_free_img(&t);
+        return NULL;
+    }
+    px = t.px;
+    t.px = NULL;                     /* keep the pixels, release the rest */
+    gfx_free_img(&t);
+    return px;
+}
+
+static void delta_free(Sheet *S)
+{
+    if (S->wrun) free(S->wrun);
+    if (S->wpx) free(S->wpx);
+    S->wrun = NULL; S->wpx = NULL; S->nrun = 0;
+}
+
+static void winter_drop(void)
+{
+    int i;
+    for (i = 0; i < s_nsheets; i++) { delta_free(&s_sheets[i]); s_sheets[i].wbmp = NULL; }
+    s_winterPlan = 0;
+}
+
+/* Plan A: the runs where page pixels px (shown) and other (the other season) differ; keeps other's pixels there.
+   Returns the bytes kept, -1 when out of memory. */
+static int delta_build(Sheet *S, const PIX *other)
+{
+    const PIX *px = S->img.px;
+    int n = S->w * S->h, i, k, nrun = 0, npx = 0, len;
+    for (i = 0; i < n; ) {                             /* count */
+        if (px[i] == other[i]) { i++; continue; }
+        for (len = 0; i < n && px[i] != other[i] && len < 32767; i++, len++) {}
+        nrun++; npx += len;
+    }
+    S->nrun = nrun;
+    if (!nrun) return 0;
+    S->wrun = (u32 *)malloc(nrun * sizeof(u32));
+    S->wpx = (PIX *)malloc(npx * sizeof(PIX));
+    if (!S->wrun || !S->wpx) { delta_free(S); return -1; }
+    for (i = 0, k = 0, nrun = 0; i < n; ) {            /* fill */
+        int off;
+        if (px[i] == other[i]) { i++; continue; }
+        off = i;
+        for (len = 0; i < n && px[i] != other[i] && len < 32767; i++, len++) S->wpx[k++] = other[i];
+        S->wrun[nrun++] = (u32)off | ((u32)len << 17);
+    }
+    return nrun * (int)sizeof(u32) + npx * (int)sizeof(PIX);
+}
+
+/* Plan A swap: exchange the shown pixels with the kept ones, run by run (symmetric; runs average ~9 px, so a plain
+   loop beats memcpy calls: VM B 31 pages ~40 ms) */
+static void delta_swap(Sheet *S)
+{
+    PIX *px = S->img.px, *w = S->wpx, t;
+    int r, k;
+    for (r = 0; r < S->nrun; r++) {
+        PIX *d = px + (S->wrun[r] & 0x1FFFF);
+        int len = (int)(S->wrun[r] >> 17);
+        for (k = 0; k < len; k++, w++) { t = d[k]; d[k] = *w; *w = t; }
+    }
+}
+
+/* bring a page's px to season `season` (Plan A delta swap / Plan B disk read) without uploading; 0 = failed */
+static int px_swap_only(Sheet *S, int season)
+{
+    if (!S->wbmp || !S->img.px || S->pxSeason == season) return 1;
+    if (s_winterPlan == 'A') delta_swap(S);
+    else {
+        PIX *px = load_page_px(season ? S->wbmp : S->def->bmp, S->w, S->h, S->def->keyed);
+        if (!px) return 0;
+        memcpy(S->img.px, px, S->w * S->h * sizeof(PIX));
+        free(px);
+    }
+    S->pxSeason = season;
+    S->vramStale = 1;
+    return 1;
+}
+
+/* the same + upload (evicted: px only) */
+static int px_to_season(Sheet *S, int season)
+{
+    if (!S->wbmp || !S->img.px || S->pxSeason == season) return 1;
+    if (s_winterPlan == 'A') delta_swap(S);
+    else {
+        PIX *px = load_page_px(season ? S->wbmp : S->def->bmp, S->w, S->h, S->def->keyed);
+        if (!px) return 0;
+        memcpy(S->img.px, px, S->w * S->h * sizeof(PIX));
+        free(px);
+    }
+    S->pxSeason = season;
+    S->vramStale = 0;
+    gfx_img_update(&S->img);           /* resident: re-upload into the same surface; evicted: px only (and spans) */
+    return 1;
+}
+
+/* 1.1 W2: find the winter pages, load them (Plan A) or check them (Plan B); any failure = Plan C, never fatal */
+static void winter_init(void)
+{
+#ifdef ART_WORLD_HAS_WINTER
+    int i, n = 0, kb = 0, heap0, heap, bytes = 0;
+    double t0 = time_ms();
+    s_season = 0;
+    s_winterPlan = 0;
+    if (!g_cfg.winter_art) { log_printf("art: winter scenery off (INI winter_art=0): summer art all year"); return; }
+    heap0 = heap_used_kb();
+    for (i = 0; i < ART_WORLD_SHEET_COUNT; i++) {
+        Sheet *S;
+        if (!art_world_winter[i] || s_pageSlot[i] < 0) continue;
+        S = &s_sheets[s_pageSlot[i]];
+        {
+            PIX *wpx;
+            int b;
+            S->wbmp = art_world_winter[i];
+            wpx = load_page_px(S->wbmp, S->w, S->h, S->def->keyed);
+            if (!wpx) {
+                log_printf("art: warning: winter page %s missing or corrupt: summer art all year (Plan C)", S->wbmp);
+                winter_drop();
+                return;
+            }
+            b = delta_build(S, wpx);
+            free(wpx);
+            if (b < 0) { log_printf("art: warning: out of memory for the winter art: summer art all year (Plan C)"); winter_drop(); return; }
+            bytes += b;
+        }
+        n++; kb += S->w * S->h * (int)sizeof(PIX) / 1024;
+    }
+    if (!n) { log_printf("art: no winter pages listed: summer art all year"); return; }
+    heap = heap_used_kb();
+    s_winterPlan = 'A';
+    if (heap > ART_HEAP_BUDGET_KB) {                    /* Plan B: keep only the names, read at the swap */
+        for (i = 0; i < s_nsheets; i++) delta_free(&s_sheets[i]);
+        s_winterPlan = 'B';
+    }
+    log_printf("art: winter art Plan %c: %d winter pages (%d KB of pixels; the winter delta %d KB%s), process memory %d KB "
+               "before, %d KB with it (budget %d KB), %.0f ms", s_winterPlan, n, kb, bytes / 1024,
+               s_winterPlan == 'A' ? " kept in memory" : " dropped: pages read at the swap", heap0, heap, ART_HEAP_BUDGET_KB,
+               time_ms() - t0);
+#endif
+}
+
 int art_init(void)
 {
     int i, n, z, missing1 = 0;
     double t0 = time_ms();
     if (s_inited) return 1;
+    log_printf("art: process memory before the art: %d KB", heap_used_kb());   /* 1.1 W2: the heap budget report */
     memset(s_hash, 0, sizeof(s_hash));
     s_npc = 0;                                         /* PL4 */
     for (i = 0; i < ART_MAX_SHEETS; i++) s_pageSlot[i] = -1;
@@ -243,6 +434,7 @@ int art_init(void)
     }
     for (i = 0; i < ART_WORLD_SET_COUNT; i++)          /* PL4: world sprites = pieces on the pages */
         if (!register_set(&art_world_sets[i])) return 0;
+    winter_init();                                     /* 1.1 W2 */
     s_resident = ZOOM_64;
     if (s_blocked[ZOOM_64]) {                      /* F3: 32 zoom resident instead (degraded, but playable) */
         for (i = 0; i < s_nsheets; i++) if (s_sheets[i].def->zoom == ZOOM_64) evict(&s_sheets[i]);
@@ -270,10 +462,12 @@ void art_shutdown(void)
     for (i = 0; i < s_nsheets; i++) {
         if (s_sheets[i].loaded) gfx_free_img(&s_sheets[i].img);
         if (s_sheets[i].saved) free(s_sheets[i].saved);
+        delta_free(&s_sheets[i]);                     /* 1.1 W2 */
         memset(&s_sheets[i], 0, sizeof(Sheet));
     }
     s_nsheets = 0;
     s_npc = 0;                                         /* PL4 */
+    s_season = 0; s_winterPlan = 0;                    /* 1.1 W2 (deltas freed above) */
     if (s_cbuf) { free(s_cbuf); s_cbuf = NULL; s_cbufN = 0; }
     gfx_free_img(&s_missImg);
     memset(s_hash, 0, sizeof(s_hash));
@@ -293,6 +487,7 @@ static int evict(Sheet *S)
 static int reload(Sheet *S)
 {
     if (S->loaded) return 1;
+    px_to_season(S, s_season);         /* 1.1 W2: an evicted page swapped its season lazily */
     if (!gfx_img_restore(&S->img)) {
         log_printf("art: error: VRAM full reloading %s (free %d KB)", S->def->bmp, gfx_vram_free_kb());
         return 0;
@@ -329,6 +524,56 @@ int art_set_resident_zoom(int zoom)
 }
 
 int art_resident_zoom(void) { return s_resident; }
+
+/* ------------------------------------------------------------------ seasons (1.1 W2) */
+int art_season(void) { return s_season; }
+int art_winter_available(void) { return s_winterPlan != 0; }
+
+/* Two steps on two calls (render polls every frame), so the hitch is split: step 1 swaps the RESIDENT pages' px (CPU;
+   VRAM still shows the old season, so chunks rendered this frame stay consistent) and returns 0; step 2 uploads them
+   into their surfaces (one Lock/copy/Unlock each), switches the season and returns 1. Evicted pages (the other zoom)
+   catch up in reload() when they become resident. */
+static int s_pendSeason = -1;
+static double s_pendMs;
+int art_set_season(int winter)
+{
+    int i, up = 0, fail = 0;
+    double t0 = time_ms();
+    winter = winter ? 1 : 0;
+    if (!s_inited || !s_winterPlan) return 0;
+    if (winter == s_season) {
+        if (s_pendSeason >= 0) {                       /* a pending step 1 cancelled: px back (VRAM never changed) */
+            for (i = 0; i < s_nsheets; i++) {
+                Sheet *S = &s_sheets[i];
+                if (S->wbmp && S->pxSeason != s_season && px_swap_only(S, s_season)) S->vramStale = 0;
+            }
+            s_pendSeason = -1;
+        }
+        return 0;
+    }
+    if (s_pendSeason != winter) {                      /* step 1: px */
+        for (i = 0; i < s_nsheets; i++) {
+            Sheet *S = &s_sheets[i];
+            if (S->wbmp && S->loaded && !px_swap_only(S, winter)) fail++;
+        }
+        s_pendSeason = winter;
+        s_pendMs = time_ms() - t0;
+        if (fail) log_printf("art: warning: %d winter pages could not be read", fail);
+        return 0;
+    }
+    for (i = 0; i < s_nsheets; i++) {                  /* step 2: upload (and any page that became resident meanwhile) */
+        Sheet *S = &s_sheets[i];
+        if (!S->wbmp || !S->loaded) continue;
+        if (S->pxSeason != winter) { if (!px_swap_only(S, winter)) { fail++; continue; } }
+        if (S->vramStale) { S->vramStale = 0; gfx_img_update(&S->img); up++; }
+    }
+    s_season = winter;
+    s_pendSeason = -1;
+    log_printf("art: season %s: %d resident pages: px swap %.1f ms (frame 1), upload %.1f ms (frame 2) (Plan %c%s; the other "
+               "zoom's pages follow at its next residency), art VRAM %d KB, free %d KB", winter ? "winter" : "summer", up,
+               s_pendMs, time_ms() - t0, s_winterPlan, fail ? ", SOME PAGES FAILED" : "", art_vram_kb(), gfx_vram_free_kb());
+    return 1;
+}
 int art_zoom_available(int zoom) { return zoom >= 0 && zoom < ZOOM_COUNT && !s_blocked[zoom]; }   /* F3 */
 
 /* ------------------------------------------------------------------ lookup */

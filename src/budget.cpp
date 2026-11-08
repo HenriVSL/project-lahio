@@ -3,6 +3,7 @@
 #include "common.h"
 #include "civic.h"
 #include "budget.h"
+#include "season.h"          /* 1.1 W1: the Winter ledger line */
 #include "industry.h"
 #include "complex.h"
 #include "world.h"
@@ -35,9 +36,22 @@ static const int s_tax_weight[2][4] = { { 0, 1, 4, 6 },      /* houses T1..T3 */
 static int upkeep_index(void)
 {
     int y = sim_date()->year - UPKEEP_INFL_FROM;
-    return y <= 0 ? 100 : IMIN(UPKEEP_INFL_CAP, 100 + y * UPKEEP_INFL_PCT / 10);
+    return y <= 0 ? 100 : IMIN((int)diff()->upkeep_cap, 100 + y * UPKEEP_INFL_PCT / 10);   /* 1.1 D1: cap by level
+                                                                   (Easy = UPKEEP_INFL_CAP 130, Normal 145, Hard 160) */
 }
 int budget_upkeep_index(void) { return upkeep_index(); }    /* F3: shown in the Budget panel and Query */
+
+/* 1.1 D1: the level's upkeep surcharge and tax-yield cut phase in with the welfare state (like the upkeep index): none
+   before 1960, a fifth more each year, in full from 1965. The village years stay as on Easy (the bots' 1.0 early game
+   already runs within a few hundred markka of the emergency loan); the pressure lands on the built-up town (coasting). */
+static int phase_in(int pct)
+{
+    int y = sim_date()->year - UPKEEP_INFL_FROM;
+    if (pct == 100 || y <= 0) return 100;
+    return 100 + (pct - 100) * IMIN(y, 5) / 5;
+}
+int budget_level_upkeep_pct(void) { return phase_in(diff()->upkeep_pct); }
+int budget_level_tax_pct(void) { return phase_in(diff()->tax_yield_pct); }
 
 /* PL2: overtime. A service running above OVERTIME_FREE_PCT of its capacity (town-wide load / capacity, sim stats) pays
    its staff overtime: the line's upkeep grows with the load beyond that, up to OVERTIME_MAX_PCT. Without it a town that
@@ -52,7 +66,8 @@ int budget_overtime_pct(int svc)
     if (svc < 0 || svc >= SVC_COUNT) return 100;
     cap = st->svc_capacity[svc]; load = st->svc_load[svc];
     if (cap <= 0) return 100;
-    return (int)ICLAMP((s64)load * 100 / cap - (OVERTIME_FREE_PCT - 100), (s64)100, (s64)OVERTIME_MAX_PCT);
+    return (int)ICLAMP((s64)load * 100 / cap - (diff()->overtime_free - 100), (s64)100, (s64)OVERTIME_MAX_PCT);   /* 1.1 D1:
+                                                                   overtime from OVERTIME_FREE_PCT (Easy) / 115 / 105 % */
 }
 #define RES_TAX_LV_BASE 30
 #define RES_TAX_DIV     17000
@@ -74,8 +89,8 @@ void budget_new(Money start, int unlimited)
     budget_init();
     g_budget.money = start;
     g_budget.unlimited = unlimited;
-    g_budget.tax_res = TAX_NEUTRAL;
-    g_budget.tax_bus = TAX_NEUTRAL;
+    g_budget.tax_res = diff()->tax_neutral;   /* 1.1 D1: start at the level's tolerance (TAX_NEUTRAL 9 on Easy, Hard 8) */
+    g_budget.tax_bus = diff()->tax_neutral;
     g_budget.loan_rate = LOAN_RATE;
     for (i = 0; i < SVC_COUNT; i++) g_budget.funding[i] = 100;
 }
@@ -154,14 +169,23 @@ static void compute_lines(Money *out, int book)
     for (i = 0; i < SVC_COUNT; i++) svc[i] = svc[i] * ui * budget_overtime_pct(i) / 100;   /* PL2: overtime */
     roads10 *= ui; lines10 *= ui;
     util = (Money)((s64)util * ui / 100); special = (Money)((s64)special * ui / 100);
+    if (budget_level_upkeep_pct() != 100) {   /* 1.1 D1: service, road, network and utility upkeep by level (Easy: untouched) */
+        int up = budget_level_upkeep_pct();
+        for (i = 0; i < SVC_COUNT; i++) svc[i] = svc[i] * up / 100;
+        roads10 = roads10 * up / 100; lines10 = lines10 * up / 100;
+        util = (Money)((s64)util * up / 100);
+    }
+    if (budget_level_tax_pct() != 100) res = res * budget_level_tax_pct() / 100;   /* 1.1 D1: tax yield by level (Hard 90 %) */
     out[BL_TAX_RES] = div_rem(res * g_budget.tax_res, RES_TAX_DIV, BL_TAX_RES, book);
     complex_budget_base(&bus, &ind_workers);   /* M6: mill / state works staff (half rate) + export volume */
+    if (budget_level_tax_pct() != 100) bus = bus * budget_level_tax_pct() / 100;   /* 1.1 D1 */
     out[BL_TAX_BUS] = div_rem(bus * g_budget.tax_bus, 3000, BL_TAX_BUS, book);
     out[BL_EXPORT] = div_rem(ind_workers, 12, BL_EXPORT, book);
     out[BL_GRANTS] = IMAX(0, GRANT_BASE - pop / GRANT_FADE_DIV);   /* village support, fades out by 3,200 */
     for (i = 0; i < SVC_COUNT; i++)
         out[BL_SVC(i)] = -div_rem(svc[i] * g_budget.funding[i], 100 * 100, BL_SVC(i), book);
     out[BL_ROADS] = -div_rem(roads10, 10 * 100, BL_ROADS, book);
+    out[BL_WINTER] = -season_winter_upkeep(-out[BL_ROADS], world_pipe_tiles(NULL), ui);   /* 1.1 W1: ploughing + frost (Easy 0) */
     out[BL_NETWORKS] = -div_rem(lines10, 10 * 100, BL_NETWORKS, book);
     out[BL_UTILITIES] = -util;
     out[BL_SPECIAL] = -special;

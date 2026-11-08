@@ -336,7 +336,7 @@ int def_req_growc(int req)
     case REQ_ROAD: case REQ_ROUTE: return GROWC_ROAD;     /* M2: no route to jobs = a road problem */
     case REQ_POWER: return GROWC_POWER;
     case REQ_WATER: case REQ_WATER_TOWER: return GROWC_WATER;
-    case REQ_SCHOOL: case REQ_SAUNA: case REQ_HEALTH: case REQ_SHOP: case REQ_PHONE: return GROWC_SERVICES;
+    case REQ_SCHOOL: case REQ_SAUNA: case REQ_HEALTH: case REQ_SHOP: case REQ_PHONE: case REQ_LIBRARY: return GROWC_SERVICES;
     case REQ_LAND_VALUE: return GROWC_LAND_VALUE;
     case REQ_LOW_POLLUTION: return GROWC_POLLUTION;
     default: return GROWC_OTHER;
@@ -395,3 +395,22 @@ int def_selfcheck(void)
         if (g_services[i].max_dist == 0) { log_printf("defs: error: service %s max_dist 0", g_services[i].key); bad++; }
     return bad;
 }
+
+/* ------------------------------------------------------------------ 1.1 difficulty (D1, DESIGN_1_1 2.2)
+   EASY must stay the 1.0 values exactly (the 1.0 balance runs and world hashes are the regression test). Normal/Hard
+   values are the design's bot-tuning starting points (BALANCE.md section 10 records tuning). D1 tuning (with W1's
+   winter in): Hard upkeep 115 -> 105 %, index cap 160 -> 150 % (1980), tax yield 90 -> 95 %, overtime 105 -> 110 %:
+   with the design's values every bot but politics/metal ended 1955-1990 stuck at the emergency-loan cap (no recovery =
+   against "fail softly"); the upkeep surcharge and yield cut phase in 1960-65 (budget.cpp); taxes start at the
+   tolerance. Hard's pressure now comes from winter, decline, emigration, cards, Sweden, fires and the tax tolerance. */
+const DiffParams g_diff[DIFF_COUNT] = {
+    /* name     upk  cap  tax neu  ot  emU emH dch dut swe exp | card gmin gmax auth east shock fire spr fwin | wload hw hload hwat plg plgH frost */
+    { "Easy",   100, 130, 100, 9, 125,  8,  4,  4,  8,  0,  0,   100,  12,  24,  20,  50,  100, 100, 3, 100,     0,  0,   0, 100,  0,   0,   0 },
+    { "Normal", 105, 145, 100, 9, 115,  6,  3,  4,  6,  2,  1,   115,  12,  20,  24,  45,  115, 150, 3, 150,    15, 20,  15,  90, 25,  40,   1 },
+    { "Hard",   105, 150,  95, 8, 110,  5,  3,  3,  4,  4,  1,   140,  12,  16,  30,  40,  130, 200, 4, 150,    20, 33,  20,  85, 35,  55,   2 },
+};
+static int s_diff_level = DIFF_EASY;
+const DiffParams *diff(void) { return &g_diff[s_diff_level]; }
+int  diff_level(void) { return s_diff_level; }
+void diff_set_level(int level) { s_diff_level = level < 0 ? 0 : level >= DIFF_COUNT ? DIFF_COUNT - 1 : level; }
+const char *diff_name(int level) { return g_diff[level < 0 ? 0 : level >= DIFF_COUNT ? DIFF_COUNT - 1 : level].name; }

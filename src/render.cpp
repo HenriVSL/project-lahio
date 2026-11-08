@@ -47,6 +47,7 @@
 #include "industry.h"
 #include "mapgen.h"
 #include "ui_layout.h"
+#include "season.h"         /* 1.1 W2: the art season (season_is_winter / season_changed) */
 #include <math.h>
 
 #define MAX_POOL        96
@@ -215,9 +216,9 @@ static int ground_id(int x, int y, const Tile *t, int *water)
         *water = 1;
         return s_idRiver[(TER_VAR(t) & RIVER_RAPIDS_BIT) ? 1 : 0][ax][f];
     }
-    if (TER_IS_WATER(ter)) { *water = 1; return s_idWater[s_anim]; }
+    if (TER_IS_WATER(ter)) { *water = !art_season(); return s_idWater[s_anim]; }   /* 1.1 W2: ice does not shimmer */
     m = shore_of(x, y);
-    if (m) { *water = 1; return s_idShore[m][s_anim]; }      /* forest/rock on a shore: shore + a tree */
+    if (m) { *water = !art_season(); return s_idShore[m][s_anim]; }      /* forest/rock on a shore: shore + a tree */
     switch (ter) {
     case TER_FOREST: case TER_ROCK: return -1;
     case TER_FIELD: return (TER_VAR(t) & 1) ? s_idPlough : s_idCrop;
@@ -906,11 +907,33 @@ static int repair_one(const VRange *v, int flag)
     return 1;
 }
 
+static int s_mmReady;                     /* minimap colours (section "minimap") */
+
+/* 1.1 W2: the season to show (INI winter_art=0 / missing pages: art_set_season does nothing). Polled every frame;
+   the swap re-uploads the art pages into their surfaces, then every cached picture made from the old pixels goes:
+   chunks (visible ones re-render this frame, the rest as they come into view), ghost copies, minimap colours. */
+static void season_poll(void)
+{
+    int want, ch = season_changed();
+    double t0;
+    want = g_cfg.force_season >= 0 ? g_cfg.force_season : season_is_winter();
+    if (want == art_season() || !art_winter_available()) { art_set_season(want); return; }   /* (cancels a pending step) */
+    t0 = time_ms();
+    if (art_set_season(want)) {               /* 0 after step 1 (px swapped, VRAM unchanged): again next frame */
+        int i;
+        for (i = 0; i < 4; i++) if (s_ghost[i].img.w) { gfx_free_img(&s_ghost[i].img); memset(&s_ghost[i], 0, sizeof(Ghost)); }
+        s_mmReady = 0;
+        flush_all(0);
+        log_printf("render: season %s (hook %d): art swap + cache flush %.1f ms", want ? "winter" : "summer", ch, time_ms() - t0);
+    }
+}
+
 void render_update(double budget_ms)
 {
     VRange v;
     int i, j, k, pass;
     if (!s_inited) return;
+    season_poll();                            /* 1.1 W2 */
     s_frame++;
     s_st.chunks_rendered = 0; s_st.chunk_ms = 0;
     if (gfx_restore_serial() != s_serial) {
@@ -1163,7 +1186,6 @@ int render_pick_lot(int sx, int sy)
 static PIX s_mmTer[TER_COUNT][4], s_mmRoad[ROAD_CLASS_COUNT], s_mmZone[ZONE_COUNT], s_mmLine, s_mmBg;
 static PIX s_mmOvl[OVR_COUNT][8];
 static PIX s_mmLot[B_COUNT][3];
-static int s_mmReady;
 
 static PIX avg_color(int id)
 {

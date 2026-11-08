@@ -174,5 +174,12 @@ int  art_zoom_available(int zoom);
 /* PL4 addition: blit the sprite-local rectangle (sx, sy, w, h) of sprite id with its top-left at (dx, dy) of the
    current target (origin/clip apply): one blit per piece that overlaps it (render.cpp strips + occlusion fix) */
 void art_blit_part(int zoom, int id, int sx, int sy, int w, int h, int dx, int dy);
+/* 1.1 W2 seasons: winter art = the same pages and piece table with other pixels (art/art_world.h art_world_winter[]).
+   art_set_season(1/0) swaps every world page's pixels (both zooms) and re-uploads the resident ones into their
+   existing surfaces (0 KB extra VRAM); returns 1 when the art changed (the caller flushes its caches: chunks, ghost
+   copies, minimap colours). No-op (0) with INI winter_art=0 or missing winter pages (art_winter_available() = 0). */
+int  art_set_season(int winter);
+int  art_season(void);                   /* 1 = winter art shown */
+int  art_winter_available(void);
 
 #endif

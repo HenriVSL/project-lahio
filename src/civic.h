@@ -81,6 +81,7 @@ int  civic_lot_util_state(int ut, int lot);  /* NLS_OK served / NLS_SHORT connec
 int  civic_lot_util_src(int ut, int lot, int *dist);
 s32  civic_lot_util_use(int ut, int lot);    /* heat units / residents this lot puts on the network now */
 s32  civic_heat_spare_for(int lot);          /* spare heat left in the lot's network (upgrade check) */
+s32  civic_heat_spare_peak(int lot);         /* 1.1 W1: the same at this winter's peak load (the Apartments T3 check) */
 typedef struct {
     int sources, networks, lots_served, lots_short, lots_unconnected;
     s32 supply, demand, used;

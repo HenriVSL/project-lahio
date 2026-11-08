@@ -49,6 +49,51 @@ static const ArtSheet art_world_sheets[] = {
 };
 #define ART_WORLD_SHEET_COUNT 39
 
+/* 1.1 W2 winter art: per art_world_sheets index, the winter copy of that page (same size, same alpha, the
+   same piece rects) or NULL for a season-invariant page.  art.cpp swaps the pixels at the season change. */
+#define ART_WORLD_HAS_WINTER 1
+static const char *const art_world_winter[] = {
+    "art\\world0_64w.bmp",
+    "art\\world1_64w.bmp",
+    "art\\world2_64w.bmp",
+    "art\\world3_64w.bmp",
+    "art\\world4_64w.bmp",
+    "art\\world5_64w.bmp",
+    "art\\world6_64w.bmp",
+    "art\\world7_64w.bmp",
+    "art\\world8_64w.bmp",
+    "art\\world9_64w.bmp",
+    "art\\world10_64w.bmp",
+    "art\\world11_64w.bmp",
+    "art\\world12_64w.bmp",
+    "art\\world13_64w.bmp",
+    "art\\world14_64w.bmp",
+    "art\\world15_64w.bmp",
+    "art\\world16_64w.bmp",
+    "art\\world17_64w.bmp",
+    "art\\world18_64w.bmp",
+    "art\\world19_64w.bmp",
+    "art\\world20_64w.bmp",
+    "art\\world21_64w.bmp",
+    "art\\world22_64w.bmp",
+    "art\\world23_64w.bmp",
+    "art\\world24_64w.bmp",
+    "art\\world25_64w.bmp",
+    "art\\world26_64w.bmp",
+    "art\\world27_64w.bmp",
+    "art\\world28_64w.bmp",
+    "art\\world29_64w.bmp",
+    "art\\world30_64w.bmp",
+    "art\\world0_32w.bmp",
+    "art\\world1_32w.bmp",
+    "art\\world2_32w.bmp",
+    "art\\world3_32w.bmp",
+    "art\\world4_32w.bmp",
+    "art\\world5_32w.bmp",
+    "art\\world6_32w.bmp",
+    "art\\world7_32w.bmp",
+};
+
 static const ArtPieceSet art_world_sets[] = {
     { ZOOM_64, art_pieces_64, ART_PIECES_64_COUNT, art_sprites_64, ART_SPRITES_64_COUNT },
     { ZOOM_32, art_pieces_32, ART_PIECES_32_COUNT, art_sprites_32, ART_SPRITES_32_COUNT },

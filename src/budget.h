@@ -28,6 +28,7 @@ enum { BL_TAX_RES, BL_TAX_BUS, BL_EXPORT, BL_GRANTS, BL_TIMBER, BL_INCOME_END,
        BL_POLITICS,                                  /* M1: decrees, letters, event cards (booked by politics) */
        BL_COMPANY,                                   /* M6: company contribution (income, booked by complex.cpp) */
        BL_FUEL,                                      /* M7: oil plants at the oil price, coal surcharge 1974-85 (trade.cpp) */
+       BL_WINTER,                                    /* 1.1 W1: "Winter: ploughing and frost repairs" (Dec-Mar, season.h) */
        BL_COUNT };
 #define BL_SVC(svc) (BL_SVC_FIRST + (svc))
 
@@ -75,5 +76,9 @@ int   budget_upkeep_index(void);
 /* PL2 addition: overtime in % (100..200) on a service line's upkeep when the town's load exceeds 125% of that service's
    capacity (Budget panel / service tooltips: "overcrowded: overtime +40%") */
 int   budget_overtime_pct(int svc);
+/* 1.1 D1 additions: the level's upkeep multiplier (service, road, network, utility lines) and tax-yield multiplier in % as
+   applied now (diff()->upkeep_pct / tax_yield_pct, phased in 1960-1965; 100 on Easy) - for the ledger tooltips */
+int   budget_level_upkeep_pct(void);
+int   budget_level_tax_pct(void);
 
 #endif

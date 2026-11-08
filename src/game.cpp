@@ -48,6 +48,7 @@
 #include "menu.h"
 #include "save.h"
 #include "mapgen.h"
+#include "season.h"        /* 1.1 W1 */
 #include <math.h>
 
 /* F3: the '+'/'=' and '-' keys of the main row (VK_OEM_PLUS / VK_OEM_MINUS are missing from VC6's headers) */
@@ -60,6 +61,7 @@ static int  s_play_direct;              /* command line asked for a game straigh
 static char s_script[PATH_LEN];
 static int  s_politics_cmd;          /* M1: -politics (direct starts; the New Game menu has its own toggle) */
 static int  s_rail_cmd = -1;         /* PL2: -rail / -norail (default: railway on, off for -script replays of Mac runs) */
+static int  s_diff_cmd = -1;         /* 1.1 D1: -difficulty easy|normal|hard (direct starts / replays; default Easy = 1.0) */
 static int  s_ovl, s_ovl_param, s_show_buildings;
 static int  s_speed_before_pause = SPEED_2;
 static int  s_road_cls = ROAD_STREET;
@@ -129,6 +131,10 @@ static void parse_cmdline(void)
         else if (str_ieq(a, "politics")) s_politics_cmd = 1;      /* M1: direct starts with politics on */
         else if (str_ieq(a, "rail")) s_rail_cmd = 1;              /* PL2 */
         else if (str_ieq(a, "norail")) s_rail_cmd = 0;
+        else if (str_ieq(a, "difficulty") && i + 1 < n) {          /* 1.1 D1: a name or 0..2 */
+            const char *v = tok[++i];
+            s_diff_cmd = str_ieq(v, "hard") || !strcmp(v, "2") ? DIFF_HARD : str_ieq(v, "normal") || !strcmp(v, "1") ? DIFF_NORMAL : DIFF_EASY;
+        }
     }
     if (g_cfg.load_path[0]) s_play_direct = 1;
 }
@@ -148,6 +154,7 @@ void game_default_params(NewGameParams *p)
     text_town_name(&r, p->sim.town, NAME_LEN);
     p->sim.disasters = g_cfg.disasters;
     if (s_politics_cmd) p->sim.politics = 1;   /* M1 */
+    if (s_diff_cmd >= 0) p->sim.difficulty = s_diff_cmd;   /* 1.1 D1 (the New Game panel defaults to Normal itself) */
     /* PL2 (PLAYTEST 2 item 9): every new map gets the railway (New Game checkbox on); -script runs keep the Mac tests'
        mapgen default (off) so recorded bot scripts replay the same map, unless -rail is given */
     p->map.railway = s_rail_cmd >= 0 ? s_rail_cmd : !s_script[0];
@@ -434,6 +441,7 @@ static int script_game_cmd(const char *line)
     if (str_ieq(cmd, "tool") && n >= 2) { tools_select(a, b); return 1; }
     if (str_ieq(cmd, "query") && n >= 3) { if (s_ready) ui_open_query(world_lot_at(a, b), a, b); return 1; }   /* M6: query panel shots */
     if (str_ieq(cmd, "quit")) { s_scr_quit = 1; return 1; }
+    if (str_ieq(cmd, "artseason") && n >= 2) { g_cfg.force_season = a < 0 ? -1 : (a ? 1 : 0); return 1; }   /* 1.1 W2: 1 winter, 0 summer, -1 by date */
     if (str_ieq(cmd, "polpanel") && n >= 2) { if (s_ready) uipol_show(a); return 1; }   /* M1: screenshots */
     /* M7 (screenshots): newspaper [0 latest | 1 newsreel | 2 close], m7panel 0 graphs | 1 trade [tab] */
     if (str_ieq(cmd, "newspaper")) {
@@ -990,6 +998,16 @@ static void drain_events(void)
                 uix_ticker(sev, buf, (em.type == EM_RIGHTS_PETITION || em.type == EM_RIGHTS_REMIND) ? (politics_enabled() ? PANEL_POLITICS : PANEL_POPULATION) :
                            em.type == EM_RIGHTS_NEAR ? PANEL_POPULATION : em.type == EM_POWER_NEAR ? PANEL_SERVICES :
                            era_msg_panel(&em) ? PANEL_TRADE : PANEL_NONE);
+    }
+    {   /* 1.1 W1: winter lines (forecast, first snow, candles, frozen pipes, the thaw) -> ticker (click = the place) */
+        SeasonMsg wm;
+        char wb[240];
+        int wsev;
+        while (season_poll_msg(&wm))
+            if (season_msg_text(wb, sizeof(wb), &wm, &wsev)) {
+                ui_ticker_push(wsev, wb, wm.x, wm.y);
+                if (wsev == SEV_WARN) snd_play(SND_WARN, 40);
+            }
     }
     while (politics_poll_msg(&pm)) {        /* M1: politics messages -> ticker (click opens the President's desk) */
         uipol_message(&pm);

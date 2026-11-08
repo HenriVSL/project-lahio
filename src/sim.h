@@ -33,6 +33,7 @@ typedef struct {
     int  disasters;
     int  all_unlocked;         /* creative mode: everything unlocked + unlimited money */
     u32  seed;                 /* sim RNG seed (usually = the map seed) */
+    int  difficulty;           /* 1.1 D1: DIFF_* (defs.h); 0 = Easy = 1.0 rules (tests, -seed starts); New Game: Normal */
 } SimSettings;
 void sim_default_settings(SimSettings *s);
 
@@ -69,6 +70,7 @@ enum { DT_OPEN_JOBS, DT_MIGRATION, DT_ATTRACTIVENESS, DT_VACANT_HOMES, DT_EMIGRA
        DT_POLICY,            /* M1: presidential decrees and event effects (0 with politics off) */
        DT_REGIONAL,          /* M2: regional migrants by train (railway station, transit.h) */
        DT_FREIGHT,           /* M2: rail freight orders (railway station) */
+       DT_SWEDEN,            /* 1.1 D1: "Sweden is hiring" 1969-70 (Normal/Hard; hard.cpp), people per month */
        DT_COUNT };
 typedef struct {
     s32  value;                /* bar -100..+100 = scaled `smoothed` (100*s/(|s|+K), K grows with the city) */

@@ -390,6 +390,7 @@ def resolve_aliases(A, names):
 
 # =========================================================================== rendering (parallel)
 _JOBS = None
+_WINTER = [True]          # 1.1 W2: also shade the winter copy of every sprite (--nowinter: summer only)
 
 
 def run_job(args):
@@ -401,6 +402,12 @@ def run_job(args):
     res = []
     for (name, mode) in job.outs:
         img = shade(gb, STYLE_C, mode)
+        # 1.1 W2: the winter copy of the same G-buffer (cars are season-invariant: they drive in every season)
+        imw = None
+        if job.kind != 'car' and _WINTER[0]:
+            imw = shade(gb, STYLE_C, 'ab_winter' if mode == 'ab' else 'winter')
+            if key_mask(imw).tobytes() != key_mask(img).tobytes():
+                raise RuntimeError('winter pass changed the alpha mask of %s' % name)
         anc = gb['anchor']
         hot = gb['hot']
         if job.kind == 'car':
@@ -411,10 +418,13 @@ def run_job(args):
                 if job.kind == 'lot':        # keep full width (strip columns), trim only the top
                     bb = (0, bb[1], img.width, img.height)
                 img = img.crop(bb)
+                if imw is not None:
+                    imw = imw.crop(bb)
                 anc = (anc[0] - bb[0], anc[1] - bb[1])
                 if hot:
                     hot = (min(max(hot[0] - bb[0], 0), img.width - 1), min(max(hot[1] - bb[1], 0), img.height - 1))
-        res.append((name, int(64 * zoom), img.size, img.tobytes(), anc, hot or (-1, -1)))
+        res.append((name, int(64 * zoom), img.size, img.tobytes(), anc, hot or (-1, -1),
+                    imw.tobytes() if imw is not None else None, tuple(sorted(artlib._unknown_ground))))
     return res
 
 
@@ -432,21 +442,28 @@ def render(jobs, only=None, nproc=None):
         job = jobs[t[0]]
         return -(len(job.outs) * (4 if job.kind == 'lot' else 1)) * (4 if t[1] == 1.0 else 1)
     tasks.sort(key=cost)
-    out = {}
+    out, wout, unknown = {}, {}, set()
     t0 = time.time()
     nproc = nproc or multiprocessing.cpu_count()
+
+    def take(res):
+        for r in res:
+            out[(r[0], r[1])] = r[:6]
+            wout[(r[0], r[1])] = r[6]
+            unknown.update(r[7])
     if nproc > 1:
         ctx = multiprocessing.get_context('fork')
         with ctx.Pool(nproc) as pool:
             for res in pool.imap_unordered(run_job, tasks, chunksize=1):
-                for r in res:
-                    out[(r[0], r[1])] = r
+                take(res)
     else:
         for t in tasks:
-            for r in run_job(t):
-                out[(r[0], r[1])] = r
-    print('  rendered %d sprites (%d g-buffers) in %.1fs' % (len(out), len(tasks), time.time() - t0))
-    return out
+            take(run_job(t))
+    print('  rendered %d sprites (%d g-buffers, winter copies: %d) in %.1fs' %
+          (len(out), len(tasks), sum(1 for v in wout.values() if v is not None), time.time() - t0))
+    if unknown:
+        print('  winter: summer ground keys mapped to plain snow by default: %s' % ' '.join(sorted(unknown)))
+    return out, wout
 
 
 # =========================================================================== procedural sprites
@@ -692,8 +709,34 @@ def zonev_img(zoom, z, edges):
     return img
 
 
-def procedural(zoom):
-    """name -> (img, anchor, hot)"""
+# 1.1 W2: winter copies of the flat marks.  Same alpha (same pixels drawn), darker colours: the light summer
+# tones (cream cursor, light zone dashes, the faint NETC_WET dither) vanish against snow.
+CUR_COLS = {'ok': '#e8e2c8', 'bad': '#c8423a', 'sel': ('#d8b85a', '#a8883a'), 'query': '#7ab0d8'}
+CUR_COLS_W = {'ok': '#4a4639', 'bad': '#b8352d', 'sel': ('#b88e1e', '#6e5414'), 'query': '#2f6c9e'}
+ZONE_TINTS_W = {1: '#5a8a34', 2: '#2c6a3a', 3: '#36609a', 4: '#a07818', 5: '#2a4a26', 6: '#8a7034'}
+ZONEV_COLS_W = {1: ('#5e8a36', '#2e4a1c'), 2: ('#2f7a56', '#1a4430'), 3: ('#4a72b0', '#22365a'),
+                4: ('#b08a22', '#5a400e'), 5: ('#3e6a32', '#1a2e16'), 6: ('#a08648', '#4c3c1c')}
+
+
+def _ovr_winter(c):
+    """overlay dither colour for snow: darker and a little more saturated (half the pixels are white snow)"""
+    r, g, b = hexc(c)
+    m = (r + g + b) / 3.0
+    return tuple(max(0, min(255, (m + (v - m) * 1.25) * 0.80)) for v in (r, g, b))
+
+
+def procedural(zoom, winter=False):
+    """name -> (img, anchor, hot).  winter (1.1 W2): the same sprites with the snow palette above"""
+    global OVR_RAMPS, ZONE_TINTS, ZONEV_COLS, CUR_COLS
+    if winter:
+        saved = (OVR_RAMPS, ZONE_TINTS, ZONEV_COLS, CUR_COLS)
+        OVR_RAMPS = [(rn, [_ovr_winter(c) if not (rn == 'net' and li == 4) else '#3f78b0' for li, c in enumerate(cols)])
+                     for (rn, cols) in OVR_RAMPS]
+        ZONE_TINTS, ZONEV_COLS, CUR_COLS = ZONE_TINTS_W, ZONEV_COLS_W, CUR_COLS_W
+        try:
+            return procedural(zoom)
+        finally:
+            OVR_RAMPS, ZONE_TINTS, ZONEV_COLS, CUR_COLS = saved
     out = {}
     tw, th = int(64 * zoom), int(32 * zoom)
     anc = (tw // 2, th)
@@ -704,20 +747,21 @@ def procedural(zoom):
             else:
                 img = diamond_img(zoom, (lambda cc: lambda x, y, e: cc if (x + y) % 2 == 0 else None)(c))
             out['ovl_%d_%d' % (ri, li)] = (img, anc, (-1, -1))
-    out['cur_ok'] = (diamond_img(zoom, lambda x, y, e: '#e8e2c8' if e else ('#e8e2c8' if (x % 2 == 0 and y % 2 == 0) else None)), anc, (-1, -1))
-    out['cur_bad'] = (diamond_img(zoom, lambda x, y, e: '#c8423a' if e or (x + y) % 4 == 0 else None), anc, (-1, -1))
+    cc = CUR_COLS
+    out['cur_ok'] = (diamond_img(zoom, lambda x, y, e: cc['ok'] if e else (cc['ok'] if (x % 2 == 0 and y % 2 == 0) else None)), anc, (-1, -1))
+    out['cur_bad'] = (diamond_img(zoom, lambda x, y, e: cc['bad'] if e or (x + y) % 4 == 0 else None), anc, (-1, -1))
     w = tw
 
     def sel(x, y, e):
         if e:
-            return '#d8b85a'
+            return cc['sel'][0]
         # second ring: 1 px inside the edge
         inner = all(diamond_inside(x + dx, y + dy, zoom) and
                     all(diamond_inside(x + dx + ex, y + dy + ey, zoom) for (ex, ey) in ((1, 0), (-1, 0), (0, 1), (0, -1)))
                     for (dx, dy) in ((1, 0), (-1, 0), (0, 1), (0, -1)))
-        return None if inner else '#a8883a'
+        return None if inner else cc['sel'][1]
     out['cur_sel'] = (diamond_img(zoom, sel), anc, (-1, -1))
-    out['cur_query'] = (diamond_img(zoom, lambda x, y, e: '#7ab0d8' if e else ('#7ab0d8' if (x % 2 == 0 and y % 2 == 0) else None)), anc, (-1, -1))
+    out['cur_query'] = (diamond_img(zoom, lambda x, y, e: cc['query'] if e else (cc['query'] if (x % 2 == 0 and y % 2 == 0) else None)), anc, (-1, -1))
     for z, c in ZONE_TINTS.items():
         out['zone_%d' % z] = (diamond_img(zoom, (lambda cc: lambda x, y, e: cc if (e and (x + y) % 2 == 0) or
                                                  (x % 2 == 0 and y % 2 == 0) else None)(c)), anc, (-1, -1))
@@ -743,17 +787,27 @@ def procedural(zoom):
 
 
 # =========================================================================== sheets + headers
-def make_sprites(rendered, zoom_px):
-    """name -> (img, anchor, hot) for one zoom"""
-    S = {}
+def make_sprites(rendered, zoom_px, winter=None):
+    """name -> (img, anchor, hot) for one zoom.  winter (1.1 W2): the winter cache {(name, z): bytes or None};
+    then returns (S, SW) where SW holds the winter images (season-invariant sprites: the summer image)."""
+    S, SW = {}, {}
     for (name, z), r in rendered.items():
         if z != zoom_px:
             continue
         _, _, size, data, anc, hot = r
         S[name] = (Image.frombytes('RGB', size, data), tuple(anc), tuple(hot))
+        if winter is not None:
+            wd = winter.get((name, z))
+            SW[name] = (Image.frombytes('RGB', size, wd), tuple(anc), tuple(hot)) if wd else S[name]
     for name, v in procedural(1.0 if zoom_px == 64 else 0.5).items():
         S[name] = v
-    return S
+        SW[name] = v
+    if winter is not None:
+        for name, v in procedural(1.0 if zoom_px == 64 else 0.5, winter=True).items():
+            SW[name] = v
+    if winter is None:
+        return S
+    return S, SW
 
 
 def sprite_pieces(name, img, ax, hw):
@@ -804,22 +858,28 @@ def sprite_pieces(name, img, ax, hw):
     return [bb for bb in (box(a, b) for (a, b) in reversed(seg)) if bb]
 
 
-def write_sheets(S, zoom_px):
+def write_sheets(S, zoom_px, SW=None):
     """PL4: sprites -> trimmed pieces (identical pieces stored once) -> skyline-packed pages.
-    Returns (pages [(sname, img)], placed {piece id: (page, x, y, w, h)}, spr {name: [(piece id, dx, dy)]})."""
+    Returns (pages [(sname, img)], placed {piece id: (page, x, y, w, h)}, spr {name: [(piece id, dx, dy)]}).
+    1.1 W2: SW = the winter images (same boxes, same alpha).  A piece is shared only when it is identical in BOTH
+    seasons, so one piece table serves both; the winter pages world<k>_<z>w.bmp get the winter pixels at exactly
+    the summer rects.  pages entries then are (sname, img, winter img or None when the page is season-invariant)."""
     hw = zoom_px // 2
-    items, crops, uniq, spr = [], {}, {}, {}
+    items, crops, wcrops, uniq, spr = [], {}, {}, {}, {}
     for n in sorted(S):
         img, anc, hot = S[n]
+        imw = SW[n][0] if SW is not None else None
         pcs = []
         for k, (x0, y0, x1, y1) in enumerate(sprite_pieces(n, img, anc[0], hw)):
             c = img.crop((x0, y0, x1, y1))
-            key = (c.size, c.tobytes())
+            cw = imw.crop((x0, y0, x1, y1)) if imw is not None else None
+            key = (c.size, c.tobytes(), cw.tobytes() if cw is not None else None)
             pid = uniq.get(key)
             if pid is None:
                 pid = '%s#%d' % (n, k)
                 uniq[key] = pid
                 crops[pid] = c
+                wcrops[pid] = cw
                 items.append((pid, x1 - x0, y1 - y0))
             pcs.append((pid, x0, y0))
         spr[n] = pcs
@@ -827,12 +887,19 @@ def write_sheets(S, zoom_px):
     out, placed = [], {}
     for k, (page, ph) in enumerate(zip(pages, heights)):
         img = Image.new('RGB', (SHEET_W, ph), KEY)
+        imw = Image.new('RGB', (SHEET_W, ph), KEY) if SW is not None else None
         for (pid, x, y, w, h) in page:
             img.paste(crops[pid], (x, y))
+            if imw is not None:
+                imw.paste(wcrops[pid], (x, y))
             placed[pid] = (k, x, y, w, h)
         sname = 'world%d_%d' % (k, zoom_px)
         write_bmp(os.path.join(HERE, sname + '.bmp'), img)
-        out.append((sname, img))
+        if imw is not None and imw.tobytes() != img.tobytes():
+            write_bmp(os.path.join(HERE, sname + 'w.bmp'), imw)
+        else:
+            imw = None
+        out.append((sname, img, imw))
     return out, placed, spr
 
 
@@ -843,7 +910,7 @@ def write_headers(zsets, alias_list):
     idx = []
     for (zoom_px, pages, placed, spr, S) in zsets:
         base = len(idx)
-        idx += [(sname, zoom_px) for (sname, img) in pages]
+        idx += [(pg[0], zoom_px, pg[2] is not None) for pg in pages]
         rows = [(n, n) for n in spr]
         rows += [(a, t) for (a, t) in resolve_aliases(alias_list, spr) if t in spr]
         rows.sort(key=lambda r: r[0])
@@ -878,9 +945,15 @@ def write_headers(zsets, alias_list):
     for (zoom_px, pages, placed, spr, S) in zsets:
         L.append('#include "sheet_world_%d.h"' % zoom_px)
     L += ['', 'static const ArtSheet art_world_sheets[] = {']
-    for (sname, z) in idx:
+    for (sname, z, w) in idx:
         L.append('    { "art\\\\%s.bmp", %s, 1, NULL, 0 },' % (sname, 'ZOOM_64' if z == 64 else 'ZOOM_32'))
-    L += ['};', '#define ART_WORLD_SHEET_COUNT %d' % len(idx), '', 'static const ArtPieceSet art_world_sets[] = {']
+    L += ['};', '#define ART_WORLD_SHEET_COUNT %d' % len(idx), '',
+          '/* 1.1 W2 winter art: per art_world_sheets index, the winter copy of that page (same size, same alpha, the',
+          '   same piece rects) or NULL for a season-invariant page.  art.cpp swaps the pixels at the season change. */',
+          '#define ART_WORLD_HAS_WINTER 1', 'static const char *const art_world_winter[] = {']
+    for (sname, z, w) in idx:
+        L.append('    %s,' % ('"art\\\\%sw.bmp"' % sname if w else 'NULL'))
+    L += ['};', '', 'static const ArtPieceSet art_world_sets[] = {']
     for (zoom_px, pages, placed, spr, S) in zsets:
         L.append('    { %s, art_pieces_%d, ART_PIECES_%d_COUNT, art_sprites_%d, ART_SPRITES_%d_COUNT },' %
                  ('ZOOM_64' if zoom_px == 64 else 'ZOOM_32', zoom_px, zoom_px, zoom_px, zoom_px))
@@ -1304,6 +1377,14 @@ def mockup(S, zoom, W, H, centre, overlay=None):
         pobj, oobj = water_layer(N, G, objs)
         objs = to_ground(objs) + oobj + pobj
         sm = []
+    elif overlay == 'good':            # 1.1 W2: land value (GOOD ramp), high around the centre and the lake shore
+        objs = to_ground(objs)
+        for i in range(N):
+            for j in range(N):
+                lv = int(clamp(7.5 - math.hypot(i - 17, j - 11) / 2.2 + (1.5 if math.hypot(i - 8, j - 8) < 9 else 0), 0, 7))
+                if not G[i][j].startswith(('water', 'shore')):
+                    objs.append(('ovl_1_%d' % lv, i, j, 1, 1))
+        sm = []
     elif overlay:
         objs = to_ground(objs)
         for i in range(N):
@@ -1317,6 +1398,87 @@ def mockup(S, zoom, W, H, centre, overlay=None):
     cx = ox + (ci - cj) * tw / 2.0
     cy = oy + (ci + cj) * th / 2.0
     return canvas.crop((int(cx - W / 2), int(cy - H / 2), int(cx - W / 2) + W, int(cy - H / 2) + H))
+
+
+def cursor_mockup(S, zoom, W, H, centre):
+    """1.1 W2 readability check: cursor marks and a lot ghost (render.cpp ghost_img: 50% checker of the lot
+    sprite) on the plain view: cur_ok / cur_bad / cur_sel / cur_query on empty land and on a road, empty zoned
+    tiles, a 2x2 apartment ghost and a house ghost on empty land"""
+    S = dict(S)
+    for nm in ('apt_t2_2x2_v0_r0', 'house_t2_v2_r1', 'com_t2_2x1_v0_r0'):
+        img, anc, hot = S[nm]
+        g = img.copy()
+        p = g.load()
+        for y in range(g.height):
+            for x in range(g.width):
+                if (x + y) & 1:
+                    p[x, y] = KEY
+        S['ghost_' + nm] = (g, anc, hot)
+    N, G, objs = town_layout()
+    objs = list(objs)
+    marks = [('cur_ok', 5, 25), ('cur_ok', 6, 25), ('cur_bad', 5, 26), ('cur_bad', 6, 26), ('cur_sel', 7, 25),
+             ('cur_query', 7, 26), ('cur_ok', 3, 27), ('cur_bad', 3, 28), ('cur_sel', 8, 21), ('cur_query', 8, 22),
+             ('zone_1', 5, 29), ('zone_2', 6, 29), ('zone_3', 7, 29), ('zone_4', 8, 29),
+             ('zone_1', 5, 30), ('zone_2', 6, 30), ('zone_3', 7, 30), ('zone_4', 8, 30)]
+    for (nm, i, j) in marks:
+        objs.append((nm, i, j, 1, 1))
+    objs.append(('ghost_apt_t2_2x2_v0_r0', 9, 25, 2, 2))
+    objs.append(('ghost_house_t2_v2_r1', 11, 27, 1, 1))
+    objs.append(('ghost_com_t2_2x1_v0_r0', 9, 28, 2, 1))
+    canvas, ox, oy = compose_map(S, N, G, objs, zoom)
+    tw, th = int(64 * zoom), int(32 * zoom)
+    ci, cj = centre
+    cx = ox + (ci - cj) * tw / 2.0
+    cy = oy + (ci + cj) * th / 2.0
+    return canvas.crop((int(cx - W / 2), int(cy - H / 2), int(cx - W / 2) + W, int(cy - H / 2) + H))
+
+
+def side_by_side(a, b, gap=8):
+    out = Image.new('RGB', (a.width + b.width + gap, max(a.height, b.height)), (30, 32, 36))
+    out.paste(a, (0, 0))
+    out.paste(b, (a.width + gap, 0))
+    return out
+
+
+def write_winter_previews(S64, S32, W64, W32):
+    """1.1 W2 mockups: winter versions of the town previews (both zooms), overlays and the zone view on snow,
+    cursors and lot ghosts on snow, the M2 town mockups, winter review sheets and summer|winter comparisons"""
+    os.makedirs(PREVIEW, exist_ok=True)
+    for f in glob.glob(os.path.join(PREVIEW, '*_winter.png')) + glob.glob(os.path.join(PREVIEW, 'cmp_*.png')):
+        os.remove(f)
+    views = [('town_64', 1.0, 800, 600, (19.0, 13.5), None), ('town_64_houses', 1.0, 800, 600, (11.0, 20.0), None),
+             ('town_64_overlay', 1.0, 800, 600, (19.0, 13.5), True), ('town_64_landvalue', 1.0, 800, 600, (17.0, 13.0), 'good'),
+             ('town_32', 0.5, 800, 600, (17.0, 17.0), None), ('town_32_landvalue', 0.5, 800, 600, (17.0, 15.0), 'good'),
+             ('town_64_water', 1.0, 800, 600, (18.5, 13.0), 'water'), ('town_32_water', 0.5, 800, 600, (17.0, 15.0), 'water'),
+             ('yards_64', 1.0, 800, 400, (19.5, 16.5), None),
+             ('town_64_zones', 1.0, 800, 600, (18.0, 13.0), 'zones'), ('town_32_zones', 0.5, 800, 600, (16.0, 15.0), 'zones')]
+    for (nm, z, w, h, c, ov) in views:
+        Sw, Ss = (W64, S64) if z == 1.0 else (W32, S32)
+        imw = mockup(Sw, z, w, h, c, overlay=ov)
+        imw.save(os.path.join(PREVIEW, nm + '_winter.png'))
+        if ov == 'good':
+            mockup(Ss, z, w, h, c, overlay=ov).save(os.path.join(PREVIEW, nm + '.png'))
+    for (nm, Sw, Ss, z, c) in (('cursors_64', W64, S64, 1.0, (8.0, 26.5)), ('cursors_32', W32, S32, 0.5, (8.0, 25.0))):
+        w = cursor_mockup(Sw, z, 640, 400, c)
+        w.save(os.path.join(PREVIEW, nm + '_winter.png'))
+        side_by_side(cursor_mockup(Ss, z, 640, 400, c), w).save(os.path.join(PREVIEW, 'cmp_' + nm + '.png'))
+    for (nm, z, w, h, c, ov) in (('town_64', 1.0, 640, 480, (19.0, 13.5), None),
+                                 ('town_64_zones', 1.0, 640, 480, (18.0, 13.0), 'zones'),
+                                 ('town_64_water', 1.0, 640, 480, (18.5, 13.0), 'water'),
+                                 ('town_32', 0.5, 640, 480, (17.0, 17.0), None)):
+        Sw, Ss = (W64, S64) if z == 1.0 else (W32, S32)
+        side_by_side(mockup(Ss, z, w, h, c, overlay=ov), mockup(Sw, z, w, h, c, overlay=ov)).save(
+            os.path.join(PREVIEW, 'cmp_' + nm + '.png'))
+    for S, z in ((W64, 64), (W32, 32)):
+        sc = 2 if z == 64 else 3
+        tiles = [n for n in sorted(S) if S[n][0].size == ((64, 32) if z == 64 else (32, 16)) and not n.startswith(('ovl', 'cur', 'zone'))]
+        preview_sheet(S, tiles, scale=sc).save(os.path.join(PREVIEW, 'tiles_%d_winter.png' % z))
+        roads = [n for n in sorted(S) if n.startswith(ROAD_KEYS + ('rail', 'power', 'wire'))]
+        preview_sheet(S, roads, scale=sc).save(os.path.join(PREVIEW, 'roads_%d_winter.png' % z))
+        misc = [n for n in sorted(S) if n.startswith(('tree', 'forest', 'rock', 'rubble', 'field_hay'))]
+        preview_sheet(S, misc, scale=sc).save(os.path.join(PREVIEW, 'misc_%d_winter.png' % z))
+    import art_mockup_m2
+    art_mockup_m2.write(sys.modules[__name__], W64, W32, PREVIEW, suffix='_winter')
 
 
 def write_previews(S64, S32):
@@ -1647,7 +1809,7 @@ def check(verbose=True):
     for z in sets:
         names[z] = set(r[0] for r in sets[z][1])
     print('  pages (PL4: <= %dx%d, pieces trimmed per half-tile column):' % (SHEET_W, SHEET_MAX_H))
-    for f in sorted(glob.glob(os.path.join(HERE, 'world*_*.bmp')), key=lambda f: (-int(f[:-4].split('_')[-1]), int(re.findall(r'world(\d+)_', f)[0]))):
+    for f in sorted(glob.glob(os.path.join(HERE, 'world*_[0-9][0-9].bmp')), key=lambda f: (-int(f[:-4].split('_')[-1]), int(re.findall(r'world(\d+)_', f)[0]))):
         sname = os.path.basename(f)[:-4]
         d = open(f, 'rb').read()
         sig, _, _, _, off = struct.unpack('<2sIHHI', d[:14])
@@ -1693,7 +1855,7 @@ def check(verbose=True):
             ok = False
     # per-zoom VRAM (DESIGN 14.5): only the active zoom's world sheets are resident, UI sheets always are
     zt = {64: 0, 32: 0}
-    for f in glob.glob(os.path.join(HERE, 'world*_*.bmp')):
+    for f in glob.glob(os.path.join(HERE, 'world*_[0-9][0-9].bmp')):
         w, h = Image.open(f).size
         zt[int(os.path.basename(f)[:-4].split('_')[1])] += w * h * 2
     ui = 0
@@ -1862,7 +2024,101 @@ def check(verbose=True):
         print('    %-44s %6.1f / %5.1f' % ('total', t64 / 1024.0, t32 / 1024.0))
     cnt = dict((z, len(names[z])) for z in names)
     print('  sprite names: 64: %d, 32: %d' % (cnt[64], cnt[32]))
+    if not check_winter(pages, sets, zt):
+        ok = False
     print('  check: %s' % ('PASS' if ok else 'FAIL'))
+    return ok
+
+
+def check_winter(pages, sets, zt):
+    """1.1 W2: winter pages share the summer piece table.  Per page: the winter file listed in art_world.h has
+    the same size and format, colours 565 / no near-key, and EXACTLY the summer alpha mask (so every piece rect
+    holds the same opaque pixels); with the winter render cache present, every sprite re-assembled from the winter
+    pages equals its winter render (dedup invariant).  VRAM per zoom x season."""
+    ok = True
+    idx = open(os.path.join(HERE, 'art_world.h')).read()
+    m = re.search(r'art_world_winter\[\] = \{(.*?)\};', idx, re.S)
+    if not m:
+        print('  winter: FAIL art_world.h has no art_world_winter[]')
+        return False
+    wl = [None if e.strip() == 'NULL' else re.search(r'world\d+_\d+w', e).group(0)
+          for e in m.group(1).split(',') if e.strip()]
+    if len(wl) != len(pages):
+        print('  winter: FAIL %d winter entries for %d pages' % (len(wl), len(pages)))
+        return False
+    stat = {64: [0, 0, 0], 32: [0, 0, 0]}          # winter pages, invariant pages, KB of winter pages
+    wsheets = {}
+    for k, ((sname, z), wn) in enumerate(zip(pages, wl)):
+        if wn is None:
+            stat[z][1] += 1
+            continue
+        f = os.path.join(HERE, wn + '.bmp')
+        if not os.path.exists(f):
+            print('  winter: FAIL missing %s' % f)
+            ok = False
+            continue
+        d = open(f, 'rb').read(54)
+        isz, w, h, planes, bpp, comp = struct.unpack('<IiiHHI', d[14:34])
+        sm = Image.open(os.path.join(HERE, sname + '.bmp')).convert('RGB')
+        wm = Image.open(f).convert('RGB')
+        bad = []
+        if bpp != 24 or comp != 0 or wm.size != sm.size:
+            bad.append('format/size %dx%d bpp %d vs %dx%d' % (wm.width, wm.height, bpp, sm.width, sm.height))
+        else:
+            sd, wd = sm.tobytes(), wm.tobytes()
+            if key_mask(sm).tobytes() != key_mask(wm).tobytes():
+                bad.append('alpha mask differs from summer')
+            near = n565 = 0
+            for c in wm.getdata():
+                if c == KEY:
+                    continue
+                if c[0] >= 248 and c[1] <= 8 and c[2] >= 248:
+                    near += 1
+                elif to565(c) != c:
+                    n565 += 1
+            if near or n565:
+                bad.append('near-key %d non565 %d' % (near, n565))
+        if bad:
+            print('  winter: FAIL %s: %s' % (wn, '; '.join(bad)))
+            ok = False
+        stat[z][0] += 1
+        stat[z][2] += wm.width * wm.height * 2
+        wsheets[k] = wm
+    for z in (64, 32):
+        print('  winter %d-zoom: %d winter pages (alpha = summer), %d season-invariant pages; VRAM summer %.0f KB = '
+              'winter %.0f KB (same surfaces, +0 KB); winter page pixels %.0f KB (art.cpp keeps only the pixels that differ)' %
+              (z, stat[z][0], stat[z][1], zt[z] / 1024.0, zt[z] / 1024.0, stat[z][2] / 1024.0))
+    wpath = os.path.join(CACHE, 'sprites_winter.pickle')
+    cpath = os.path.join(CACHE, 'sprites.pickle')
+    if os.path.exists(wpath) and os.path.exists(cpath):
+        with open(cpath, 'rb') as f:
+            rend = pickle.load(f)
+        with open(wpath, 'rb') as f:
+            wint = pickle.load(f)
+        nbad = nchk = 0
+        badn = []
+        for z in (64, 32):
+            psum = dict((k, Image.open(os.path.join(HERE, sn + '.bmp')).convert('RGB'))
+                        for k, (sn, zz) in enumerate(pages) if zz == z)
+            pw = dict((k, wsheets.get(k, psum[k])) for k in psum)
+            for row in sets[z][1]:
+                key = (row[0], z)
+                if key not in rend:
+                    continue
+                size = rend[key][2]
+                wd = wint.get(key) or rend[key][3]
+                want = Image.frombytes('RGB', size, wd)
+                got = logical_sprite(pw, sets[z][0], row)
+                nchk += 1
+                if got.size != want.size or got.tobytes() != want.tobytes():
+                    nbad += 1
+                    badn.append(row[0])
+        print('  winter sprites re-assembled from the winter pages = winter renders: %d checked, %s' %
+              (nchk, 'ok' if not nbad else 'FAIL %d: %s' % (nbad, ' '.join(badn[:8]))))
+        if nbad:
+            ok = False
+    else:
+        print('  winter: render cache missing, piece-content check skipped (alpha identity checked)')
     return ok
 
 
@@ -1877,38 +2133,66 @@ def main():
     nproc = None
     if '-j' in args:
         nproc = int(args[args.index('-j') + 1])
+    if '--nowinter' in args:
+        _WINTER[0] = False
+    mockups = '--mockups' in args        # 1.1 W2: render (or reuse with --cached) + winter mockups only, no pages
     t0 = time.time()
     jobs = build_jobs()
     print('gen_art: %d jobs' % len(jobs))
     os.makedirs(CACHE, exist_ok=True)
     cpath = os.path.join(CACHE, 'sprites.pickle')
-    rendered = {}
-    repack = '--repack' in args          # PL4: cached sprites only (re-cut + re-pack, no rendering)
+    wpath = os.path.join(CACHE, 'sprites_winter.pickle')
+    rendered, winter = {}, {}
+    repack = '--repack' in args or '--cached' in args   # PL4: cached sprites only (re-cut + re-pack, no rendering)
     if (only or repack) and os.path.exists(cpath):
         with open(cpath, 'rb') as f:
             rendered = pickle.load(f)
         valid = set(o[0] for j in jobs for o in j.outs)
         rendered = dict((k, v) for k, v in rendered.items() if k[0] in valid)
+        if os.path.exists(wpath):
+            with open(wpath, 'rb') as f:
+                winter = pickle.load(f)
+            winter = dict((k, v) for k, v in winter.items() if k in rendered)
     if not repack:
-        rendered.update(render(jobs, only, nproc))
+        r, w = render(jobs, only, nproc)
+        rendered.update(r)
+        winter.update(w)
         with open(cpath, 'wb') as f:
             pickle.dump(rendered, f, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(wpath, 'wb') as f:
+            pickle.dump(winter, f, protocol=pickle.HIGHEST_PROTOCOL)
+    nw = sum(1 for k in rendered if winter.get(k) is None)
+    if nw:
+        print('  winter: %d sprites without a winter copy (cars + anything not rendered with winter on)' % nw)
+    if mockups:
+        SS, WW = {}, {}
+        for (z, zz) in ZOOMS:
+            SS[zz], WW[zz] = make_sprites(rendered, zz, winter)
+            for D in (SS[zz], WW[zz]):
+                for (a, t) in resolve_aliases(aliases(), D):
+                    if t in D:
+                        D[a] = D[t]
+        write_winter_previews(SS[64], SS[32], WW[64], WW[32])
+        print('gen_art: winter mockups done in %.1fs' % (time.time() - t0))
+        return
     for f in glob.glob(os.path.join(HERE, 'world*_*.bmp')):
         os.remove(f)
     zsets = []
-    SS = {}
+    SS, WW = {}, {}
     for (z, zz) in ZOOMS:
-        S = make_sprites(rendered, zz)
-        SS[zz] = S
-        pages, placed, spr = write_sheets(S, zz)
+        S, SW = make_sprites(rendered, zz, winter)
+        SS[zz], WW[zz] = S, SW
+        pages, placed, spr = write_sheets(S, zz, SW)
         zsets.append((zz, pages, placed, spr, S))
     write_headers(zsets, aliases())
     if '--nopreview' not in args and not repack:
         for zz in SS:
-            for (a, t) in resolve_aliases(aliases(), SS[zz]):
-                if t in SS[zz]:
-                    SS[zz][a] = SS[zz][t]
+            for D in (SS[zz], WW[zz]):
+                for (a, t) in resolve_aliases(aliases(), D):
+                    if t in D:
+                        D[a] = D[t]
         write_previews(SS[64], SS[32])
+        write_winter_previews(SS[64], SS[32], WW[64], WW[32])
     print('gen_art: done in %.1fs' % (time.time() - t0))
     sys.exit(0 if check() else 1)
 

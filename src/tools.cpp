@@ -28,6 +28,7 @@
 #include "complex.h"
 #include "civic.h"
 #include "era.h"           /* M7 */
+#include "season.h"        /* 1.1 W1 */
 
 /* ------------------------------------------------------------------ state */
 static ToolPreview s_prev;
@@ -1373,6 +1374,8 @@ int tools_script_line(const char *line, int *wait_months, FILE *out)
     if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "fire") : r;
     r = era_script_line(n, t, out);                                /* M7: trade ... / era dump / news ... */
     if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "trade/era") : r;
+    r = season_script_line(n, t, out);                             /* 1.1 W1: season dump | season force hard|ordinary */
+    if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "season") : r;
     return SCR_UNKNOWN;
 }
 

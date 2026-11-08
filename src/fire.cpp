@@ -9,6 +9,7 @@
 #include "fields.h"
 #include "save.h"
 #include "util.h"
+#include "season.h"         /* 1.1 W1: winter fire multiplier */
 
 #define RUBBLE_MAX 64
 
@@ -140,7 +141,8 @@ void fire_tick(void)
                     for (j = 0; j < nid && ids[j] != nl; j++) {}
                     if (j == nid && nid < 24) ids[nid++] = nl;       /* each neighbour lot once, in ring order */
                 }
-            for (j = 0; j < nid && s_ob_spread < CIVIC_FIRE_SPREAD_MAX; j++)   /* never more than a few houses */
+            for (j = 0; j < nid && s_ob_spread < diff()->fire_spread_max; j++)   /* never more than a few houses (1.1 D1:
+                                                                                    CIVIC_FIRE_SPREAD_MAX on Easy, Hard 4) */
                 if (lot_burnable(&g_world.lots[ids[j]]) && rng_below(&s_rng, 100) < chance) ignite(ids[j], 1);
         }
         if (f->age >= CIVIC_FIRE_BURN_TICKS) {                          /* burnt down: rubble */
@@ -176,7 +178,9 @@ void fire_cycle(void)
     if (!sim_settings()->disasters) return;
     for (i = 1; i < g_world.lot_hi; i++) total += ignite_weight(&g_world.lots[i]);
     if (total <= 0) return;
-    p = total * CIVIC_FIRE_IGNITE_PPB;
+    p = total * diff()->fire_ppb;      /* 1.1 D1: CIVIC_FIRE_IGNITE_PPB on Easy, Normal 150, Hard 200 (the Dec-Mar wood-stove
+                                          factor diff()->fire_winter_pct is W1's season_fire_pct) */
+    if (season_fire_pct() != 100) p = p * season_fire_pct() / 100;   /* 1.1 W1: wood stoves Dec-Mar (Easy: 100) */
     if (p > 500000000) p = 500000000;
     if ((s64)(rng_next(&s_rng) % 1000000000u) >= p) return;
     {

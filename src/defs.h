@@ -96,6 +96,7 @@ enum { REQ_ROAD,          /* road access (lot touches a usable road) */
        REQ_WOOD,          /* M3: sawmills: wood supply (industry.cpp; have/need = supply % / 75) */
        REQ_MILK,          /* M3: dairies: milk supply */
        REQ_ROUTE,         /* M2: homes need a road route to the town's jobs (traffic.cpp traffic_route_ok) */
+       REQ_LIBRARY,       /* 1.1 D1: era expectation 1975 (houses/apartments T3; sim.cpp expect_reqs, Normal/Hard only) */
        REQ_COUNT };
 typedef struct { u8 req; s16 need; } TierReq; /* need: threshold where the requirement has one */
 
@@ -266,5 +267,57 @@ int  def_era(int year);                           /* ERA_* */
 int  def_status_for_population(s32 pop);          /* TS_* by thresholds (sim keeps the max reached) */
 int  def_selfcheck(void);                         /* table consistency (ids, footprints, upgrade_to);
                                                      0 ok, else number of problems (logged) */
+
+/* ------------------------------------------------------------------ 1.1 difficulty (D1, DESIGN_1_1 section 2)
+   One preset table g_diff[DIFF_COUNT] (defs.cpp); code reads diff()->x, never "if (hard)". Chosen at New Game (default
+   Normal there), stored in the SIM chunk (v3; 1.0 saves load as Easy), fixed for the game. EASY = the 1.0 values bit
+   for bit (every 1.0 test and replay runs on Easy: sim_default_settings picks it). The level is set by sim_new_city /
+   sim_load (diff_set_level); tooltips, the ledger and the Guide page read the same table, so every lever is named. */
+enum { DIFF_EASY, DIFF_NORMAL, DIFF_HARD, DIFF_COUNT };
+typedef struct {
+    const char *name;         /* "Easy", "Normal", "Hard" */
+    /* economy */
+    s16 upkeep_pct;           /* service, road, network and utility upkeep x % (100/105/105; phased in 1960-65); budget.cpp */
+    s16 upkeep_cap;           /* upkeep index cap % (+2.5 %/year from 1960): 130 (1972) / 145 (1978) / 150 (1980) */
+    s16 tax_yield_pct;        /* resident + business tax yield x % (100/100/95; phased in 1960-65) */
+    s16 tax_neutral;          /* tax tolerance: rate with no demand penalty (9/9/8; 1.0 TAX_NEUTRAL); new towns start at it */
+    s16 overtime_free;        /* service overtime starts at this load % (125/115/110; max 300 %) */
+    /* people */
+    s16 emig_unemp_div;       /* unemployed (as people) emigrating per month: 1/N (8/6/5) */
+    s16 emig_homeless_div;    /* homeless emigrating per month: 1/N (4/3/3) */
+    s16 decline_checks;       /* bad growth checks (4 per month) before a decline step (SIM_G_DOWN: 4/4/3) */
+    s16 decline_util_checks;  /* the same when only power/water are missing (SIM_G_DOWN_UTIL: 8/6/4) */
+    s16 sweden_permille;      /* 1969-70 Sweden pull, per mille of population per month (0/2/4); hard.cpp */
+    s16 expectations;         /* era expectations 1975 (library) / 1980 (clinic) on (0/1/1); hard.cpp */
+    /* politics, trade, fires */
+    s16 card_neg_pct;         /* negative event-card effects (money, approval, meters) x % (100/115/140) */
+    s16 card_gap_min, card_gap_max;   /* months between random cards (POL_EVENT_MIN/MAX: 12-24 / 12-20 / 12-16) */
+    s16 auth_div;             /* authority income = popularity / N per month (20/24/30) */
+    s16 east_target;          /* Eastern relations drift target, +-1 every 4 months (50/45/40) */
+    s16 shock_pct;            /* oil/coal price rise above 100 x % (100/115/130); trade.cpp */
+    s16 fire_ppb;             /* fire ignition per cycle per unit of fire risk, per 1e9 (CIVIC_FIRE_IGNITE_PPB: 100/150/200) */
+    s16 fire_spread_max;      /* spreads per outbreak (CIVIC_FIRE_SPREAD_MAX: 3/3/4) */
+    s16 fire_winter_pct;      /* ignition x % in December-March, wood stoves (100/150/150) */
+    /* winter (W1 reads these; Easy = cosmetic winter only) */
+    s16 winter_load_pct;      /* extra power + district-heat use Dec-Mar, % (0/15/20) */
+    s16 hard_winter_pct;      /* chance of a hard winter per winter, % (0/20/33; + the fixed 1986-87 on Normal/Hard) */
+    s16 hard_load_pct;        /* hard winter: further extra load, % (0/15/20) */
+    s16 hard_water_pct;       /* hard winter: water-source output % (100/90/85; pumps and wells, not towers) */
+    s16 plough_pct;           /* ploughing surcharge on road upkeep Dec-Mar, % (0/25/35) */
+    s16 plough_hard_pct;      /* the same in a hard winter, % (0/40/55) */
+    s16 frost_repair10;       /* hard winter: frost repairs, mk per 10 pipe tiles per month (0/1/2) */
+} DiffParams;
+extern const DiffParams g_diff[DIFF_COUNT];
+const DiffParams *diff(void);                     /* the current game's level (never NULL) */
+int  diff_level(void);                            /* DIFF_* */
+void diff_set_level(int level);                   /* sim_new_city / sim_load; clamped */
+const char *diff_name(int level);                 /* "Easy" / "Normal" / "Hard" */
+/* era expectations (DESIGN_1_1 2.4; on where diff()->expectations): announced in the January paper a year before;
+   from the year on they block upgrades; standing tiers decline only after EXPECT_GRACE_MONTHS */
+#define EXPECT_LIBRARY_YEAR  1975   /* "The welfare state": houses T3 and apartments T3 also need library cover */
+#define EXPECT_CLINIC_YEAR   1980   /* "The lahio question": apartments T2+ also need clinic (health) cover */
+#define EXPECT_GRACE_MONTHS  12
+#define SWEDEN_FROM_YEAR     1969   /* the great migration to Sweden: January 1969 - December 1970 */
+#define SWEDEN_TO_YEAR       1970
 
 #endif

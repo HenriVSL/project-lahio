@@ -20,6 +20,7 @@
 #include "util.h"
 #include "politics.h"
 #include "complex.h"            /* M6: CPX_DEF_USE (complex modules: power/water per stage) */
+#include "season.h"             /* 1.1 W1: winter load on power, hard frost on pumps and wells */
 
 #define NTILES      (MAP_MAX_W * MAP_MAX_H)
 #define NCELLS      (FIELD_MAX_W * FIELD_MAX_H)
@@ -392,7 +393,7 @@ static void solve_power_full(void)
 #undef PSTEP
         }
         /* allocate in BFS order: the furthest consumers lose power first */
-        left = supply;
+        left = season_eff_supply(supply, season_power_pct());   /* 1.1 W1: winter load (use x pct <= supply) */
         for (k = 0; k < nl; k++) {
             Lot *l = &g_world.lots[s_order[k]];
             int use = lot_active(l) ? CPX_DEF_USE(l->def, power_use, CPXU_POWER) : 0;
@@ -413,6 +414,7 @@ static void solve_power_full(void)
         }
     }
     ns->networks = ncomp;
+    ns->demand = season_scale(ns->demand, season_power_pct());        /* 1.1 W1: winter use (Easy: unchanged) */
     s_pncomp = IMIN(ncomp, MAX_COMP - 1);
     s_pvalid = ncomp < MAX_COMP;
     for (i = 1; i < g_world.lot_hi; i++) {
@@ -514,7 +516,7 @@ static int solve_power_incremental(void)
         }
         if ((supply > 0) != (s_pc_supply[c] > 0)) return 0;  /* lines' powered bit flips: full flood */
         s_pc_supply[c] = supply;
-        left = supply;
+        left = season_eff_supply(supply, season_power_pct());   /* 1.1 W1 */
         for (id = s_pc_head[c]; id; id = s_pnext[id]) {
             Lot *l = &g_world.lots[id];
             int use, st;
@@ -549,6 +551,7 @@ static int solve_power_incremental(void)
         ns->supply += supply;
     }
     ns->networks = s_pncomp;
+    ns->demand = season_scale(ns->demand, season_power_pct());        /* 1.1 W1 */
     for (i = 1; i < g_world.lot_hi; i++) {
         const Lot *l = &g_world.lots[i];
         if (l->def != B_NONE && !s_lot_pcomp[i] && lot_active(l) && CPX_DEF_USE(l->def, power_use, CPXU_POWER) > 0) {
@@ -833,9 +836,9 @@ static void solve_water(void)
         if (l->def == B_PUMP) {
             ws->flags |= WSF_PUMP;
             ws->shore = (u16)pump_shore(lot);
-            if (l->flags & LF_POWERED) { ws->flags |= WSF_POWERED; ws->output = IMIN(d->capacity, ws->shore * PUMP_PER_WATER_TILE); }
+            if (l->flags & LF_POWERED) { ws->flags |= WSF_POWERED; ws->output = season_scale(IMIN(d->capacity, ws->shore * PUMP_PER_WATER_TILE), season_water_pct()); }   /* 1.1 W1: hard frost */
         } else if (l->def == B_WATER_TOWER) ws->flags |= WSF_TOWER;
-        else ws->output = d->capacity;
+        else ws->output = season_scale(d->capacity, season_water_pct());   /* well; 1.1 W1: hard frost */
         s_lot_out[lot] = ws->output;
     }
     for (i = 0; i <= s_nws; i++) s_wnsup[i] = 0;

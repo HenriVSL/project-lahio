@@ -15,7 +15,10 @@
 /* ------------------------------------------------------------------ the Cabinet's advice */
 enum { ADV_NONE, ADV_POWER_SHORT, ADV_WATER_SHORT, ADV_MONEY_DEBT, ADV_RIGHTS_WAITING, ADV_MONEY_FALLING,
        ADV_POWER_NEAR, ADV_APT_ELEMENTS, ADV_APT_TOWER, ADV_HEAT, ADV_SHOPS, ADV_SCHOOL, ADV_HEALTH, ADV_SAUNA,
-       ADV_JOBS, ADV_HOMES, ADV_RIGHTS_NEAR, ADV_COUNT };
+       ADV_JOBS, ADV_HOMES, ADV_RIGHTS_NEAR,
+       ADV_WINTER_POWER, ADV_WINTER_HEAT,   /* 1.1 W1: Oct-Nov, the winter peak exceeds supply (season.h) */
+       ADV_SWEDEN, ADV_EXPECT_LIBRARY, ADV_EXPECT_CLINIC,   /* 1.1 D1: 1969-70 missing reasons; era expectations (hard.h) */
+       ADV_COUNT };
 /* what a click on the line does (the UI maps these): camera = centre on (x, y) when x >= 0 */
 enum { AGO_NONE, AGO_CAMERA, AGO_POWER /* power overlay + camera */, AGO_WATER /* water overlay + camera */,
        AGO_HEAT /* heat overlay + camera */, AGO_SERVICES, AGO_PEOPLE, AGO_DEMAND, AGO_BUDGET, AGO_DESK, AGO_COUNT };

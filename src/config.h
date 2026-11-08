@@ -92,6 +92,9 @@ typedef struct {
     int   hints;                 /* INI hints: opening hint chain in the ticker at a new game (default 1) */
     /* M7 addition (INI) */
     int   newspaper;             /* INI newspaper: 1 = the January paper opens (pauses), 0 = headline to the ticker only */
+    /* 1.1 W2 additions */
+    int   winter_art;            /* INI winter_art: 1 = snow scenery Dec-Mar (default), 0 = summer art all year (Plan C) */
+    int   force_season;          /* -winter / -summer (tests, screenshots): 1 winter, 0 summer, -1 = by the sim date */
 } Config;
 
 extern Config g_cfg;

@@ -32,6 +32,8 @@
 #include "civic.h"
 #include "era.h"           /* M7: eras, town status by decree, trade hooks */
 #include "trade.h"
+#include "hard.h"          /* 1.1 D1: Sweden 1969-70, era expectations */
+#include "season.h"        /* 1.1 W1: winter */
 
 /* T12 tuning constants (local; the shared ones are in sim.h) */
 #define PHONE_YEAR 1960                 /* M5: houses tier 3 need a telephone (post office) from this year */
@@ -162,6 +164,8 @@ void sim_new_city(const SimSettings *s)
     int i;
     if (!s_listener_added) { world_add_listener(on_world_change, NULL); s_listener_added = 1; }
     s_set = *s;
+    diff_set_level(s->difficulty);   /* 1.1 D1: fixed for the game */
+    s_set.difficulty = diff_level();
     memset(&s_date, 0, sizeof(s_date));
     s_date.year = s->start_year;
     rng_seed(&s_rng, s->seed);
@@ -195,6 +199,8 @@ void sim_new_city(const SimSettings *s)
     s_stats.era = def_era(s_date.year);
     snapshot_unlocks(0);
     era_reset();               /* M7: trade agreement, history, newspaper */
+    hard_reset();              /* 1.1 D1 */
+    season_reset();            /* 1.1 W1 */
 }
 
 const SimSettings *sim_settings(void) { return &s_set; }
@@ -254,6 +260,34 @@ static void ctx_make(Ctx *c, int x0, int y0, int x1, int y1)
     c->pol = pol[c->cell];
 }
 
+/* 1.1 D1: era expectations (hard.h; Normal/Hard): library cover for tier-3 homes from 1975, clinic cover for apartment
+   blocks T2+ from 1980. The year before: a met, greyed checklist line (why 3, need = the year). From the year on an
+   upgrade needs it; a standing lot (keep) only after the grace (why 4 while it lasts). Same thresholds as the services. */
+static u32 expect_reqs(int zone, int tier, const Ctx *c, int keep, Checklist *cl)
+{
+    u32 unmet = 0;
+    int k;
+    for (k = 0; k < HX_COUNT; k++) {
+        int ph = hard_expect_phase(k, zone, tier, s_date.year, s_date.month), req = hard_expect_req(k), svc, src, met;
+        ReqItem it;
+        if (!ph) continue;
+        memset(&it, 0, sizeof(it));
+        it.req = (u8)req;
+        if (ph == 1 || (ph == 2 && keep)) {
+            met = 1;
+            it.why = (u8)(ph == 1 ? 3 : 4); it.need = hard_expect_year(k);
+        } else {
+            svc = hard_expect_svc(k);
+            src = net_cov_src_map(svc)[c->cell];
+            met = src && net_cov_q_map(svc)[c->cell] >= (keep ? 20 : 40);
+            if (cl) { it.lot = src; if (src) net_service_load(src, &it.have, &it.need); it.why = (u8)(src ? 1 : 0); }
+        }
+        if (!met) unmet |= 1u << req;
+        if (cl && cl->n < REQ_COUNT) { it.met = (u8)met; cl->item[cl->n++] = it; }
+    }
+    return unmet;
+}
+
 /* Evaluate the requirements to reach/keep (zone, tier) for a lot (id) or an empty rect (id 0).
    keep = 1 uses the looser "keep" thresholds (hysteresis). cl (query only) also gets the have/need
    details. Returns the unmet bit mask. */
@@ -308,7 +342,7 @@ static u32 eval_reqs(int zone, int tier, int id, const Ctx *c, int keep, Checkli
             if (met && !keep && id) {
                 const BuildingDef *cd = def_building(g_world.lots[id].def);
                 if (cd->upgrade_to != B_NONE && cd->tier < tier)
-                    met = civic_heat_spare_for(id) >= def_building(cd->upgrade_to)->water_use - cd->water_use;
+                    met = civic_heat_spare_peak(id) >= def_building(cd->upgrade_to)->water_use - cd->water_use;   /* 1.1 W1: winter peak */
             }
             if (cl) { it.why = (u8)civic_req_why(REQ_HEAT, id, &it.have, &it.need); it.lot = civic_lot_util_src(UT_HEAT, id, NULL); }
             break;
@@ -369,6 +403,7 @@ static u32 eval_reqs(int zone, int tier, int id, const Ctx *c, int keep, Checkli
         if (!met) unmet |= 1u << req;
         if (cl && cl->n < REQ_COUNT) { it.met = (u8)met; cl->item[cl->n++] = it; }
     }
+    if (diff()->expectations) unmet |= expect_reqs(zone, tier, c, keep, cl);   /* 1.1 D1 */
     return unmet;
 }
 
@@ -734,7 +769,8 @@ static void process_lot(int id)
         s_band_allow[dm] = IMAX(0, s_band_allow[dm] - add); s_dem[dm].allowance = IMAX(0, s_dem[dm].allowance - add);
         l->growth = 0;
         count_first(zone, d->tier + 1, SE_LOT_UPGRADED, x0, y0, up);
-    } else if (l->growth <= -(unmet_cur && !(unmet_cur & ~SIM_UTIL_BITS) ? SIM_G_DOWN_UTIL : SIM_G_DOWN)) {
+    } else if (l->growth <= -(unmet_cur && !(unmet_cur & ~SIM_UTIL_BITS) ? diff()->decline_util_checks : diff()->decline_checks)) {
+        /* 1.1 D1: decline speed by level (Easy = SIM_G_DOWN_UTIL / SIM_G_DOWN; Normal 6/4, Hard 4/3) */
         l->growth = 0;
         decline_step(id, l, d, unmet_cur);
     }
@@ -888,15 +924,15 @@ static void compute_demand(void)
 {
     const CityStats *st = &s_stats;
     s32 res = st->population, W = st->workers, open_people, pull, attr_pct, tax_pct, pa;
-    s32 v[8];
-    u8 ids[8];
+    s32 v[9];
+    u8 ids[9];
     int era = def_era(s_date.year), avg_tier10 = res ? (int)(s_tier_sum * 10 / res) : 10, k;
     s32 kk[DEM_COUNT];
     /* R */
     open_people = IMAX(0, st->jobs - W) * 100 / SIM_LABOUR_PCT;
     pull = pull_base(s_date.year) + res * pull_rate(s_date.year) / 1000;
     attr_pct = 50 + st->avg_happiness / 2;
-    tax_pct = ICLAMP((g_budget.tax_res - TAX_NEUTRAL) * 4, -12, 44);
+    tax_pct = ICLAMP((g_budget.tax_res - diff()->tax_neutral) * 4, -12, 44);   /* 1.1 D1: tolerance by level (TAX_NEUTRAL on Easy) */
     s_stats.migration_pull = pull;
     v[0] = open_people;                         ids[0] = DT_OPEN_JOBS;
     v[1] = pull;                                ids[1] = DT_MIGRATION;
@@ -907,13 +943,14 @@ static void compute_demand(void)
     k = politics_mod(PM_MIGRATION_PCT);         /* M1: decrees scale the rural migration (0 when off) */
     v[6] = k == 100 ? 0 : (v[1] + v[2] + v[3]) * (k - 100) / 100;   ids[6] = DT_POLICY;
     v[7] = transit_regional_migrants(pull);     ids[7] = DT_REGIONAL;   /* M2: railway station */
-    set_terms(&s_dem[DEM_R], v, ids, 8);
-    pa = IMAX(0, v[1] + v[2] + v[3] + v[6] + v[7]);
+    v[8] = hard_sweden_eval();                  ids[8] = DT_SWEDEN;     /* 1.1 D1: 1969-70 (0 on Easy and other years) */
+    set_terms(&s_dem[DEM_R], v, ids, 9);
+    pa = IMAX(0, v[1] + v[2] + v[3] + v[6] + v[7] + v[8]);
     /* move-in flow for this cycle (a quarter of the monthly flow) + homeless re-housing */
     s_movein_homeless = (s_homeless + 3) / 4;
     s_movein = (pa + open_people + 3) / 4 + s_movein_homeless;
     /* C */
-    tax_pct = ICLAMP((g_budget.tax_bus - TAX_NEUTRAL) * 3, -9, 33);
+    tax_pct = ICLAMP((g_budget.tax_bus - diff()->tax_neutral) * 3, -9, 33);
     v[0] = res * spend_pct(era, avg_tier10) / 100;   ids[0] = DT_SPENDING;
     v[1] = -s_cap_com;                               ids[1] = DT_COM_CAPACITY;
     v[2] = -v[0] * tax_pct / 100;                    ids[2] = DT_TAX;
@@ -1039,15 +1076,22 @@ static void month_end_population(void)
     employ();
     /* emigration to Sweden: 1/8 of the unemployed (as people) and 1/4 of the homeless per month */
     unemployed_people = s_stats.unemployed * 100 / SIM_LABOUR_PCT;
-    emig = (unemployed_people + 7) / 8;
+    emig = (unemployed_people + diff()->emig_unemp_div - 1) / diff()->emig_unemp_div;   /* 1.1 D1: 1/8 (Easy), 1/6, 1/5 */
     emig = POL_PCT(emig, politics_mod(PM_EMIGRATION_PCT));    /* M1: decrees/events (100 when off) */
     emig = IMIN(emig, s_stats.population);
     emigrate(emig);
     {
-        s32 h = (s_homeless + 3) / 4;
+        s32 h = (s_homeless + diff()->emig_homeless_div - 1) / diff()->emig_homeless_div;   /* 1.1 D1: 1/4 (Easy), 1/3 */
         s_homeless -= h;
         emig += h;
     }
+    if (hard_sweden()->active) {   /* 1.1 D1: Sweden 1969-70: the recruiters take employed residents too (hard.h) */
+        s32 sw = IMIN(hard_sweden()->pull, s_res_track), before = s_res_track;
+        emigrate(sw);
+        sw = before - s_res_track;
+        hard_sweden_book(sw);
+        emig += sw;
+    } else hard_sweden_book(0);
     s_stats.emigrated_month = emig;
     s_stats.emigrated_total += emig;
     s_stats.immigrated_month = s_immigrated_acc;
@@ -1136,6 +1180,7 @@ static void month_end_books(void)
     }
     snapshot_unlocks(1);
     s_stats.era = def_era(s_date.year);
+    season_month();            /* 1.1 W1: the new month's forecast / first snow / thaw / winter reports (Easy: lines only) */
 }
 
 /* ------------------------------------------------------------------ scheduler */
@@ -1224,7 +1269,7 @@ int sim_query_lot(int lot, LotInfo *out)
     out->age_months = l->age_months;
     out->land_value = WT(cx, cy)->lv; out->pollution = field_at(FLD_POLLUTION, cx, cy); out->happy = l->happy;
     out->growth = l->growth;
-    out->growth_threshold = l->growth >= 0 ? SIM_G_UP : -SIM_G_DOWN;
+    out->growth_threshold = l->growth >= 0 ? SIM_G_UP : -diff()->decline_checks;   /* 1.1 D1 */
     if (d->cat == BCAT_ZONE) {
         Ctx ctx;
         ctx_make(&ctx, x0, y0, x1, y1);
@@ -1283,7 +1328,7 @@ static int main_problem(u32 problems)
 {
     static const u8 order[] = { REQ_ROAD, REQ_POWER, REQ_WATER, REQ_WATER_TOWER, REQ_SCHOOL, REQ_SAUNA, REQ_HEALTH,
                                 REQ_SHOP, REQ_PHONE, REQ_LAND_VALUE, REQ_LOW_POLLUTION, REQ_CUSTOMERS, REQ_WORKERS,
-                                REQ_ELEMENTS, REQ_MAIN_ROAD, REQ_HEAT };
+                                REQ_ELEMENTS, REQ_MAIN_ROAD, REQ_HEAT, REQ_LIBRARY };   /* 1.1 D1 */
     int k;
     for (k = 0; k < COUNTOF(order); k++) if (problems & (1u << order[k])) return def_req_growc(order[k]);
     return GROWC_OK;
@@ -1417,6 +1462,7 @@ u32 sim_hash(void)
     h ^= complex_hash();                           /* M6: 0 without a complex */
     h ^= civic_hash();                             /* M5 */
     h ^= era_hash();                               /* M7: era + trade */
+    h ^= season_hash();                            /* 1.1 W1: 0 on Easy */
     return h;
 }
 
@@ -1425,8 +1471,8 @@ const PhaseTiming *sim_phase_timing(int phase) { return &s_phase[phase & (SIM_ST
 const PhaseTiming *sim_phase_timing_total(int phase) { return &s_phase_tot[phase & (SIM_STEPS_PER_CYCLE - 1)]; }
 void sim_phase_timing_total_reset(void) { memset(s_phase_tot, 0, sizeof(s_phase_tot)); memset(s_phase_tot_sum, 0, sizeof(s_phase_tot_sum)); }
 
-static const char *s_dt_names[DT_COUNT] = { "open_jobs", "migration", "attract", "vacant", "emigration",
-    "spending", "com_cap", "clearing", "western", "local_need", "ind_cap", "tax", "policy", "regional", "freight" };
+static const char *s_dt_names[DT_COUNT] = { "open_jobs", "migration", "attract", "vacant", "emigration",   /* 1.1 D1: + sweden */
+    "spending", "com_cap", "clearing", "western", "local_need", "ind_cap", "tax", "policy", "regional", "freight", "sweden" };
 
 static s32 term_of(const Demand *d, int id)
 {
@@ -1453,6 +1499,7 @@ int sim_statlog_open(const char *path)
     }
     for (k = 0; k < BL_COUNT; k++) fprintf(s_statlog, ",bl%d", k);
     for (k = 0; k < SIM_STEPS_PER_CYCLE; k++) fprintf(s_statlog, ",p%d_avg,p%d_max", k, k);
+    season_statlog(s_statlog, 1);               /* 1.1 W1: winter columns */
     fprintf(s_statlog, "\n");
     fflush(s_statlog);
     return 1;
@@ -1486,6 +1533,7 @@ static void statlog_row(void)
     }
     for (k = 0; k < BL_COUNT; k++) fprintf(s_statlog, ",%d", g_budget.last[k]);
     for (k = 0; k < SIM_STEPS_PER_CYCLE; k++) fprintf(s_statlog, ",%.3f,%.3f", s_phase[k].avg_ms, s_phase[k].max_ms);
+    season_statlog(s_statlog, 0);               /* 1.1 W1 */
     fprintf(s_statlog, "\n");
     fflush(s_statlog);
 }
@@ -1497,6 +1545,7 @@ void sim_dump_report(FILE *f)
     static const char *dn[DEM_COUNT] = { "R", "C", "I" };
     fprintf(f, "=== %s, %d-%02d (step %u) status %s era %s\n", s_set.town, s_date.year, s_date.month + 1,
             (unsigned)s_date.total_steps, g_statuses[st->town_status].name, g_eras[st->era].name);
+    hard_dump(f);                                 /* 1.1 D1: the level, Sweden 1969-70, the expectations */
     fprintf(f, "population %d (houses %d, apartments %d), homes %d (vacant %d), homeless %d\n", st->population,
             st->residents_zone[ZONE_HOUSES], st->residents_zone[ZONE_APARTMENTS], st->capacity_res, st->vacant,
             st->homeless);
@@ -1559,7 +1608,7 @@ static void stats_load(struct SaveFile *sf, int nz)
 int sim_save(struct SaveFile *sf)
 {
     int k, i;
-    save_begin_chunk(sf, "SIM ", 2);              /* M3: v2 = zone count before s_first_built */
+    save_begin_chunk(sf, "SIM ", 3);              /* M3: v2 = zone count before s_first_built; 1.1 D1: v3 = + difficulty */
     save_bytes(sf, s_set.president, NAME_LEN);
     save_bytes(sf, s_set.town, NAME_LEN);
     save_s32(sf, s_set.start_year); save_s32(sf, s_set.funds); save_s32(sf, s_set.politics);
@@ -1574,6 +1623,7 @@ int sim_save(struct SaveFile *sf)
     save_bytes(sf, s_first_built, sizeof(s_first_built));
     save_s32(sf, s_hist_n); save_s32(sf, s_hist_pos);
     for (k = 0; k < HIST_COUNT; k++) for (i = 0; i < SIM_HISTORY; i++) save_s32(sf, s_hist[k][i]);
+    save_s32(sf, s_set.difficulty);               /* 1.1 D1 (v3) */
     save_end_chunk(sf);
     return 1;
 }
@@ -1597,6 +1647,9 @@ int sim_load(struct SaveFile *sf)
     s_hist_n = load_s32(sf); s_hist_pos = load_s32(sf);
     for (k = 0; k < HIST_COUNT; k++) for (i = 0; i < SIM_HISTORY; i++) s_hist[k][i] = load_s32(sf);
     s_hist_n = ICLAMP(s_hist_n, 0, SIM_HISTORY); s_hist_pos = ICLAMP(s_hist_pos, 0, SIM_HISTORY - 1);
+    s_set.difficulty = ver >= 3 ? load_s32(sf) : DIFF_EASY;   /* 1.1 D1: 1.0 saves (v2) play on, as Easy = the 1.0 rules */
+    diff_set_level(s_set.difficulty);
+    s_set.difficulty = diff_level();
     s_res_track = 0;
     for (i = 1; i < g_world.lot_hi; i++) {
         const Lot *l = &g_world.lots[i];

@@ -289,7 +289,7 @@ def render(G, S, zoom, W, H, centre, T=None):
     return canvas.crop((x0, y0, x0 + W, y0 + H))
 
 
-def write(G, S64, S32, outdir):
+def write(G, S64, S32, outdir, suffix=''):
     import os
     T64 = layout(G, S64)
     T32 = layout(G, S32)
@@ -301,6 +301,6 @@ def write(G, S64, S32, outdir):
              ('town_m2_32.png', S32, T32, 0.5, 800, 600, (20.0, 17.0)),
              ('town_m2_overview_32.png', S32, T32, 0.5, 1280, 720, (20.0, 18.5))]
     for (nm, S, T, z, W, H, c) in views:
-        render(G, S, z, W, H, c, T).save(os.path.join(outdir, nm))
+        render(G, S, z, W, H, c, T).save(os.path.join(outdir, nm.replace('.png', suffix + '.png')))
     if T64.missing:
         print('  town_m2 mockup: %d names missing (skipped): %s' % (len(T64.missing), ' '.join(sorted(T64.missing)[:30])))

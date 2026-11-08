@@ -257,3 +257,36 @@ version of the bot matched the play-test even closer: 4,900 plateau, -214k by 19
 Open: dense on c3/r30 (25-28k on 4 modules) still ends the 20-year run at 126-147k: half the plants and pipes per
 resident. Levers if wanted: apartment power/water use, or district-heat fees. tax13 piles money once built out (the
 money-for-growth trade; exempt from the 150k cap). Metal's oil-years deficit (-240/month) takes one late loan.
+
+## 10. 1.1 difficulty levels (D1, 2026-11-08; B1 tunes across levels)
+
+`make -f tests/Makefile.mac T=balance_levels` (~20 s; `LAHIO_LEVELS_ALL=1` adds c3/r30 x 3 levels, ~90 s) plays all 11
+styles 1955-1990 on s7 at Normal and Hard: `tests/out/balance_levels_summary.txt` (one row per style x level, the
+DESIGN_1_1 2.6 targets that are missed), `tests/out/balance_era_<style>_s7_<level>.txt` (year tables), replay scripts
+`bal_<planner|naive>_s7_era_<level>.txt` (VM: `-seed 7 -preset lakeland -difficulty LEVEL -script ... -fast`). Easy = the
+1.0 runs: `balance_era_1955_1990` checks the 11 v1.0 world hashes (planner 12,188 / 4,171 mk).
+
+D1 changes against the design table (defs.cpp `g_diff`): **Hard upkeep x105 % (design 115), index cap 150 % / 1980 (160 /
+1984), tax yield 95 % (90), overtime from 110 % (105)**; upkeep surcharge and yield cut **phase in 1960-65**; a new town's
+taxes start at the level's tolerance (Hard 8 %); **no hard winter in a game's first two winters** (season.cpp). Reason:
+with the design values every bot but politics/metal ended Hard stuck at the emergency-loan cap for 10-25 years.
+
+Bot habits on Normal/Hard only (Easy keeps the 1.0 bots): each January a loss with < 6 months of expenses (or a negative
+treasury) -> +1 % tax (max 13), a surplus with 18 (Hard 9) months banked -> -1 % (not below the tolerance); plants for the
+winter peak (`season_peak_pct`), heat plants for the heat peak, wells for a forecast hard frost; no new neighbourhood in
+October-November without a winter reserve; libraries/clinics a year before the expectations; libraries where the
+checklist names them. Results s7 (VM B replays = Mac exactly for planner/naive x Normal/Hard and the Easy planner):
+
+| style | Easy 1990 pop / mk | Normal | Hard |
+|---|---|---|---|
+| planner | 12,188 / 4,171, 0 L | 12,268 / 67,886, 0 L, Town 1965 | 11,790 / 37,387, 3 L (cleared), Town 1966 |
+| politics | 12,228 / 7,100 | 12,066 / 46,331, 0 L | 12,020 / 19,089, 2 L, Town 1977 |
+| dense | 18,974 / 15,353 | 17,951 / 57,949, 0 L | 15,167 / 20,331, 4 L |
+| mill / rural | 11,991 / 12,222 | 12,038 / 11,684, <= 1 L | 11,870 / 11,813, 2-3 L |
+| naive | 18,120 / 27,095, 1 L | 9,773 / -84,328, 6 L | 7,474 / -248,491, 5 L, at the cap |
+| greedy / tax13 | 4,968 / 11,931 | 4,965 / 11,948 | 4,956 / 5,164, at the cap |
+
+Open for B1: the naive bot (first-time human) does not recover on Normal or Hard (it expands with emergency-loan cash
+and skimps services: overtime); industry/metal/greedy/tax13 sit at the loan cap on Hard; quiet years (no Cabinet warning
+>= 500) Normal planner 13 of 15 (target <= 6): the planner-style bots coast on Normal after raising taxes; Sweden loss
+naive Normal 3.1 % (target 4-8: sweden_permille 3?).

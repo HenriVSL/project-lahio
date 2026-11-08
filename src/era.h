@@ -98,7 +98,9 @@ typedef struct {
 } NewsIssue;
 enum { NT_NONE, NT_ERA, NT_STATUS, NT_GROWTH, NT_DECLINE, NT_EMIGRATION, NT_UNEMPLOYMENT, NT_MONEY_UP, NT_MONEY_DOWN,
        NT_LOAN, NT_ELECTION, NT_LANDMARK, NT_CLEARING_DEFICIT, NT_CLEARING_SURPLUS, NT_WEST_UP, NT_WEST_DOWN,
-       NT_POWER, NT_WATER, NT_INDUSTRY, NT_HOUSING, NT_AGREEMENT, NT_DECREE, NT_QUIET, NT_COUNT };
+       NT_POWER, NT_WATER, NT_INDUSTRY, NT_HOUSING, NT_AGREEMENT, NT_DECREE, NT_QUIET,
+       NT_WINTER,          /* 1.1 W1: the January paper in a hard winter (season.h) */
+       NT_COUNT };
 const NewsIssue *era_news(void);
 int  era_news_pending(void);               /* NEWS_* waiting, 0 none */
 void era_news_seen(void);

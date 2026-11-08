@@ -15,6 +15,7 @@
 #include "trade.h"
 #include "era.h"
 #include "util.h"
+#include "hard.h"       /* 1.1 D1: the level's oil/coal shock factor */
 /* colours (art/ui_layout.h values; that header is ui.cpp's) */
 #define UI_COL_PAPER_LT   238, 230, 205
 #define UI_COL_PENCIL      90,  85,  82
@@ -186,6 +187,7 @@ static void trade_panel(int x, int y, int w, int h)
     }
     text_fmt_money(b, sizeof(b), t->fuel_cost, sim_date()->year);
     str_printf(a, sizeof(a), "World oil price %d%%, fuel %s a month", t->oil_index, b);
+    if (diff()->shock_pct != 100) str_printf(a + strlen(a), (int)sizeof(a) - (int)strlen(a), " (%s: shocks x%d%%)", diff()->name, diff()->shock_pct);   /* 1.1 D1 */
     uix_text_fit(x + 6, yy, a, FONT_BODY_DARK, w - 12); yy += 11;
     str_printf(a, sizeof(a), "Western orders x%d%% (price index)", trade_western_pct());
     uix_text_fit(x + 6, yy, a, FONT_BODY_DARK, w - 12); yy += 14;

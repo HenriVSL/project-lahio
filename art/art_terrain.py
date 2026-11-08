@@ -57,8 +57,18 @@ def wave_d(x, y, st, frame=0):
     return 0.0
 
 
+def w_ice(x, y, st):
+    """1.1 W2: lake ice (THEME #CADCE6) with wind-drifted snow patches; no shimmer (every frame identical)"""
+    s = st.texture / 0.36 if st.texture > 0 else 0.0
+    if vnoise(x, y, 8.0, 720) * 0.75 + vnoise(x, y, 4.0, 721) * 0.25 > 0.66:
+        return 'ice', 1.3 + (vnoise(x, y, 4.0, 722) - 0.5) * 0.4 * s
+    return 'ice', (vnoise(x, y, 8.0, 723) - 0.5) * 0.7 * s
+
+
 def g_water(g, st, frame=0):
     x, y = g.W[0], g.W[1]
+    if getattr(st, 'winter', False):
+        return w_ice(x, y, st)
     d = (vnoise(x, y, 8.0, 50) - 0.5) * 0.6 * st.texture
     if wave_d(x, y, st, frame):
         return 'water_lt', 0.0
@@ -196,6 +206,20 @@ def g_shore(g, st, corners=(1, 0, 0, 0), frame=0, md=None):
     x, y = g.W[0], g.W[1]
     f = shore_field(x, y, corners)
     flipped = md is not None and (g.px, g.py) in getattr(md, 'flips', ())
+    if getattr(st, 'winter', False):                     # 1.1 W2: snow on land, dry reeds standing in the shore ice
+        if flipped:
+            return ('snow', 0.0) if f <= 0.5 else ('ice', 0.6)
+        if f > 0.5:
+            return ('snow', -0.35 if f < 0.60 else 0.0)
+        if f > 0.445:
+            if ihash(int(x * 0.9), int(y * 0.9), 65) < 0.16:
+                return 'reed_w', 0.0
+            return 'ice', 0.7
+        if f > 0.40 and st.texture > 0.2:
+            if ihash(int(x * 0.8), int(y * 0.8), 66) < 0.10:
+                return 'reed_w', -0.4
+            return 'ice', 0.35
+        return w_ice(x, y, st)
     if flipped:
         return ('sand', 0.0) if f <= 0.5 else ('shallow', 0.3)
     if f > 0.5:
@@ -233,6 +257,14 @@ def g_field(g, st, kind='crop'):
     key, dk = ('crop', 'crop_dk') if kind == 'crop' else ('plough', 'plough_dk')
     m = 1.0 if st.zoom >= 1 else 2.0
     yy = y % T
+    if getattr(st, 'winter', False):                     # 1.1 W2: white field, frozen ditch, furrows/stubble rows faintly showing
+        if abs(yy - 16.0) < 0.8 * m:
+            return 'ice', -1.2
+        if abs(yy - 16.0) < 2.0 * m:
+            return 'snow', -0.5
+        if (y % (3.0 * m)) < 1.0 * m:
+            return 'snow', (-0.9 if kind != 'crop' else -0.6)
+        return 'snow', (vnoise(x, y, 6.0, 724) - 0.5) * 0.5
     # open ditch (sarkaoja) along the middle of every tile: long parallel ditches across a field
     if abs(yy - 16.0) < 0.8 * m:
         return 'water_dk', 0.0
@@ -249,6 +281,13 @@ def g_field(g, st, kind='crop'):
 def g_marsh(g, st):
     x, y = g.W[0], g.W[1]
     n = vnoise(x, y, 6.0, 91)
+    if getattr(st, 'winter', False):                     # 1.1 W2: frozen pools, dry sedge tussocks poking through the snow
+        if n < 0.30 * edge_window(x, y) and edge_window(x, y) > 0.3:
+            return 'ice', 0.2
+        if vnoise(x, y, 3.0, 93) > 0.62:
+            ix, iy = int(math.floor(x)) % 32, int(math.floor(y)) % 32
+            return ('reed_w', -0.2) if ihash(ix, iy, 725) < 0.45 else ('snow', -0.5)
+        return 'snow', (vnoise(x, y, 4.0, 94) - 0.5) * 0.6
     if n < 0.30 * edge_window(x, y) + 0.0 and edge_window(x, y) > 0.3:
         return 'water_dk', 0.2
     ix, iy = int(math.floor(x)) % 32, int(math.floor(y)) % 32
@@ -344,6 +383,45 @@ def road_ground(kind, mask):
     return fn
 
 
+def w_bank(d, e0, e1, x, y):
+    """ploughed snow bank between road-centre distances e0 (road side) and e1 (verge side): a blue-shadowed
+    inner foot, a bright crest, then the verge snow"""
+    u = (d - e0) / (e1 - e0)
+    if u < 0.22:
+        return 'snow', -1.6
+    if u < 0.65:
+        return 'snow', 1.0
+    return 'snow', 0.4 + (vnoise(x, y, 2.0, 726) - 0.5) * 0.5
+
+
+def w_road(x, y, st, kind, d, hw, mid, grass):
+    """1.1 W2 winter road surface by distance from the centre line: ploughed asphalt (markings hidden, a
+    slush ridge between the lanes, packed snow along the edges) or packed snow with ruts on gravel roads,
+    snow banks along both sides (geometry-based, so every autotile piece meets its neighbours)."""
+    tx = st.texture / 0.36 if st.texture > 0 else 0.0
+    bank = {'grav': (hw - 0.6, hw + 1.6), 'road': (hw - 1.2, hw + 1.6), 'main': (hw - 1.4, hw + 2.4),
+            'mway': (hw - 1.3, hw + 1.6)}[kind]
+    if d >= bank[1]:
+        return grass()
+    if d >= bank[0]:
+        return w_bank(d, bank[0], bank[1], x, y)
+    if kind == 'grav':
+        if 3.0 < d < 4.6:
+            return 'packed', -0.9
+        if d < 0.9:
+            return 'packed', 0.4
+        return 'packed', (vnoise(x, y, 2.0, 74) - 0.5) * 0.7 * tx
+    if kind == 'mway' and mid and d < 2.4:
+        if d < (0.6 if st.zoom >= 1 else 1.0) * 0.9:
+            return 'steel_lt', 0.4
+        return 'snow', 0.3
+    if d > bank[0] - 1.2 or (kind != 'mway' and d < (1.0 if st.zoom >= 1 else 1.4)):
+        return 'packed', -0.4 + (vnoise(x, y, 2.0, 727) - 0.5) * 0.6 * tx
+    if vnoise(x, y, 3.0, 728) > 0.84:
+        return 'asph_w', 0.7
+    return 'asph_w', (vnoise(x, y, 3.0, 71) - 0.5) * 0.6 * tx
+
+
 def g_road(g, st, conn, kind, base=None):
     x, y = g.W[0], g.W[1]
     tx = st.texture
@@ -351,6 +429,7 @@ def g_road(g, st, conn, kind, base=None):
     straight = is_straight(conn)
     curve = is_curve(conn)
     n = len(conn)
+    winter = getattr(st, 'winter', False)
 
     def grass():
         return base(g, st) if base else g_grass(g, st)
@@ -358,6 +437,8 @@ def g_road(g, st, conn, kind, base=None):
     if kind == 'grav':
         hw = 6.5
         d, along, arm = road_geom(x, y, conn, bulb=1.0 if n == 1 else 0.0)
+        if winter:
+            return w_road(x, y, st, kind, d, hw, False, grass)
         if d < hw:
             if d < 0.9 and tx > 0.3 and n <= 2:
                 return 'gravel_dk', 0.3
@@ -373,6 +454,8 @@ def g_road(g, st, conn, kind, base=None):
     if kind == 'road':
         hw = 7.0
         d, along, arm = road_geom(x, y, conn, bulb=2.5 if n == 1 else 0.0)
+        if winter:
+            return w_road(x, y, st, kind, d, hw, False, grass)
         if d < hw:
             if d < 0.6 and z1 and n >= 1:
                 if curve:
@@ -394,6 +477,8 @@ def g_road(g, st, conn, kind, base=None):
     if kind == 'main':
         hw = 9.5
         d, along, arm = road_geom(x, y, conn, bulb=2.0 if n == 1 else 0.0)
+        if winter:
+            return w_road(x, y, st, kind, d, hw, False, grass)
         lw = 0.6 if z1 else 1.0
         if d < hw:
             if hw - 1.9 <= d < hw - 1.9 + lw * 1.4:
@@ -425,6 +510,8 @@ def g_road(g, st, conn, kind, base=None):
         core = n == 0 or (n != 2 and (arm is None or _core_dist(x, y, arm) <= hw + 0.5))
         if curve:
             core = False
+        if winter:
+            return w_road(x, y, st, kind, d, hw, not core, grass)
         if d < hw:
             if not core and d < 2.4:
                 if d < lw * 0.9:
@@ -507,13 +594,27 @@ def g_rail(g, st, conn, base=None):
     best = 0
     out = None
     rw = 0.55 if z1 else 1.0
+    winter = getattr(st, 'winter', False)
     for tr in tracks:
         d, along, _ = _track_geom(tr, x, y)
         if tr[0] == 'arc':
             sp = ARC_LEN / 8.0
         else:
             sp = 3.2
-        if abs(d - 3.1) < rw:
+        if winter:                    # 1.1 W2: dark rails on snow, sleepers as faint dips, a snow-covered bed
+            if abs(d - 3.1) < rw:
+                pr, res = 4, ('steel', 0.4 if d < 3.1 else -0.6)
+            elif d < 2.5:             # the bed between the rails, blown clear: grey ballast and grit
+                pr, res = 3, ('packed', -0.6 if _dash(along, sp, 1.4 if z1 else 1.6) else -0.1)
+            elif d < 5.4 and _dash(along, sp, 1.4 if z1 else 1.6):
+                pr, res = 3, ('snow', -1.1)
+            elif d < 7.2:
+                pr, res = 2, ('snow', -0.3)
+            elif d < 8.6:
+                pr, res = 1, ('snow', 0.3)
+            else:
+                continue
+        elif abs(d - 3.1) < rw:
             pr, res = 4, ('rail', 0.6 if d < 3.1 else -0.2)
         elif d < 5.4 and _dash(along, sp, 1.4 if z1 else 1.6):
             pr, res = 3, ('sleeper', 0.0)
@@ -555,12 +656,24 @@ def rail_ground(mask):
 def g_lot(g, st, paths=(), gravel=(), base='grass', var=0):
     """lot ground: grass + rectangles (canonical x0,y0,x1,y1[,key]) of gravel / asphalt / dirt"""
     P = g.P
+    winter = getattr(st, 'winter', False)
     for r in paths:
         if r[0] <= P[0] < r[2] and r[1] <= P[1] < r[3]:
+            if winter:                # 1.1 W2: shovelled paths = packed snow
+                return 'packed', 0.3 + (vnoise(g.W[0], g.W[1], 2.0, 76) - 0.5) * 0.6
             return 'gravel', (vnoise(g.W[0], g.W[1], 2.0, 76) - 0.5) * 0.8 * st.texture
     for r in gravel:
         if r[0] <= P[0] < r[2] and r[1] <= P[1] < r[3]:
             key = r[4] if len(r) > 4 else 'gravel'
+            if winter and key == 'asphalt':   # ploughed car park / yard, snow piled along its edges
+                e = min(P[0] - r[0], r[2] - P[0], P[1] - r[1], r[3] - P[1])
+                if e < 1.8:
+                    return w_bank(1.8 - e, 0.0, 1.8, g.W[0], g.W[1]) if e > 0.4 else ('snow', 0.6)
+                if vnoise(g.W[0], g.W[1], 3.0, 729) > 0.80:
+                    return 'packed', -0.6
+                return 'asph_w', (vnoise(g.W[0], g.W[1], 2.5, 77) - 0.5) * 0.6
+            if winter and key in ('gravel', 'dirt', 'sawdust', 'concrete', 'court_cinder'):
+                return 'packed', (vnoise(g.W[0], g.W[1], 2.5, 77) - 0.5) * 0.7
             if key == 'potato':      # vegetable patch: dark soil rows with green tops
                 k2 = 'plough' if int(P[1] * (1.0 if st.zoom >= 1 else 0.5)) % 2 == 0 else 'apple_leaf'
                 return k2, 0.0
@@ -572,6 +685,8 @@ def g_lot(g, st, paths=(), gravel=(), base='grass', var=0):
             if key == 'lawn':
                 return g_grass(g, st, var, 'grass_lt')
             return key, (vnoise(g.W[0], g.W[1], 2.5, 77) - 0.5) * 0.7 * st.texture
+    if base == 'dirt' and winter:
+        return 'packed', (vnoise(g.W[0], g.W[1], 3.0, 96) - 0.5) * 0.7
     if base == 'dirt':
         n = vnoise(g.W[0], g.W[1], 3.0, 96)
         if n > 0.66:

@@ -34,15 +34,17 @@ static int month_now(void) { return sim_date()->year * 12 + sim_date()->month; }
 static int pol_on(void) { return politics_enabled(); }
 
 /* ------------------------------------------------------------------ prices as functions of the date (m = year*12+month) */
+/* 1.1 D1: the rise above 100 scaled by level (Easy x100 %, Normal x115 %, Hard x130 %: 1973 400 / 445 / 490) */
+static int shock(int idx) { return diff()->shock_pct == 100 ? idx : 100 + (idx - 100) * diff()->shock_pct / 100; }
 static int oil_index_at(int m)
 {
     if (m < 1973 * 12 + 10) return 100;
-    if (m < 1979 * 12) return 400;
-    if (m < 1981 * 12) return 550;
-    if (m < 1986 * 12 + 2) return 500;
-    return 250;
+    if (m < 1979 * 12) return shock(400);
+    if (m < 1981 * 12) return shock(550);
+    if (m < 1986 * 12 + 2) return shock(500);
+    return shock(250);
 }
-static int coal_index_at(int m) { return m < 1974 * 12 ? 100 : m < 1986 * 12 ? 180 : 130; }
+static int coal_index_at(int m) { return shock(m < 1974 * 12 ? 100 : m < 1986 * 12 ? 180 : 130); }
 static int clearing_boom_at(int m)
 {
     if (m < 1973 * 12 + 10) return 100;
@@ -294,7 +296,7 @@ void trade_month(void)
         }
         if (A.from_year < TRADE_FIRST_PERIOD && A.level >= 0) make_quota(A.level);   /* the preliminary protocol: yearly lists */
     }
-    if (nm == 1973 * 12 + 10 && !T.closed) era_push_msg(EM_OIL_SHOCK, 400, 0);
+    if (nm == 1973 * 12 + 10 && !T.closed) era_push_msg(EM_OIL_SHOCK, oil_index_at(nm), 0);   /* 1.1 D1: 400 on Easy */
     if (nm == TRADE_END_YEAR * 12 && !T.closed) {
         T.closed = 1;
         era_push_msg(EM_CLEARING_END, T.balance, T.lost_total);

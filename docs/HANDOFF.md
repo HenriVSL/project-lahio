@@ -498,3 +498,50 @@ learned while building. Append your own section when you finish a task.
 ## Polish wave verification (orchestrator, 2026-11-04)
 - Mac 182/182; gen_art + gen_ui checks pass; VC6 /W3 0 warnings on VM B; town1 headless 0 errors (pop 5,188);
   1955-1990 planner replay (`-seed 7 -preset lakeland`) = Mac exactly (12,188 pop, 4,171 mk).
+
+## W2 winter art (1.1, done) — art/artlib.py, art/art_terrain.py, art/gen_art.py, src/art.*, render.cpp, ART.md 9
+- Generator: `winter` / `ab_winter` shade modes on the same G-buffer (alpha identical, enforced); pages
+  `art/world<k>_<z>w.bmp` share the summer piece table (`art_world_winter[]` in art_world.h); summer pixels = 1.0
+  (one 32-zoom piece split, page sizes unchanged). `--check` verifies alpha identity per page and every winter sprite
+  re-assembled from the winter pages; `--mockups` writes the winter previews only. User approved the mockups as is.
+- VRAM +0 KB at every resolution x zoom (same surfaces): 64-zoom 7,691 KB, 32-zoom 1,918 KB; 1024 z64 keeps 522 KB free
+  in winter, 800 z64 2,062 KB (VM B logs in tests/out/w2/).
+- art.cpp: Plan A = per-page delta of the other season (3,887 KB); `art_set_season` in two frames (px swap 37 ms, then
+  upload 128-141 ms at z64 / 32 ms at z32), other zoom lazily at its residency; Plan B (process memory > 40 MB,
+  VirtualQuery) disk reads ~850 ms; Plan C INI `winter_art=0` (config.cpp) or missing pages. Process memory 19.8 MB
+  before art, 30.0 MB with (1.0), 34.0 MB with the delta.
+- render.cpp `season_poll()` (one poller of `season_changed()`), `-winter` / `-summer` switches, script `artseason N`
+  (game.cpp); after a swap: chunk flush, ghost copies dropped, minimap colours rebuilt (ui.cpp mm_update); lake and
+  shore tiles stop shimmering in winter (rivers keep it).
+- Open: bridge water is ice also over rivers; no Settings checkbox for "Winter scenery" (INI only); no snowflake
+  date glyph (UI sheet untouched).
+
+## W2 winter art (done) — art/ART.md section 9, tests/out/w2/
+- Winter pages `art/world<k>_<z>w.bmp` with exactly the summer layout/piece table (checked per page); `art_world_winter[]`;
+  `art_set_season` with plans A/B/C; render polls the season, flushes caches, no shimmer on ice; minimap rebuilt after swap;
+  INI `winter_art`, `-winter`/`-summer`, script `artseason N`. Summer art pixel-identical to 1.0; VRAM unchanged.
+- Swap split over 2 frames (37 ms + 128-141 ms at z64); other zoom swaps on next zoom (zoom-in 174 ms).
+- Heap: 30.0 MB (1.0) → 34.0 MB with winter (only differing pixels kept, 3.9 MB). **Orchestrator: ART_HEAP_BUDGET_KB 40 MB
+  accepted**; README now says ≤ 40 MB. Strict 32 MB would mean ~850 ms disk reloads per season change.
+- Open (polish): bridge over a river shows ice; no Settings checkbox for winter scenery (INI only); no snowflake on the date;
+  `winter_art=0` untested on the VM.
+
+## W1 winter simulation (done) — src/season.*, tests/test_winter.cpp, tests/out/winter_summary.txt
+- `season_is_winter()` (1 Dec-31 Mar, pure date); `season_changed()` single poller (renderer). BL_WINTER ledger "Winter:
+  ploughing and frost repairs". Power/heat allocated against winter use; pumps/wells scaled in hard frost; T3 heat check on
+  the peak (`civic_heat_spare_peak()`); fire × season_fire_pct; chunk SEAS v1; ticker forecast/first snow/thaw (all levels,
+  flavour), candles/frozen pipes/cold radiators/peaks (Normal/Hard); 1 Oct + 1 Nov ticker warning when the peak > supply.
+- All values from D1's `diff()`. Easy: neutral hooks, no RNG, planner replay = 1.0 (12,188 / 4,171).
+- Hard winters 1955-89: Normal 18%, Hard 38%, 1986-87 always hard. VM B Normal replay CSV = Mac.
+- Not built (cut list): coal-ship card, ice-road filler, minimap snow. Grace years for hard winters → D1 asked.
+
+## D1 difficulty (done) — src/hard.*, g_diff[3]/diff() in defs, BALANCE.md section 10, tests/out/balance_levels_summary*.txt
+- SimSettings.difficulty (tests/direct starts Easy; New Game default Normal; `-difficulty easy|normal|hard`); SIM chunk v3;
+  1.0 saves load as Easy. Levers wired in budget/sim/politics/trade/fire. Sweden 1969-70 (DT_SWEDEN, chunk HARD), era
+  expectations (REQ_LIBRARY 1975 tier-3 homes; clinic for apartments T2+ 1980; shown a year ahead, 12-month grace).
+  Guide page 2 "The Presidency"; level in pause menu/date tooltip; lever notes across budget/demand/query/desk/trade panels.
+- Deviations: Hard upkeep 105% (spec 115), index cap 150% (160), tax yield 95% (90), overtime from 110% (105); surcharge and
+  yield cut phase in 1960-65; towns start at the level's tax tolerance. Grace: no hard winter in a game's first two winters.
+- s7 1990: planner Normal 12,268 / 67,886 mk 0 loans, Hard 11,790 / 37,387 3 loans cleared; naive Normal −84k 6 loans,
+  Hard at loan cap. **Open for B1:** naive doesn't recover on Normal; quiet years 13/15 (target ≤ 6) → coasting persists;
+  Sweden loss 3.1% (target 4-8%); lot-query decline countdown ignores the slower utility-only decline.

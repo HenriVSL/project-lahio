@@ -409,7 +409,8 @@ int politics_reasons(int bloc, Term *out, int max)
 int politics_meter(int meter) { return (meter >= 0 && meter < METER_COUNT) ? P.meter[meter] : 50; }
 int politics_authority(void) { return P.auth10 / 10; }
 int politics_authority_cap(void) { return POL_AUTH_CAP + 5 * P.term_mod; }
-int politics_authority_income10(void) { return P.enabled ? IMAX(0, P.popularity / 2 + 10 * P.term_mod) : 0; }
+int politics_authority_income10(void) { return P.enabled ? IMAX(0, P.popularity * 10 / diff()->auth_div + 10 * P.term_mod) : 0; }
+/* 1.1 D1: popularity / 20 per month on Easy (= the 1.0 popularity / 2 tenths), / 24 Normal, / 30 Hard */
 int politics_term_mod(void) { return P.term_mod; }
 int politics_next_election(void) { return P.election_year; }
 int politics_months_to_election(void) { return P.election_year * 12 - (month_index() + 1); }
@@ -553,6 +554,12 @@ void politics_choice_fx(int ev, int choice, PolFx *out)
     if (ev == EV_SAUNA)                       /* diminishing returns: 12, 8, 6, 4.8 ... */
         for (i = 0; i < POL_FX_MAX; i++)
             if (out[i].kind == FX_METER && out[i].value > 0) out[i].value = (s16)(out[i].value * 2 / (2 + P.ev_count[ev]));
+    if (diff()->card_neg_pct != 100)          /* 1.1 D1: negative card effects by level (money, approval, meters: Normal x115 %,
+                                                 Hard x140 %); the card's choice text shows the scaled numbers (ui_pol.cpp) */
+        for (i = 0; i < POL_FX_MAX; i++)
+            if (out[i].value < 0 && (out[i].kind == FX_MONEY || out[i].kind == FX_MONEY_POP || out[i].kind == FX_BLOC ||
+                                     out[i].kind == FX_METER))
+                out[i].value = (s16)((s32)out[i].value * diff()->card_neg_pct / 100);
 }
 
 static void resolve_event(int choice, int expired)
@@ -565,7 +572,8 @@ static void resolve_event(int choice, int expired)
     P.pending_age = 0;
     apply_list(fx);
     if (P.ev_count[ev] < 255) P.ev_count[ev]++;
-    if (ev != EV_CAMPAIGN) P.event_next = POL_EVENT_MIN + rng_below(&P.rng, POL_EVENT_MAX - POL_EVENT_MIN + 1);
+    if (ev != EV_CAMPAIGN)          /* 1.1 D1: the gap by level (Easy POL_EVENT_MIN-MAX 12-24, Normal 12-20, Hard 12-16) */
+        P.event_next = diff()->card_gap_min + rng_below(&P.rng, diff()->card_gap_max - diff()->card_gap_min + 1);
     if (ev != EV_CAMPAIGN) P.card_since = 0;                   /* P1: the shared card gap restarts */
     recompute_mods();
     push_msg(expired ? PMSG_EVENT_EXPIRED : PMSG_CHOICE, ev, choice);
@@ -742,7 +750,10 @@ void politics_month(void)
             }
     }
     if ((sim_date()->total_months & 3) == 3)
-        for (i = 0; i < METER_COUNT; i++) P.meter[i] += P.meter[i] < 50 ? 1 : P.meter[i] > 50 ? -1 : 0;
+        for (i = 0; i < METER_COUNT; i++) {   /* 1.1 D1: the neighbour's patience: Eastern drifts to 50 (Easy) / 45 / 40 */
+            int tgt = i == METER_EAST ? diff()->east_target : 50;
+            P.meter[i] += P.meter[i] < tgt ? 1 : P.meter[i] > tgt ? -1 : 0;
+        }
     /* timed effects run out */
     for (i = P.ntimed - 1; i >= 0; i--) if (--P.timed[i].months <= 0) P.timed[i] = P.timed[--P.ntimed];
     for (d = 0; d < DEC_COUNT; d++) if (P.cooldown[d] > 0) P.cooldown[d]--;

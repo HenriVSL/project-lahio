@@ -46,6 +46,8 @@
 #include "complex.h"      /* M6 */
 #include "era.h"
 #include "advice.h"       /* PL1: progression, unlock sentences, purposes, the power summary */
+#include "season.h"       /* 1.1 W1: winter peak tooltips */
+#include "hard.h"         /* 1.1 D1: difficulty notes, Sweden 1969-70 */
 
 /* ================================================================== constants */
 #define WIN_MAX_W   340          /* the panel target; every panel fits (600x420 rule: fits 640x480) */
@@ -677,10 +679,12 @@ static void mm_update(int force)
        the VRAM copy keeps the old picture until the last row is done, then one upload. ui_update runs at
        frame start (before any blit), so the upload doesn't wait behind queued blits (T05). */
     if (s_mm_row < 0) {
-        if (g_world.serial == s_mm_serial) return;
-        if (s_now - s_mm_t < MM_INTERVAL) return;   /* world edits: at most every 3 s */
+        static int mm_season;                /* 1.1 W2: the art season changed: snow colours, a few rows per frame */
+        if (g_world.serial == s_mm_serial && mm_season == art_season()) return;
+        if (mm_season == art_season() && s_now - s_mm_t < MM_INTERVAL) return;   /* world edits: at most every 3 s */
         s_mm_row = 0;
         s_mm_serial = g_world.serial;
+        mm_season = art_season();
     }
     render_minimap_rows(s_mm.px, s_mm.w, w, h, ovl, s_mm_row, s_mm_row + MM_ROWS_PER_FRAME);
     s_mm_row += MM_ROWS_PER_FRAME;
@@ -1322,6 +1326,8 @@ static int tip_build(int h)
         tip_add(a, FONT_BODY_DARK, NULL, 0);
         str_printf(a, sizeof(a), "Status: %s", text_status_name(cs->town_status));
         tip_add(a, FONT_BODY_DARK, NULL, 0);
+        hard_note(HN_LEVEL, a, sizeof(a));        /* 1.1 D1: "Difficulty: Normal" (the Guide, F4 Tab, lists the levers) */
+        tip_add(a, FONT_BODY_GREY, NULL, 0);
         {   /* PL1: "Next: Market town at 3,000 (you have 2,750)" + bar */
             int pct = advice_progress(b, sizeof(b), NULL);
             tip_add(b, advice_rights_waiting() ? FONT_BODY_RED : FONT_BODY_GREY, NULL, 0);
@@ -1349,6 +1355,11 @@ static int tip_build(int h)
         text_fmt_money_signed(a, sizeof(a), budget_net_last(), year);
         tip_add("Last month", FONT_BODY_GREY, a, FONT_BODY_GREY);
         if (g_budget.loan > 0) { text_fmt_money(a, sizeof(a), g_budget.loan, year); tip_add("Emergency loan", FONT_BODY_RED, a, FONT_BODY_RED); }
+        if (hard_note(HN_UPKEEP, b, sizeof(b))) {     /* 1.1 D1: "Hard: upkeep x115%" + the index cap */
+            char c3[48];
+            if (hard_note(HN_INDEX, c3, sizeof(c3))) str_printf(b + strlen(b), (int)sizeof(b) - (int)strlen(b), ", index to %d%%", diff()->upkeep_cap);
+            tip_add(b, FONT_BODY_GREY, NULL, 0);
+        }
         return 1;
     }
     if (h == H_POP) {
@@ -1383,6 +1394,9 @@ static int tip_build(int h)
             tip_add(c3, FONT_BODY_GREY, NULL, 0);
             str_printf(c3, sizeof(c3), GLYPH_BULLET " Western orders x%d%% (price index)", trade_western_pct());
             tip_add(c3, FONT_BODY_GREY, NULL, 0);
+            if (hard_sweden()->active) { hard_sweden_reasons(c3, sizeof(c3)); tip_add(c3, FONT_BODY_RED, NULL, 0); }   /* 1.1 D1 */
+            if (hard_note(HN_TAX, c3, sizeof(c3))) tip_add(c3, FONT_BODY_GREY, NULL, 0);
+            if (hard_note(HN_EMIGRATION, c3, sizeof(c3))) tip_add(c3, FONT_BODY_GREY, NULL, 0);
         }
         return 1;
     }
@@ -1399,6 +1413,11 @@ static int tip_build(int h)
         tip_add(a, ws.lots_short ? FONT_BODY_RED : FONT_BODY_GREY, NULL, 0);
         bl = world_lot(ws.best_spare_lot);
         if (bl) { text_fmt_int(b, sizeof(b), ws.best_spare); str_printf(a, sizeof(a), "Largest spare: %s (%s)", def_building(bl->def)->name, b); tip_add(a, FONT_BODY_GREY, NULL, 0); }
+        {   /* 1.1 W1: hard frost on pumps and wells, the heat winter peak */
+            int wwarn;
+            if (season_tip_line(STIP_WATER, a, sizeof(a), &wwarn)) tip_add(a, wwarn ? FONT_BODY_RED : FONT_BODY_AMBER, NULL, 0);
+            if (season_tip_line(STIP_HEAT, a, sizeof(a), &wwarn)) tip_add(a, wwarn ? FONT_BODY_RED : FONT_BODY_GREY, NULL, 0);
+        }
         tip_add("Click for the water overlay", FONT_BODY_GREY, NULL, 0);
         return 1;
     }
@@ -1415,6 +1434,10 @@ static int tip_build(int h)
         if (pn->lots_short) str_printf(a, sizeof(a), "Short by %d units: the furthest buildings go dark first", (int)(pt.demand - pt.supply));
         else str_printf(a, sizeof(a), "Spare: %s units%s", b, pt.pct >= 90 ? " - time for a new plant" : "");
         tip_add(a, pn->lots_short ? FONT_BODY_RED : pt.pct >= 90 ? FONT_BODY_AMBER : FONT_BODY_GREY, NULL, 0);
+        {   /* 1.1 W1: "Winter peak (forecast): ~1,360 / 1,300" from October; the winter load Dec-Mar */
+            int pwarn;
+            if (season_tip_line(STIP_POWER, a, sizeof(a), &pwarn)) tip_add(a, pwarn ? FONT_BODY_RED : FONT_BODY_GREY, NULL, 0);
+        }
         tip_add("Click for the power overlay", FONT_BODY_GREY, NULL, 0);
         return 1;
     }
@@ -1630,11 +1653,14 @@ static void panel_budget(int x, int y, int w, int h)
             slider(x + 6, yy + 13, w - 12 - 36, i ? g_budget.tax_bus : g_budget.tax_res, 0, 20, i);
             yy += 28;
         }
-        txt(x + 6, yy, "Above 9% taxes slow growth and drive people away.", FONT_BODY_GREY);
+        if (!hard_note(HN_TAX, b, sizeof(b))) str_printf(b, sizeof(b), "Above %d%% taxes slow growth and drive people away.", diff()->tax_neutral);
+        txt_fit(x + 6, yy, b, FONT_BODY_GREY, w - 12);   /* 1.1 D1: the level's tax tolerance / yield */
         yy += 14;
         rule(x + 6, yy, w - 12); yy += 6;
         txt(x + 6, yy, "Monthly projection", FONT_HEAD);
         str_printf(b, sizeof(b), "Upkeep index %d%%", budget_upkeep_index());      /* F3 (T12: +2.5%/year from 1960) */
+        if (diff()->upkeep_cap != g_diff[DIFF_EASY].upkeep_cap)                    /* 1.1 D1: the level's cap */
+            str_printf(b, sizeof(b), "Upkeep index %d%% (to %d%%)", budget_upkeep_index(), diff()->upkeep_cap);
         txt_r(x + w - 6, yy + 2, b, budget_upkeep_index() > 100 ? FONT_BODY_RED : FONT_BODY_GREY);
         yy += 16;
         n = budget_projection(t, COUNTOF(t));
@@ -1647,8 +1673,11 @@ static void panel_budget(int x, int y, int w, int h)
         yy += 3;
         for (i = 0; i < 2; i++) {               /* incomes, then service upkeep (one line), then other costs */
             if (i == 1 && svc) {
+                char sl[48];
                 text_fmt_money_signed(a, sizeof(a), svc, year);
-                row_lr(x + 12, yy, w - 24, "Service upkeep", FONT_BODY_DARK, a, FONT_BODY_RED);
+                if (budget_level_upkeep_pct() != 100) str_printf(sl, sizeof(sl), "Service upkeep (%s: x%d%%)", diff()->name, budget_level_upkeep_pct());   /* 1.1 D1 */
+                else str_copy(sl, "Service upkeep", sizeof(sl));
+                row_lr(x + 12, yy, w - 24, sl, FONT_BODY_DARK, a, FONT_BODY_RED);
                 yy += 11; rows++;
             }
             for (k = 0; k < n && rows < 8; k++) {
@@ -1767,8 +1796,14 @@ static void panel_population(int x, int y, int w, int h)
         draw9(&s9_inset, x + 6, yy, w - 12, 20, COL(UI_COL_PAPER_DK));
         text_fmt_int(a, sizeof(a), cs->emigrated_total);
         str_printf(b, sizeof(b), "Emigrated to Sweden: %s", a);
+        if (diff()->sweden_permille > 0 && (hard_sweden()->active || hard_sweden()->total > 0)) {   /* 1.1 D1: 1969-70 */
+            char c3[24];
+            text_fmt_int(c3, sizeof(c3), hard_sweden()->total);
+            str_printf(b + strlen(b), (int)sizeof(b) - (int)strlen(b), " (1969-70: %s)", c3);
+        }
         txt_c(x + 6, w - 12, yy + 3, b, FONT_HEAD_RED);
         yy += 26;
+        if (hard_sweden_line(b, sizeof(b))) { txt_fit(x + 6, yy - 4, b, FONT_BODY_RED, w - 12); yy += 10; }   /* 1.1 D1 */
         rule(x + 6, yy, w - 12); yy += 6;
         txt(x + 6, yy, "Top problems", FONT_HEAD); yy += 16;
         n = sim_top_problems(pr, 3);
@@ -1959,6 +1994,12 @@ static void panel_query(int x, int y, int w, int h)
                 txt(x + 6, yy, b, FONT_HEAD); yy += 16;
                 checklist(x + 10, &yy, w - 16, &li.next, ymax - 60);
             } else { txt(x + 6, yy, "Top tier. Nothing more to ask for.", FONT_BODY_GREEN); yy += 14; }
+            if (li.growth < 0 && li.growth_threshold < 0) {  /* 1.1 D1: the decline countdown, with the level's speed */
+                int wk = IMAX(1, li.growth - li.growth_threshold);
+                str_printf(b, sizeof(b), "Declining: a step down in %d week%s%s%s", wk, wk == 1 ? "" : "s",
+                           diff_level() != DIFF_EASY ? " " TEXT_DOT " " : "", diff_level() != DIFF_EASY ? diff()->name : "");
+                txt_fit(x + 6, yy, b, FONT_BODY_RED, w - 12); yy += 12;
+            }
             yy += 4;
             score_terms(x + 6, &yy, w - 12, li.score, li.terms, li.nterms, TERMK_SCORE);
         } else {
@@ -1995,15 +2036,23 @@ static void panel_query(int x, int y, int w, int h)
                 } else { txt(x + 6, yy, "Power: not producing", FONT_BODY_GREY); yy += 12; }
             } else if (li.power_out) { text_fmt_int(a, sizeof(a), li.power_out); str_printf(b, sizeof(b), "Power output: %s units", a); txt(x + 6, yy, b, FONT_BODY_DARK); yy += 12; }
             yy = query_water(x, yy, w, ymax, s_q_lot, d);      /* F1 (WATER.md 3.6 B/C) */
+            if (season_lot_line(s_q_lot, b, sizeof(b))) { txt_fit(x + 6, yy, b, FONT_BODY_GREY, w - 12); yy += 12; }   /* 1.1 W1 */
             if (d->jobs) { text_fmt_int(a, sizeof(a), li.occupants); text_fmt_int(c2, sizeof(c2), d->jobs);
                 str_printf(b, sizeof(b), "Staff: %s/%s", a, c2); txt(x + 6, yy, b, FONT_BODY_DARK); yy += 12; }
             {   /* F3: upkeep as booked = def upkeep x funding x the upkeep index (budget.cpp) */
-                int ui = budget_upkeep_index();
-                text_fmt_money(a, sizeof(a), (Money)((s64)li.upkeep * ui / 100), year);
-                if (ui > 100) str_printf(b, sizeof(b), "Upkeep: %s a month (index %d%%)", a, ui);
-                else str_printf(b, sizeof(b), "Upkeep: %s a month", a);
+                int ui = budget_upkeep_index(), n2;
+                int up = (d->cat == BCAT_SERVICE || d->cat == BCAT_POWER || d->cat == BCAT_WATER || li.def == B_HEAT_PLANT ||
+                          li.def == B_SEWAGE_WORKS) ? budget_level_upkeep_pct() : 100;   /* 1.1 D1: the level (budget.cpp) */
+                int ot = d->cat == BCAT_SERVICE ? budget_overtime_pct(d->service) : 100;   /* PL2 overtime */
+                text_fmt_money(a, sizeof(a), (Money)((s64)li.upkeep * ui / 100 * up / 100 * ot / 100), year);
+                n2 = str_printf(b, sizeof(b), "Upkeep: %s a month", a);
+                if (ui > 100) n2 += str_printf(b + n2, (int)sizeof(b) - n2, " (index %d%%", ui);
+                if (up != 100) n2 += str_printf(b + n2, (int)sizeof(b) - n2, "%s%s x%d%%", ui > 100 ? ", " : " (", diff()->name, up);
+                if (ot > 100) n2 += str_printf(b + n2, (int)sizeof(b) - n2, "%sovertime +%d%%", ui > 100 || up != 100 ? ", " : " (", ot - 100);
+                if (ui > 100 || up != 100 || ot > 100) str_printf(b + n2, (int)sizeof(b) - n2, ")");
             }
-            txt(x + 6, yy, b, FONT_BODY_DARK); yy += 14;
+            txt_fit(x + 6, yy, b, FONT_BODY_DARK, w - 12); yy += 14;   /* 1.1 D1: txt_fit (longer upkeep line) */
+            if (d->cat == BCAT_SERVICE && hard_note(HN_OVERTIME, a, sizeof(a))) { txt_fit(x + 6, yy - 2, a, FONT_BODY_GREY, w - 12); yy += 11; }
             yy = query_transit(x, yy, w, ymax, s_q_lot);      /* M2 */
             for (k = 0; k < 16 && yy < ymax - 22; k++) {      /* M6: complex panel (stage, jobs, wood, exports, owner, gifts) */
                 static const int fonts[5] = { FONT_BODY_DARK, FONT_BODY_GREY, FONT_BODY_RED, FONT_BODY_GREEN, FONT_HEAD };
@@ -2187,6 +2236,10 @@ static void legend(int x, int y, int w, int ovl)
     for (k = 0; k < 8; k++) swatch(ramp, k, x + k * 34, y);
     txt(x, y + 18, lo, FONT_BODY_GREY);
     txt_r(x + 7 * 34 + 32, y + 18, hi, FONT_BODY_GREY);
+    if (ovl == OVL_FIRE_RISK) {                       /* 1.1 D1: the level's fire numbers */
+        char fn[96];
+        if (hard_note(HN_FIRE, fn, sizeof(fn))) txt_fit(x, y + 31, fn, FONT_BODY_GREY, w);
+    }
 }
 
 /* P1 (DESIGN 14.7 "<= 9 overlays"): the list shows 9 overlays + "No overlay". District heating is a sub-view of

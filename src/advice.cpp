@@ -16,6 +16,8 @@
 #include "text.h"
 #include "save.h"
 #include "util.h"
+#include "season.h"         /* 1.1 W1: winter peaks */
+#include "hard.h"           /* 1.1 D1: Sweden 1969-70, era expectations */
 
 /* ------------------------------------------------------------------ hindsight state */
 enum { HS_POWER, HS_WATER, HS_ELEMENTS, HS_TOWER, HS_HEAT, HS_DEBT, HS_RIGHTS, HS_SCHOOL, HS_JOBS, HS_COUNT };
@@ -116,7 +118,7 @@ const char *advice_kind_name(int kind)
 {
     static const char *const nm[ADV_COUNT] = { "none", "power_short", "water_short", "money_debt", "rights_waiting",
         "money_falling", "power_near", "apt_elements", "apt_tower", "heat", "shops", "school", "health", "sauna", "jobs",
-        "homes", "rights_near" };
+        "homes", "rights_near", "winter_power", "winter_heat", "sweden", "expect_library", "expect_clinic" };   /* 1.1 D1 */
     return (kind >= 0 && kind < ADV_COUNT) ? nm[kind] : "?";
 }
 
@@ -146,6 +148,13 @@ static int collect_all(Advice *out, int max)
         str_printf(t, sizeof(t), "The Ministry of Trade and Industry notes, purely for the record, that the power works run at "
                    "%d%% of capacity. A new plant before the next cold snap would spare everyone an awkward speech.", pct);
         n = add(out, n, max, ADV_POWER_NEAR, AGO_POWER, 600 + pct, -1, -1, pct, pw->supply - pw->demand, t);
+    }
+    {   /* 1.1 W1: October-November, the winter peak (with the forecast) exceeds supply (never on Easy) */
+        s32 pk, sp;
+        if (pw->lots_short == 0 && season_advice(0, &pk, &sp, t, sizeof(t)))
+            n = add(out, n, max, ADV_WINTER_POWER, AGO_POWER, 700 + (int)IMIN((s64)(pk - sp) * 100 / IMAX(1, sp), (s64)200), -1, -1, pk, sp, t);
+        if (season_advice(1, &pk, &sp, t, sizeof(t)))
+            n = add(out, n, max, ADV_WINTER_HEAT, AGO_HEAT, 650 + (int)IMIN((s64)(pk - sp) * 100 / IMAX(1, sp), (s64)200), -1, -1, pk, sp, t);
     }
     /* water */
     if (cs->water_short_lots > 0) {
@@ -282,6 +291,13 @@ static int collect_all(Advice *out, int max)
             str_printf(t, sizeof(t), "%s residents are without work and have started reading Swedish newspapers. Factories and "
                        "offices, the unions suggest, would keep them home.", a1);
         n = add(out, n, max, ADV_JOBS, AGO_PEOPLE, 300 + IMIN((int)(cs->unemployed * 1000 / cs->workers), 400), -1, -1, cs->unemployed, gone, t);
+    }
+    {   /* 1.1 D1: the Sweden recruiters' missing reason, the era expectations a year ahead and in their grace (hard.h) */
+        static const u8 kd[3] = { ADV_SWEDEN, ADV_EXPECT_LIBRARY, ADV_EXPECT_CLINIC }, go[3] = { AGO_PEOPLE, AGO_SERVICES, AGO_SERVICES };
+        s32 sc, rs;
+        int k;
+        for (k = 0; k < 3; k++)
+            if (hard_advice(k, t, sizeof(t), &sc, &rs)) n = add(out, n, max, kd[k], go[k], sc, -1, -1, rs, 0, t);
     }
     return n;
 }
@@ -691,6 +707,8 @@ int advice_power_network(int lot, PowerNetInfo *out)
             }
         }
     }
+    out->demand = season_scale(out->demand, season_power_pct());   /* 1.1 W1: winter use (Easy: unchanged) */
+    out->used = season_scale(out->used, season_power_pct());
     out->spare = out->supply - out->used;
     if (out->spare < 0) out->spare = 0;
     out->pct = out->supply > 0 ? (int)((s64)out->demand * 100 / out->supply) : 0;

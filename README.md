@@ -25,7 +25,7 @@ newspaper that quietly advises the President.
 |---|---|---|
 | OS | Windows 98 SE | Windows 98 SE |
 | CPU | Pentium II 233 MHz | GHz-class Pentium M (IBM ThinkPad X41 / T40 class) |
-| RAM | 128 MB (game heap ≤ 32 MB) | 512 MB+ |
+| RAM | 128 MB (game uses ≤ 40 MB incl. winter art) | 512 MB+ |
 | Video | DirectDraw with hardware blits, **16 MB video memory**, 16-bit colour | 16 MB+ with a native Win98 driver |
 | Resolution | 800x600x16 fullscreen (640x480 and 1024x768 options, `-window` for windowed) | same |
 | DirectX | 6.1 runtime or newer (DirectDraw, DirectSound) | 6.1+ |

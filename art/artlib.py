@@ -669,6 +669,15 @@ PAL_BASE = {
     'car_lblue': '#8fb0c6', 'car_dblue': '#37507a', 'car_red': '#b03a2e', 'car_green': '#4f7a4c',
     'car_brown': '#78533c', 'car_mustard': '#c9a23a', 'car_grey': '#8d9196', 'car_aubergine': '#6a3c55',
     'tyre': '#262626', 'chrome': '#c9cccc', 'headlight': '#f2eed4', 'taillight': '#b0281e',
+    # 1.1 W2 winter (THEME 3.2): used only by the 'winter' shade mode
+    'asph_w': '#6c7074', 'spruce_w': '#34483d', 'pine_w': '#4a5946', 'twig': '#7a6d66', 'twig_lt': '#9d938f',
+    'reed_w': '#a8996a', 'win_lit': '#d2b06a', 'wire_w': '#5c5a55', 'twig_gap': '#bcb8bb',
+}
+# explicit 8-tone ramps (dark -> lit) for the winter materials; index 5 = a flat ground pixel in full light
+CUSTOM_RAMPS = {
+    'snow': ['#8597ae', '#a3b1c5', '#bcc8d8', '#cad4e0', '#d7dee8', '#e3e9ef', '#eceff3', '#f4f6f8'],
+    'ice': ['#566e84', '#6b8398', '#7f96aa', '#91a8ba', '#9fb5c6', '#acc1d0', '#b9ccda', '#c6d7e2'],
+    'packed': ['#6f6c69', '#84807b', '#98938c', '#a8a39b', '#b6b1a9', '#c2bdb5', '#ccc8c1', '#d6d3cd'],
 }
 
 
@@ -690,6 +699,7 @@ class Style(object):
             self.pal[k] = tuple(clamp(g + (x - g) * sat, 0, 255) for x in c)
         self.cache = {}
         self.zoom = 1.0
+        self.winter = False         # 1.1 W2: set by shade() for the winter mode (ground functions read it)
 
     def cont(self, base, l):
         """continuous shade of a base colour at light l (0.34 .. 1.0)"""
@@ -704,6 +714,9 @@ class Style(object):
 
     def ramp(self, key):
         r = self.cache.get(key)
+        if r is None and key in CUSTOM_RAMPS:
+            r = [to565(hexc(c)) for c in CUSTOM_RAMPS[key]]
+            self.cache[key] = r
         if r is None:
             base = self.pal[key]
             n = self.levels
@@ -777,8 +790,125 @@ def _ab_ground(g, key, d, st):
     return key, d
 
 
+# =========================================================================== winter pass (1.1 W2, DESIGN_1_1 4.2)
+# The winter pass only recolours: every pixel the summer pass draws is drawn, no other (identical alpha mask,
+# so the summer piece table serves both seasons).  Ground functions in art_terrain read st.winter themselves
+# where geometry matters (ploughed roads with banks, ice, fields, rail); every other summer ground key goes
+# through winter_ground(); solids go through winter_solid() (up-facing -> snow, foliage, lit windows).
+WINTER_KEYS = ('snow', 'ice', 'packed', 'asph_w', 'spruce_w', 'pine_w', 'twig', 'twig_lt', 'twig_gap', 'reed_w',
+               'win_lit', 'wire_w')
+SNOW_GROUND_D = -0.85      # flat ground snow one tone below a lit flat roof (#d7dee8 vs #e3e9ef): roofs read
+SNOWY = ('snow', 'ice', 'packed')
+# summer ground key -> snow tone offset (sixths of the ramp); anything not listed and not kept becomes snow 0
+SNOW_GROUND = {'grass_dk': -0.35, 'grass_lt': 0.1, 'dirt': -0.3, 'dirt_dk': -0.45, 'crop_dk': -0.3,
+               'plough': -0.2, 'plough_dk': -0.45, 'marsh_dk': -0.4, 'kerb': 0.3, 'slash': -0.5,
+               'hay_dk': -0.3, 'stump_top': 0.0}
+PACKED_GROUND = ('gravel', 'gravel_lt', 'gravel_dk', 'sawdust', 'concrete', 'concrete_dk', 'court_cinder', 'cinder',
+                 'sandpile')
+KEEP_GROUND = ('water', 'water_lt', 'water_dk', 'foam', 'foam_dk', 'rock_dk', 'rail', 'sleeper', 'steel', 'steel_lt',
+               'buffer_red', 'trim', 'ash', 'ash_lt', 'char', 'coal', 'tyre', 'boards', 'asphalt', 'asph_dk',
+               'asph_lt', 'bitumen') + WINTER_KEYS
+DECIDUOUS = ('birch_leaf', 'birch_leaf_au', 'apple_leaf', 'rowan_leaf', 'bush', 'lilac', 'hedge', 'flowers')
+NOSNOW_SOLID = GLASS_KEYS + ('cap', 'coal', 'foam', 'flag_blue', 'fire', 'smoke', 'water', 'water_lt', 'glass_broken',
+                             'headlight', 'taillight', 'chrome') + WINTER_KEYS
+WINTER_LIT_WINDOWS = True
+_unknown_ground = set()
+
+
+def snow_noise(x, y, st):
+    """quiet tile-periodic drift texture for ground snow (sixths of the ramp)"""
+    s = st.texture / 0.36 if st.texture > 0 else 0.0
+    d = (vnoise(x, y, 8.0, 701) - 0.5) * 0.7 * s
+    if vnoise(x, y, 4.0, 702) > 0.74:
+        d += 0.45 * s
+    return d
+
+
+def winter_ground(g, key, d, st):
+    """generic winter mapping of a summer ground key (the geometry-aware cases are done in art_terrain)"""
+    if key in KEEP_GROUND:
+        return key, d
+    x, y = g.W[0], g.W[1]
+    if key in PACKED_GROUND:
+        return 'packed', (vnoise(x, y, 3.0, 703) - 0.5) * 0.8 * (st.texture / 0.36)
+    if key in ('reed', 'reed_dk'):
+        return 'reed_w', -0.3 if key == 'reed_dk' else 0.0
+    if key in ('rock', 'lichen'):
+        return 'snow', 0.0
+    if key not in SNOW_GROUND and key not in PAL_SNOW_OK:
+        _unknown_ground.add(key)
+    return 'snow', SNOW_GROUND.get(key, 0.0) + snow_noise(x, y, st)
+
+
+# summer ground keys that silently become plain snow
+PAL_SNOW_OK = ('grass', 'meadow', 'flower_y', 'flower_w', 'flower_p', 'sand', 'pebble', 'crop', 'marsh', 'cotton',
+               'shallow', 'bush', 'lilac', 'flowers', 'apple_leaf', 'hay', 'woodpile', 'ballast', 'ballast_dk')
+
+
+def _snow_on(g, key, d, st, lift=0.0):
+    """snow on an up-facing solid pixel: seams/texture mostly hidden"""
+    return 'snow', d * 0.25 + lift
+
+
+def winter_solid(g, key, d, st):
+    if key in WINTER_KEYS:
+        return key, d
+    nz = g.n[2]
+    P = g.P
+    tg = g.tag
+    if key in DECIDUOUS:
+        if key == 'hedge':
+            return ('snow', 0.0) if nz > 0.8 else ('twig', -0.3)
+        cell = 1.4 if st.zoom >= 1 else 2.8
+        h = ihash(int(math.floor(P[0] / cell)), int(math.floor(P[1] / cell)), int(math.floor(P[2] / cell)),
+                  g.solid.par.get('seed', 1), 711)
+        if nz > 0.62 and h < 0.22:
+            return 'snow', 0.0
+        if h > 0.72:                     # bare crown: light gaps between the twigs (airy, not a brown ball)
+            return 'twig_gap', 0.0
+        return ('twig_lt' if h < 0.45 else 'twig'), (h - 0.5) * 0.6
+    if key == 'spruce':
+        c = g.solid.c if isinstance(g.solid, Cone) else None
+        if tg == 'cap':
+            return 'snow', 0.0
+        if c is not None:
+            ang = math.atan2(P[1] - c[1], P[0] - c[0])
+            per = 3.4 if st.zoom >= 1 else 6.8
+            j = ihash(int((ang + 4) * 4.0), g.solid.par.get('seed', 0), 712) * 1.4
+            band = (P[2] - c[2] + j) % per
+            if P[2] > c[2] + 1.4 and band > per * 0.55 and ihash(int((ang + 4) * 7.0), int(P[2] / 1.2), 713) < 0.8:
+                return 'snow', -0.3
+        return 'spruce_w', d * 0.8
+    if key == 'pine_leaf':
+        cell = 1.5 if st.zoom >= 1 else 3.0
+        h = ihash(int(math.floor(P[0] / cell)), int(math.floor(P[1] / cell)), int(math.floor(P[2] / cell)), 714)
+        if nz > 0.62 and h < 0.62:
+            return 'snow', -0.2
+        return 'pine_w', d
+    if key in GLASS_KEYS and tg in WALL_TAGS:
+        if WINTER_LIT_WINDOWS and key == 'glass' and g.solid.cls == 'obj':
+            s, t = local_st(g)
+            if ihash(int(math.floor(s / 6.0)), int(math.floor(t / 10.0)), g.solid.grp, 715) < 0.16:
+                return 'win_lit', 0.0
+        return key, d
+    if key in NOSNOW_SOLID or key.startswith(('car_', 'sign_', 'res_neon')):
+        return key, d
+    if key == 'wire':
+        return 'wire_w', d
+    if key in ('rock', 'lichen', 'rock_dk', 'res_granite'):
+        if nz > 0.80:
+            return 'snow', 0.0
+        return ('rock_dk' if key == 'rock_dk' else 'rock'), d - 0.2
+    if tg in WALL_TAGS:
+        return key, d
+    if nz > 0.5:
+        return _snow_on(g, key, d, st)
+    return key, d
+
+
 def shade(gb, st=STYLE_C, mode='normal'):
-    """G-buffer -> RGB image (key background).  mode: 'normal' | 'ab' (abandoned style pass)."""
+    """G-buffer -> RGB image (key background).  mode: 'normal' | 'ab' (abandoned style pass) | 'winter' |
+    'ab_winter' (1.1 W2: the same pixels recoloured for snow; never changes the alpha mask)."""
     st.zoom = gb['zoom']
     W, H, grid, md = gb['w'], gb['h'], gb['grid'], gb['model']
     if md.prepare is not None:
@@ -786,28 +916,42 @@ def shade(gb, st=STYLE_C, mode='normal'):
     img = Image.new('RGB', (W, H), KEY)
     px_ = img.load()
     keys = [[None] * W for _ in range(H)]
-    ab = mode == 'ab'
-    for y in range(H):
-        row = grid[y]
-        for x in range(W):
-            g = row[x]
-            if g is None:
-                continue
-            if g.kind == 'ground':
-                st.texture = st.tex_ground
-                key, d = md.ground(g, st)
-                if ab:
-                    key, d = _ab_ground(g, key, d, st)
-                st.texture = st.tex_obj
-                l = g.light - 0.10 * g.ao * 0.6
-            else:
-                key, d = g.solid.mat(g, st)
-                if ab:
-                    key, d = _ab_key(g, key, d, st)
-                l = g.light
-            keys[y][x] = key
-            snap = g.kind == 'ground' or not g.solid.curved
-            px_[x, y] = st.color(key, l, d, snap)
+    ab = mode in ('ab', 'ab_winter')
+    winter = mode in ('winter', 'ab_winter')
+    st.winter = winter
+    try:
+        for y in range(H):
+            row = grid[y]
+            for x in range(W):
+                g = row[x]
+                if g is None:
+                    continue
+                if g.kind == 'ground':
+                    st.texture = st.tex_ground
+                    key, d = md.ground(g, st)
+                    if ab:
+                        key, d = _ab_ground(g, key, d, st)
+                    if winter:
+                        key, d = winter_ground(g, key, d, st)
+                        if key == 'snow':
+                            d += SNOW_GROUND_D
+                        if key in SNOWY and g.shadow:
+                            d += 1.7             # ground shadows on snow: blue #bcc8d8, not the deep tone
+                    st.texture = st.tex_obj
+                    l = g.light - 0.10 * g.ao * 0.6
+                else:
+                    key, d = g.solid.mat(g, st)
+                    if ab:
+                        key, d = _ab_key(g, key, d, st)
+                    if winter:
+                        key, d = winter_solid(g, key, d, st)
+                    l = g.light
+                keys[y][x] = key
+                snap = g.kind == 'ground' or not g.solid.curved
+                px_[x, y] = st.color(key, l, d, snap)
+    finally:
+        st.winter = False
+        st.texture = st.tex_obj
     # sel-out outlines: darkest tone of the local material mixed toward blue-black
     out = []
     thr = 3.0
@@ -851,6 +995,8 @@ def shade(gb, st=STYLE_C, mode='normal'):
     for (P0, P1, key, sag) in md.lines:
         rp = st.ramp(key)
         col = rp[len(rp) * 2 // 3]
+        if winter and key == 'wire':             # light wires vanish against snow: dark in winter
+            col = st.ramp('wire_w')[3]
         a, b = tw(P0), tw(P1)
         L = int(max(abs(a[0] - b[0]) + abs(a[1] - b[1]), 4) * 2 * zoom)
         last = None
@@ -869,6 +1015,8 @@ def shade(gb, st=STYLE_C, mode='normal'):
             for x in range(W):
                 c = px_[x, y]
                 if c == KEY:
+                    continue
+                if winter and keys[y][x] in SNOWY:      # the snow on an abandoned lot stays snow
                     continue
                 lum = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
                 cc = tuple(lum + (c[i] - lum) * 0.42 for i in range(3))

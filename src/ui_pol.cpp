@@ -10,6 +10,7 @@
 #include "sim.h"
 #include "politics.h"
 #include "util.h"
+#include "hard.h"       /* 1.1 D1: the level's notes (the neighbour's patience, authority, card severity) */
 
 /* colours (art/ui_layout.h values; that header is ui.cpp's) */
 #define C_PAPER_DK  213, 198, 172
@@ -217,6 +218,11 @@ static void view_overview(int x, int y, int w, int h)
         uix_text_r(x + w - 6, yy, a, FONT_BODY_DARK);
         yy += 11;
     }
+    if (politics_meter(METER_EAST) >= 30 && hard_note(HN_EAST, b, sizeof(b))) {   /* 1.1 D1: "The neighbour's patience (Hard): drifts to 40" */
+        char c2[64];
+        if (hard_note(HN_AUTHORITY, c2, sizeof(c2))) str_printf(b + strlen(b), (int)sizeof(b) - (int)strlen(b), "; authority: %s", c2 + strlen(diff()->name) + 2);
+        uix_text_fit(x + 6, yy, b, FONT_BODY_GREY, w - 12);
+    } else
     uix_text_fit(x + 6, yy, politics_meter(METER_EAST) < 30 ? "Night frost: clearing orders shrink and oil costs more."
                                                                                : "East: clearing orders and oil prices. West: orders and loans.",
                  FONT_BODY_GREY, w - 12);
@@ -375,7 +381,7 @@ static void view_event(int x, int y, int w, int h)
         str_printf(a, sizeof(a), "Waiting %d month%s; the cabinet decides after %d.", politics_event_age(),
                    politics_event_age() == 1 ? "" : "s", POL_EVENT_EXPIRE);
         uix_text_fit(x + 6, y + h - 16, a, FONT_BODY_GREY, w - 110);
-    }
+    } else if (hard_note(HN_CARDS, a, sizeof(a))) uix_text_fit(x + 6, y + h - 16, a, FONT_BODY_GREY, w - 110);   /* 1.1 D1 */
     uix_button(x + w - 96, y + h - 20, 90, 18, "Decide later", UPA_LATER, 0, 1);
 }
 
