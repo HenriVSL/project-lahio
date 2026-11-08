@@ -9,7 +9,7 @@ import math
 from artlib import (T, KZ, STOREY, clamp, lerp, ihash, vnoise, vnoise3, local_st, Model, Solid,
                     Convex, box, gable_body, hip_body, roof_slab, gable_roof, mono_body, Cone, Ellipsoid,
                     HeightField)
-from art_terrain import g_grass, g_lot, g_water, g_road, g_rail
+from art_terrain import g_grass, g_lot, g_water, g_road, g_rail, g_bridge_water
 
 
 # =========================================================================== materials
@@ -2144,7 +2144,7 @@ def bridge_model(key, axis):
     markings continue across the tile edges; the deck fascia extends below the water plane so it reads
     as a span above deeper water while the deck top stays level with the land (1 px)."""
     md = Model('%s_bridge' % key)
-    md.ground = lambda g, st: g_water(g, st, 0)
+    md.ground = lambda g, st: g_bridge_water(g, st)   # 1.1 B1: open water under the deck in winter
     hw = {'grav': 7.5, 'road': 8.5, 'main': 11.0, 'mway': 14.0, 'rail': 8.5}[key]
     c = 16.0
     conn = ('-x', '+x') if axis == 'x' else ('-y', '+y')

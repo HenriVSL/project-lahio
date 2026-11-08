@@ -97,6 +97,7 @@ enum { REQ_ROAD,          /* road access (lot touches a usable road) */
        REQ_MILK,          /* M3: dairies: milk supply */
        REQ_ROUTE,         /* M2: homes need a road route to the town's jobs (traffic.cpp traffic_route_ok) */
        REQ_LIBRARY,       /* 1.1 D1: era expectation 1975 (houses/apartments T3; sim.cpp expect_reqs, Normal/Hard only) */
+       REQ_HEALTH_CENTRE, /* 1.1 B1: era expectation 1985 (houses/apartments T3: the town has its health centre; Normal/Hard) */
        REQ_COUNT };
 typedef struct { u8 req; s16 need; } TierReq; /* need: threshold where the requirement has one */
 
@@ -306,6 +307,11 @@ typedef struct {
     s16 plough_pct;           /* ploughing surcharge on road upkeep Dec-Mar, % (0/25/35) */
     s16 plough_hard_pct;      /* the same in a hard winter, % (0/40/55) */
     s16 frost_repair10;       /* hard winter: frost repairs, mk per 10 pipe tiles per month (0/1/2) */
+    /* 1.1 B1 (late-game pressure, DESIGN_1_1 2.4 item 3) */
+    s16 winter_grow_max;      /* electric heating: winter load + 1 point per winter from ELECTRIC_HEAT_FROM, up to this (0/15/15: +15 by 1989) */
+    s16 loan_surplus;         /* emergency-loan instalments only out of the month's operating surplus (0/1/0; Easy = PL2 rule) */
+    s16 loan_after;           /* months in the red before the emergency loan (LOAN_AFTER_MONTHS 6) */
+    s16 loan_cushion100;      /* the loan covers the deficit + this x 100 mk (100 = 10,000 as 1.0) */
 } DiffParams;
 extern const DiffParams g_diff[DIFF_COUNT];
 const DiffParams *diff(void);                     /* the current game's level (never NULL) */
@@ -316,7 +322,10 @@ const char *diff_name(int level);                 /* "Easy" / "Normal" / "Hard" 
    from the year on they block upgrades; standing tiers decline only after EXPECT_GRACE_MONTHS */
 #define EXPECT_LIBRARY_YEAR  1975   /* "The welfare state": houses T3 and apartments T3 also need library cover */
 #define EXPECT_CLINIC_YEAR   1980   /* "The lahio question": apartments T2+ also need clinic (health) cover */
+#define EXPECT_HCENTRE_YEAR  1985   /* 1.1 B1 "Health for all": tier-3 homes expect the town's health centre (one per 20,000) */
+#define EXPECT_HCENTRE_PER   20000
 #define EXPECT_GRACE_MONTHS  12
+#define ELECTRIC_HEAT_FROM   1975   /* 1.1 B1: after the oil crisis new homes heat by electricity: the winter peak grows a point a year */
 #define SWEDEN_FROM_YEAR     1969   /* the great migration to Sweden: January 1969 - December 1970 */
 #define SWEDEN_TO_YEAR       1970
 

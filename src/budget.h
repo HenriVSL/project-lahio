@@ -60,7 +60,8 @@ void  budget_set_tax(int res, int bus);
 void  budget_set_funding(int svc, int pct);
 /* T04 additions */
 #define TAX_NEUTRAL       9          /* tax rate with no demand/attractiveness penalty */
-#define LOAN_AFTER_MONTHS 6          /* months of negative balance before the emergency loan */
+#define LOAN_AFTER_MONTHS 6          /* months of negative balance before the emergency loan (1.1 B1: diff()->loan_after,
+                                        Easy/Hard 6, Normal 9; the cushion diff()->loan_cushion100: 10,000 / 15,000) */
 #define LOAN_RATE         6          /* per mille per month (~7.4%/year; T12: 20 made an exponential debt spiral; PL2: 8 -> 6,
                                         the rate is saved with the town, so old saves keep theirs) */
 Money budget_start_funds(int funds, int start_year);   /* FUNDS_* (sim.h) -> starting money */
@@ -80,5 +81,8 @@ int   budget_overtime_pct(int svc);
    applied now (diff()->upkeep_pct / tax_yield_pct, phased in 1960-1965; 100 on Easy) - for the ledger tooltips */
 int   budget_level_upkeep_pct(void);
 int   budget_level_tax_pct(void);
+/* 1.1 B1: what the overtime of one service costs a month (mk, as booked: index, level, funding; 0 below the threshold)
+   - the Cabinet's overtime line (advice.cpp ADV_OVERTIME) */
+Money budget_overtime_mk(int svc);
 
 #endif

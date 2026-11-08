@@ -75,6 +75,15 @@ def g_water(g, st, frame=0):
     return 'water', d
 
 
+def g_bridge_water(g, st):
+    """1.1 B1: water under a bridge.  Summer = g_water (frame 0, pixel-identical to 1.0).  Winter: open dark water (the
+    current under a bridge keeps a strait or a river open, so one sprite serves lakes and rivers: the river surface)"""
+    if not getattr(st, 'winter', False):
+        return g_water(g, st, 0)
+    x, y = g.W[0], g.W[1]
+    return _river_base(x, y, st)
+
+
 # =========================================================================== rivers + rapids
 RAPID_ROCKS = [(10.0, 10.0, 3.0), (21.0, 13.0, 2.4), (13.0, 21.5, 3.2), (23.5, 23.0, 2.0)]
 

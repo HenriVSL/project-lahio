@@ -63,6 +63,7 @@ enum {
     /* settings */
     W_S_RES0, W_S_RES2 = W_S_RES0 + 2, W_S_FULL, W_S_WINDOW, W_S_FPS60, W_S_FPS30, W_S_FPSAUTO,
     W_S_EDGE, W_S_SPEED, W_S_SFX, W_S_AMB, W_S_TICK0, W_S_TICK2 = W_S_TICK0 + 2, W_S_BACK,
+    W_S_WINTER,                                /* 1.1 B1: "Winter scenery" (INI winter_art) */
     /* pause */
     W_P_RESUME, W_P_SAVE, W_P_LOAD, W_P_SETTINGS, W_P_TITLE, W_P_QUIT,
     /* dialog */
@@ -765,7 +766,7 @@ static void screen_settings(void)
 {
     static const char *const res_name[3] = { "640x480", "800x600", "1024x768" };
     static const char *const tick_name[3] = { "Urgent only", "Normal", "Everything" };
-    int x, y, ix, iy, iw, ih, lx, cx, yy, k, rx, W = 420, H = 300;
+    int x, y, ix, iy, iw, ih, lx, cx, yy, k, rx, W = 420, H = 320;
     char buf[32];
     win_centre(W, H, &x, &y);
     win(x, y, W, H, "Settings", W_CLOSE, &ix, &iy, &iw, &ih);
@@ -786,6 +787,10 @@ static void screen_settings(void)
     rx += w_radio(W_S_FPS60, rx, yy, g_cfg.fps == 60, "60") + 10;
     rx += w_radio(W_S_FPS30, rx, yy, g_cfg.fps == 30, "30") + 10;
     w_radio(W_S_FPSAUTO, rx, yy, g_cfg.fps == 0, "Automatic");
+    yy += 20;
+    if (s_drawing) txt(lx, yy, "Scenery", FONT_BODY_DARK);   /* 1.1 B1: W2's Plan C as a setting (the simulation is unchanged) */
+    w_check(W_S_WINTER, cx, yy, g_cfg.winter_art, "Winter scenery (snow Dec-Mar)", 0);
+    if (s_drawing && g_cfg.winter_art && !art_winter_available()) txt(cx + 205, yy, "(next start)", FONT_BODY_GREY);
     yy += 22;
     rule(lx, yy, iw - 20); yy += 10;
     if (s_drawing) txt(lx, yy, "Scrolling", FONT_BODY_DARK);
@@ -992,6 +997,8 @@ static void activate(int id)
     case W_S_FPS30:   set_cfg(&g_cfg.fps, 30); plat_set_fps(30); break;
     case W_S_FPSAUTO: set_cfg(&g_cfg.fps, 0); plat_set_fps(0); break;
     case W_S_EDGE:    set_cfg(&g_cfg.edge_scroll, !g_cfg.edge_scroll); break;
+    case W_S_WINTER:  set_cfg(&g_cfg.winter_art, !g_cfg.winter_art); break;   /* 1.1 B1: off = summer art at once; on again
+                                                                                 = snow at once if it was loaded, else next start */
     case W_S_BACK:    go_back(); break;
     /* pause */
     case W_P_RESUME:   s_result = MR_RESUME; break;

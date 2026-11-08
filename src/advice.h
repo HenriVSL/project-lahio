@@ -18,6 +18,9 @@ enum { ADV_NONE, ADV_POWER_SHORT, ADV_WATER_SHORT, ADV_MONEY_DEBT, ADV_RIGHTS_WA
        ADV_JOBS, ADV_HOMES, ADV_RIGHTS_NEAR,
        ADV_WINTER_POWER, ADV_WINTER_HEAT,   /* 1.1 W1: Oct-Nov, the winter peak exceeds supply (season.h) */
        ADV_SWEDEN, ADV_EXPECT_LIBRARY, ADV_EXPECT_CLINIC,   /* 1.1 D1: 1969-70 missing reasons; era expectations (hard.h) */
+       ADV_OVERTIME,                        /* 1.1 B1: a service's overtime bill (budget_overtime_mk) and the building that ends it */
+       ADV_EXPECT_HCENTRE,                  /* 1.1 B1: the 1985 health-centre expectation (hard.h) */
+       ADV_MONEY_YEAR,                      /* 1.1 B1: January-February, last year's books closed in the red (Normal/Hard) */
        ADV_COUNT };
 /* what a click on the line does (the UI maps these): camera = centre on (x, y) when x >= 0 */
 enum { AGO_NONE, AGO_CAMERA, AGO_POWER /* power overlay + camera */, AGO_WATER /* water overlay + camera */,

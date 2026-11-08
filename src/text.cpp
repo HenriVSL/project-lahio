@@ -115,7 +115,7 @@ const char *text_req_label(int req)
 {
     static const char *const n[REQ_COUNT] = { "Road", "Power", "Water", "Water tower", "Precast elements",
         "School", "Sauna", "Health care", "Shop", "Telephone", "Land value", "Clean air", "Customers",
-        "Workers", "Main road", "District heating", "Wood", "Milk", "Route to jobs", "Library" };   /* M3: wood, milk; M2: route; 1.1 D1 */
+        "Workers", "Main road", "District heating", "Wood", "Milk", "Route to jobs", "Library", "Health centre" };   /* M3: wood, milk; M2: route; 1.1 D1; B1 */
     return (req >= 0 && req < REQ_COUNT) ? n[req] : "?";
 }
 
@@ -320,6 +320,12 @@ int text_req_line(char *buf, int size, const ReqItem *it)
         }
         if (it->met) return str_printf(buf, size, "%s %s", g, lab);
         return str_printf(buf, size, "%s %s (none within reach)", g, lab);
+    case REQ_HEALTH_CENTRE:   /* 1.1 B1: town-wide (have = health centres, need = needed) */
+        if (it->why == 3 || it->why == 4)
+            return str_printf(buf, size, it->why == 3 ? "%s %s (expected from %d)" : "%s %s (expected since %d; a year's grace)",
+                              g, lab, (int)it->need);
+        if (it->met) return str_printf(buf, size, "%s Health centre in town", g);
+        return str_printf(buf, size, "%s Health centre (the town has %d, needs %d)", g, (int)it->have, (int)it->need);
     case REQ_SHOP:
         if (it->met) return str_printf(buf, size, "%s Shop nearby", g);
         return str_printf(buf, size, "%s Shop (none within %d tiles)", g, (int)it->need);
@@ -499,6 +505,7 @@ static const char *problem_phrase(int req)
     case REQ_MILK:          return "short of milk";
     case REQ_ROUTE:         return "with no road to the jobs";   /* M2 */
     case REQ_LIBRARY:       return "without a library";          /* 1.1 D1 */
+    case REQ_HEALTH_CENTRE: return "without a health centre";    /* 1.1 B1 */
     }
     return "with a problem";
 }

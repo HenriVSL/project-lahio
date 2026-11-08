@@ -28,7 +28,9 @@ s32 hard_sweden_eval(void)
     s_sw.homes = (u8)(st->homeless <= 0 && st->vacant * 100 >= st->capacity_res * 2);
     s_sw.content = (u8)(st->avg_happiness >= 60);
     s_sw.reasons = (u8)(s_sw.jobs + s_sw.homes + s_sw.content);
-    s_sw.pull = (s32)((s64)st->population * diff()->sweden_permille * (3 - s_sw.reasons) / 3000);
+    s_sw.pull = (s32)((s64)st->population * diff()->sweden_permille * (3 - s_sw.reasons) * (3 - s_sw.reasons) / 9000);   /* 1.1 B1:
+        squared: one missing reason costs a ninth, two four ninths, none held the full pull (a careful town that lacks only
+        spare flats loses ~1 %, a neglected one 5-8 %; linear thirds could not give both) */
     return -s_sw.pull;
 }
 
@@ -55,9 +57,31 @@ int hard_sweden_line(char *buf, int size)
 }
 
 /* ------------------------------------------------------------------ era expectations */
-int hard_expect_year(int which) { return which == HX_CLINIC ? EXPECT_CLINIC_YEAR : EXPECT_LIBRARY_YEAR; }
-int hard_expect_req(int which)  { return which == HX_CLINIC ? REQ_HEALTH : REQ_LIBRARY; }
-int hard_expect_svc(int which)  { return which == HX_CLINIC ? SVC_HEALTH : SVC_LIBRARY; }
+int hard_expect_year(int which) { return which == HX_CLINIC ? EXPECT_CLINIC_YEAR : which == HX_HCENTRE ? EXPECT_HCENTRE_YEAR : EXPECT_LIBRARY_YEAR; }
+int hard_expect_req(int which)  { return which == HX_CLINIC ? REQ_HEALTH : which == HX_HCENTRE ? REQ_HEALTH_CENTRE : REQ_LIBRARY; }
+int hard_expect_svc(int which)  { return which == HX_LIBRARY ? SVC_LIBRARY : SVC_HEALTH; }
+
+/* 1.1 B1: health centres against the town's size, cached per sim cycle (pure function of the lots and the population) */
+static u32 s_hc_key = 0xffffffffu;
+static s32 s_hc_have, s_hc_need;
+int hard_hcentre_ok(s32 *have, s32 *need)
+{
+    const SimDate *dt = sim_date();
+    u32 key = (u32)dt->total_months * 64u + (u32)dt->step * 8u + (u32)dt->cycle;
+    if (key != s_hc_key) {
+        int i;
+        s_hc_have = 0;
+        for (i = 1; i < g_world.lot_hi; i++)
+            if (g_world.lots[i].def == B_HEALTH_CENTRE && g_world.lots[i].status == LOT_ACTIVE) s_hc_have++;
+        s_hc_need = 1 + sim_stats()->population / EXPECT_HCENTRE_PER;
+        if (sim_stats()->town_status < g_bdefs[B_HEALTH_CENTRE].status_req) s_hc_need = 0;   /* a Town's duty: market towns
+                                                                                       are not asked for what they cannot build */
+        s_hc_key = key;
+    }
+    if (have) *have = s_hc_have;
+    if (need) *need = s_hc_need;
+    return s_hc_have >= s_hc_need;
+}
 
 int hard_expect_phase(int which, int zone, int tier, int year, int month)
 {
@@ -74,7 +98,7 @@ int hard_expect_phase(int which, int zone, int tier, int year, int month)
 /* residents (and lots) in homes the expectation applies to (at their own tier) without that service's cover */
 static s32 expect_lacking(int which, int *nlots)
 {
-    int i, n = 0, svc = hard_expect_svc(which);
+    int i, n = 0, svc = hard_expect_svc(which), town_ok = which == HX_HCENTRE && hard_hcentre_ok(NULL, NULL);
     s32 res = 0;
     const u8 *q = net_cov_q_map(svc);
     for (i = 1; i < g_world.lot_hi; i++) {
@@ -85,7 +109,8 @@ static s32 expect_lacking(int which, int *nlots)
         d = def_building(l->def);
         if (d->cat != BCAT_ZONE) continue;
         if (which == HX_CLINIC ? (d->zone != ZONE_APARTMENTS || d->tier < 2)
-                               : ((d->zone != ZONE_HOUSES && d->zone != ZONE_APARTMENTS) || d->tier != 3)) continue;
+                               : ((d->zone != ZONE_HOUSES && d->zone != ZONE_APARTMENTS) || d->tier != 3)) continue;   /* B1: hcentre as library */
+        if (which == HX_HCENTRE) { if (town_ok) continue; n++; res += l->occupants; continue; }   /* 1.1 B1: town-wide */
         world_lot_rect(i, &x0, &y0, &x1, &y1);
         cell = (((y0 + y1) >> 1) >> FIELD_SHIFT) * FIELD_MAX_W + (((x0 + x1) >> 1) >> FIELD_SHIFT);
         if (q[cell] >= 20) continue;
@@ -150,6 +175,18 @@ int hard_news_story(int year, char *h, int hs, char *d, int ds, char *b, int bs,
                 str_printf(b, bs, "The expectation is in force. Tier-3 homes without a library within reach can no longer be "
                                   "built, and those standing will lose patience after %d. %s residents are, for now, reading "
                                   "the telephone directory.", y0, a1);
+            } else if (k == HX_HCENTRE && year == y0 - 1) {   /* 1.1 B1 */
+                str_printf(h, hs, "FROM %d EVERY TOWN ITS HEALTH CENTRE", y0);
+                str_printf(d, ds, "The Primary Health Care Act reaches %s", town());
+                str_printf(b, bs, "The National Board of Health writes that a modern town has a health centre (one for every "
+                                  "20,000 residents). From %d the best homes (tier 3) need one to be built; those standing "
+                                  "have until %d. %s of their residents still queue at the clinic.", y0, y0 + 1, a1);
+            } else if (k == HX_HCENTRE) {
+                str_printf(h, hs, "HEALTH FOR ALL: A HEALTH CENTRE NOW EXPECTED");
+                str_printf(d, ds, "Tier-3 homes need the town's health centre; the others have a year");
+                str_printf(b, bs, "The expectation is in force. Without a health centre the best homes can no longer be built, "
+                                  "and those standing lose patience after %d. %s residents bring sandwiches to the waiting "
+                                  "room.", y0, a1);
             } else if (year == y0 - 1) {
                 str_printf(h, hs, "FROM %d SUBURBS EXPECT A CLINIC", y0);
                 str_printf(d, ds, "The l\xe4hi\xf6 question reaches the Ministry");
@@ -185,14 +222,19 @@ int hard_advice(int k, char *text, int size, s32 *score, s32 *residents)
         *score = 620 + IMIN(s_sw.pull, 300);
         return 1;
     }
-    if (k == 1 || k == 2) {
-        int which = k == 1 ? HX_LIBRARY : HX_CLINIC, y0 = hard_expect_year(which), y = sim_date()->year, lots;
+    if (k == 1 || k == 2 || k == 3) {
+        int which = k == 1 ? HX_LIBRARY : k == 2 ? HX_CLINIC : HX_HCENTRE, y0 = hard_expect_year(which), y = sim_date()->year, lots;
         s32 res;
         if (!diff()->expectations || y < y0 - 1 || y > y0 + 1) return 0;
         res = expect_lacking(which, &lots);
         if (res < 100) return 0;
         text_fmt_int(a1, sizeof(a1), res);
-        if (which == HX_LIBRARY)
+        if (which == HX_HCENTRE)   /* 1.1 B1 */
+            str_printf(text, size, y < y0 ? "From %d the best homes expect the town to have a health centre. %s residents queue at "
+                                             "the clinic instead; the National Board of Health suggests one (Town status)."
+                                           : "Since %d the best homes expect a health centre in town. %s residents will not wait "
+                                             "past the end of the year; the National Board of Health suggests one.", y0, a1);
+        else if (which == HX_LIBRARY)
             str_printf(text, size, y < y0 ? "From %d families in the best homes expect a library within reach. %s residents have "
                                              "none; the Cabinet suggests a library, and perhaps a reading lamp."
                                            : "Since %d the best homes expect a library within reach. %s residents have none and "
@@ -239,16 +281,19 @@ int hard_level_lines(char lines[][100], int max)
     str_printf(ln(lines, &n, max), 100, "Fires: ignition x%d%%, %d spreads, winter x%d%% (Easy %d%%, %d)", p->fire_ppb, p->fire_spread_max, p->fire_winter_pct,
       e->fire_ppb, e->fire_spread_max);
     if (p->winter_load_pct || p->hard_winter_pct) {
-        str_printf(ln(lines, &n, max), 100, "Winter Dec-Mar: power and heat +%d%%; hard winters %d%% (+%d%%, water %d%%)", p->winter_load_pct, p->hard_winter_pct,
-          p->hard_load_pct, p->hard_water_pct);
+        str_printf(ln(lines, &n, max), 100, "Winter: power and heat +%d%% (+1 a year from %d); hard winters %d%% (+%d%%, water %d%%)",
+          p->winter_load_pct, ELECTRIC_HEAT_FROM, p->hard_winter_pct, p->hard_load_pct, p->hard_water_pct);   /* 1.1 B1: electric heating */
         str_printf(ln(lines, &n, max), 100, "Ploughing: road upkeep +%d%% in winter (+%d%% hard); frost repairs %d mk/10 pipes", p->plough_pct, p->plough_hard_pct,
           p->frost_repair10);
     } else str_printf(ln(lines, &n, max), 100, "Winter: snow and stories only");
-    if (p->sweden_permille) str_printf(ln(lines, &n, max), 100, "Sweden 1969-70: recruiters take %d per mille a month; jobs, homes, contentment each save a third",
+    if (p->loan_after != e->loan_after || p->loan_cushion100 != e->loan_cushion100 || p->loan_surplus != e->loan_surplus)   /* 1.1 B1 */
+        str_printf(ln(lines, &n, max), 100, "Emergency loan after %d months in the red, +%d mk%s (Easy %d, +%d)", p->loan_after,
+                   p->loan_cushion100 * 100, p->loan_surplus ? "; repaid from surpluses" : "", e->loan_after, e->loan_cushion100 * 100);
+    if (p->sweden_permille) str_printf(ln(lines, &n, max), 100, "Sweden 1969-70: recruiters take up to %d per mille a month; one reason missing 1/9, two 4/9",
                               p->sweden_permille);
     else str_printf(ln(lines, &n, max), 100, "Sweden 1969-70: only the usual emigration");
-    if (p->expectations) str_printf(ln(lines, &n, max), 100, "Expected: a library for tier-3 homes from %d, a clinic for blocks from %d (a year's grace)",
-                           EXPECT_LIBRARY_YEAR, EXPECT_CLINIC_YEAR);
+    if (p->expectations) str_printf(ln(lines, &n, max), 100, "Expected: library (tier 3) %d, clinic (blocks) %d, health centre (tier 3) %d",
+                           EXPECT_LIBRARY_YEAR, EXPECT_CLINIC_YEAR, EXPECT_HCENTRE_YEAR);
     else str_printf(ln(lines, &n, max), 100, "Era expectations: none");
     return n;
 }
@@ -296,7 +341,7 @@ void hard_dump(FILE *f)
     for (k = 0; k < HX_COUNT; k++) {
         int lots;
         s32 res = expect_lacking(k, &lots);
-        fprintf(f, " %s lacking %d res (%d lots)", k == HX_LIBRARY ? "library" : "clinic", res, lots);
+        fprintf(f, " %s lacking %d res (%d lots)", k == HX_LIBRARY ? "library" : k == HX_CLINIC ? "clinic" : "health centre", res, lots);
     }
     fprintf(f, "\n");
 }

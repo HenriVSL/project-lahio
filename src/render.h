@@ -85,6 +85,8 @@ void render_minimap_tile(int w, int h, int px, int py, int *tx, int *ty);
 /* Rows y0..y1-1 only, so ui can spread a refresh over frames: a full 128x128 image costs ~10 ms on the
    P2-233 (render_minimap = all rows); 16 rows per frame keeps it near 1 ms. */
 void render_minimap_rows(PIX *dst, int pitch, int w, int h, int ovl, int y0, int y1);
+/* 1.1 B1: the minimap colours after a season swap, ~6 ms of work per call; 1 = ready (ui.cpp waits for it before the rows) */
+int  render_minimap_prepare(void);
 
 /* ------------------------------------------------------------------ T13 additions (bench report) */
 enum { RR_VISIBLE, RR_DIRTY, RR_OVERLAY, RR_PREFETCH, RR_ANIM, RR_COUNT };   /* why a chunk was rendered */

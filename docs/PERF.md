@@ -172,3 +172,26 @@ Art residency (DESIGN 14.5, one zoom resident): 64-zoom world 9,520 -> **7,691 K
 - Frames: every frame over 20 ms in the after-runs is either a present stall (work 2-6 ms) or one of the sim peaks
   above (25 ms = one extra blank). 1024 z64 has only ~520 KB VRAM left (pool 41/48): fine, but new 64-zoom art now
   costs pool chunks at 1024 first (each 64 KB of art = one chunk).
+
+## 8. 1.1 B1: benches with winter (VM B, 2026-11-08)
+
+`-bench 60 -speed 3 -fps 60 -log` (60 s = about 15 game months: every run crosses 1 December and 1 April twice), logs
+and reports in `tests/out/b1/`. W2's swap uploaded all 31 z64 pages in one frame (128-141 ms) and the minimap colour
+rebuild followed in one frame (226 ms): BENCH20K 800 z64 max frame 238 ms. Now art.cpp uploads in frames of <= 70 ms
+(`ART_SWAP_FRAME_MS`, chunk flush after the last page) and render.cpp rebuilds the minimap colours ~6 ms a frame.
+
+| Run | avg fps | 1 s min | missed | max interval ms | last swap step (log) |
+|---|---|---|---|---|---|
+| BENCH20K 800 z64 | 59.26 | 49.0 | 34 | **86.5** (was 238) | 63-68 ms |
+| BENCH20K 800 z32 | 59.59 | 55.4 | 28 | 75.0 | 32-40 ms |
+| PT2_1992 800 z64 | 59.19 | 46.6 | 40 | 86.9 | 6-64 ms |
+| PT2_1992 800 z32 | 59.61 | 53.0 | 23 | 91.7 | 38-42 ms |
+| BENCH20K 1024 z64 | 59.29 | 48.6 | 31 | 100.0 | 9-69 ms |
+| BENCH20K 1024 z32 | 59.59 | 54.1 | 24 | 99.8 | 32-40 ms |
+| PT2_1992 1024 z64 | 59.50 | 50.2 | 12 | 94.1 | 56-70 ms |
+| PT2_1992 1024 z32 | 59.56 | 52.6 | 32 | 99.9 | 32-40 ms |
+| BENCH20K 800 z64, INI `winter_art=0` | 59.82 | 59.0 | - | 25.2 | none ("winter scenery off") |
+
+No frame over 100 ms at a season change (target ~150). The averages sit 0.3-0.6 fps under PL4's 59.8-59.9 because each
+run has four swaps (2-3 long frames each plus the minimap rows); without winter art the run is PL4's. Some runs
+overlapped a Mac test run (the emulator shares the CPU), so the 1 s minimum is pessimistic.

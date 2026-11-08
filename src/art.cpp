@@ -535,6 +535,11 @@ int art_winter_available(void) { return s_winterPlan != 0; }
    catch up in reload() when they become resident. */
 static int s_pendSeason = -1;
 static double s_pendMs;
+/* 1.1 B1: step 2 uploads pages until this much of the frame is used, the rest on the following frames (render.cpp flushes
+   the chunk cache only after the last page; chunks drawn in between are re-rendered by that flush) */
+#define ART_SWAP_FRAME_MS 70.0
+static double s_upMs;
+static int s_upPages, s_upFrames;
 int art_set_season(int winter)
 {
     int i, up = 0, fail = 0;
@@ -542,12 +547,18 @@ int art_set_season(int winter)
     winter = winter ? 1 : 0;
     if (!s_inited || !s_winterPlan) return 0;
     if (winter == s_season) {
-        if (s_pendSeason >= 0) {                       /* a pending step 1 cancelled: px back (VRAM never changed) */
+        if (s_pendSeason >= 0) {                       /* a pending swap cancelled: px back; pages not yet uploaded never
+                                                          changed VRAM, the ones a split step 2 already uploaded go back up */
             for (i = 0; i < s_nsheets; i++) {
                 Sheet *S = &s_sheets[i];
-                if (S->wbmp && S->pxSeason != s_season && px_swap_only(S, s_season)) S->vramStale = 0;
+                int uploaded = S->wbmp && S->pxSeason != s_season && !S->vramStale;
+                if (S->wbmp && S->pxSeason != s_season && px_swap_only(S, s_season)) {
+                    S->vramStale = 0;
+                    if (uploaded && S->loaded) gfx_img_update(&S->img);
+                }
             }
             s_pendSeason = -1;
+            s_upMs = 0; s_upPages = 0; s_upFrames = 0;
         }
         return 0;
     }
@@ -565,13 +576,23 @@ int art_set_season(int winter)
         Sheet *S = &s_sheets[i];
         if (!S->wbmp || !S->loaded) continue;
         if (S->pxSeason != winter) { if (!px_swap_only(S, winter)) { fail++; continue; } }
-        if (S->vramStale) { S->vramStale = 0; gfx_img_update(&S->img); up++; }
+        if (S->vramStale) {
+            if (up && time_ms() - t0 > ART_SWAP_FRAME_MS) {   /* 1.1 B1: the rest next frame (VM B: 31 pages took 135 ms in
+                                                               one frame; the swap frame with the chunk flush was 155 ms) */
+                s_upMs += time_ms() - t0; s_upPages += up; s_upFrames++;
+                return 0;
+            }
+            S->vramStale = 0; gfx_img_update(&S->img); up++;
+        }
     }
+    s_upMs += time_ms() - t0; s_upPages += up; s_upFrames++;
     s_season = winter;
     s_pendSeason = -1;
-    log_printf("art: season %s: %d resident pages: px swap %.1f ms (frame 1), upload %.1f ms (frame 2) (Plan %c%s; the other "
-               "zoom's pages follow at its next residency), art VRAM %d KB, free %d KB", winter ? "winter" : "summer", up,
-               s_pendMs, time_ms() - t0, s_winterPlan, fail ? ", SOME PAGES FAILED" : "", art_vram_kb(), gfx_vram_free_kb());
+    log_printf("art: season %s: %d resident pages: px swap %.1f ms (frame 1), upload %.1f ms in %d frame%s (Plan %c%s; the other "
+               "zoom's pages follow at its next residency), art VRAM %d KB, free %d KB", winter ? "winter" : "summer", s_upPages,
+               s_pendMs, s_upMs, s_upFrames, s_upFrames == 1 ? "" : "s", s_winterPlan, fail ? ", SOME PAGES FAILED" : "",
+               art_vram_kb(), gfx_vram_free_kb());
+    s_upMs = 0; s_upPages = 0; s_upFrames = 0;
     return 1;
 }
 int art_zoom_available(int zoom) { return zoom >= 0 && zoom < ZOOM_COUNT && !s_blocked[zoom]; }   /* F3 */

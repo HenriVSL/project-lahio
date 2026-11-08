@@ -235,6 +235,26 @@ static int next_slot(int first, int last, int prefer_m)
     return -1;
 }
 
+/* 1.1 B1: the town's health centre (2x2, Town) on a free 2x2 slot of a neighbourhood (the heat-plant, sewage or second
+   school place), bulldozing what grew there */
+static int build_hcentre(Money *cash)
+{
+    static const u8 sp[3] = { SL_HEAT, SL_SEWAGE, SL_SCHOOL2 };
+    int m, q;
+    if (!def_unlocked(B_HEALTH_CENTRE, sim_date()->year, sim_stats()->town_status, 0) || *cash < g_bdefs[B_HEALTH_CENTRE].cost) return 0;
+    for (m = 0; m < s_mods; m++) {
+        if (zone_kind(m) == ZONE_INDUSTRY) continue;
+        for (q = 0; q < 3; q++) {
+            int sl = sp[q], x = M->mod[m][0] + s_slot[sl].x, y = M->mod[m][1] + s_slot[sl].y;
+            if (s_used[m] & (1u << sl)) continue;
+            s_used[m] |= 1u << sl;
+            cmd("bulldoze %d %d %d %d", x, y, x + 1, y + 1);
+            if (cmd("build health_centre %d %d", x, y)) { *cash -= g_bdefs[B_HEALTH_CENTRE].cost; return 1; }
+        }
+    }
+    return 0;
+}
+
 static int empty_zone_tiles(int zone)
 {
     int x, y, n = 0;
@@ -325,7 +345,7 @@ static void bot_budget(void)
     ex /= 12;
     if ((net < 0 && g_budget.money < ex * 6) || g_budget.money < 0) {
         if (t < 13) cmd("tax %d %d", t + 1, t + 1);
-    } else if (net > 0 && g_budget.money > ex * (s_level == DIFF_HARD ? 9 : 18) && t > diff()->tax_neutral)
+    } else if (net > 0 && g_budget.money > ex * (s_level == DIFF_HARD ? 9 : 12) && t > diff()->tax_neutral)   /* B1: Normal 18 -> 12 */
         cmd("tax %d %d", t - 1, t - 1);   /* taxes above the tolerance cost growth: back down once the books allow */
 }
 
@@ -338,10 +358,14 @@ static void bot_month(void)
     Money cash = g_budget.money;
     /* utilities ahead of demand (a player watching the power/water bars) */
     /* M3: the plant site may need forest clearing / rock blasting on top of the plant's price */
-    s32 pdem = st->power_demand;
-    if (s_level != DIFF_EASY) pdem = (s32)((s64)pdem * season_peak_pct() / IMAX(100, season_power_pct()));   /* 1.1 D1 (B1 tunes):
-                                                                                       a planner plans for the winter peak */
-    if ((st->power_short_lots > 0 || pdem * 10 >= st->power_supply * 8) && cash >= plant_cost()) {
+    s32 pdem = st->power_demand, ppeak = 0;
+    if (s_level != DIFF_EASY) {   /* 1.1 B1: a planner reads the forecast (DESIGN_1_1 2.6: supply >= the forecast peak): the 1.0
+                                     rule on the summer use, plus a plant when the October-November winter peak exceeds supply
+                                     (the Cabinet's winter line; D1 kept 80 % of the peak all year: never warned, plants idle) */
+        pdem = (s32)((s64)pdem * 100 / IMAX(100, season_power_pct()));
+        if (sim_date()->month == 9 || sim_date()->month == 10) ppeak = (s32)((s64)pdem * season_peak_pct() / 100);
+    }
+    if ((st->power_short_lots > 0 || pdem * 10 >= st->power_supply * 8 || ppeak > st->power_supply) && cash >= plant_cost()) {
         Money pc = plant_cost();
         if (build_plant()) cash -= pc;
     }
@@ -389,6 +413,10 @@ static void bot_month(void)
                 if (hard_expect_phase(HX_CLINIC, z, 2, yr, mo) && z == ZONE_APARTMENTS && !(s_used[m] & (1u << SL_CLINIC)) &&
                     cash >= 1700 && build_slot(m, SL_CLINIC)) { cash -= 700; done++; }
             }
+            if (done < 3 && hard_expect_phase(HX_HCENTRE, ZONE_HOUSES, 3, yr, mo) && !hard_hcentre_ok(NULL, NULL) && cash >= 5000) {
+                Money c2 = cash - 1000;   /* 1.1 B1: the 1985 health centre a year ahead (keeps 1,000 mk) */
+                if (build_hcentre(&c2)) { cash = c2 + 1000; done++; }
+            }
         }
         if (!s_tower && st->town_status >= TS_MARKET_TOWN && cash >= 2000 && s_mods >= 2) {
             s_tower = 1;
@@ -432,6 +460,9 @@ static void bot_month(void)
 static int s_nv_power, s_nv_water, s_nv_rights, s_nv_card, s_nv_com, s_nv_full[SVC_COUNT], s_nv_hole[REQ_COUNT];
 static int s_nv_nofactory;         /* PL2 item 10: 1 = this naive player never builds the element factory (debt check) */
 static int s_nv_broke;             /* months the treasury has been negative (the "TREASURY EMPTY" headlines) */
+static int s_nv_ot, s_nv_ot_svc = -1;   /* 1.1 B1: months the Cabinet has named the same overtime bill */
+static int s_nv_hc;                /* 1.1 B1: months the health-centre expectation has been in the paper */
+static int s_jitter;                /* B1 tuning: LAHIO_B1_JITTER=n (0 = the real runs) */
 static void bot_naive(void)
 {
     const CityStats *st = sim_stats();
@@ -490,6 +521,50 @@ static void bot_naive(void)
         for (s = first; s <= last; s++) if (!(s_used[m] & (1u << s))) break;
         if (s > last) { s = next_slot(first, last, m); if (s >= 0) { m = s / 32; s %= 32; } else s = last + 1; }   /* elsewhere */
         if (s <= last && build_slot(m, s)) { cash -= cost; done++; s_nv_hole[pr[k].req] = 0; }
+    }
+    /* 1.1 B1 (Normal/Hard; Easy keeps the 1.0 bot): the paper's Cabinet box (three lines) names a full service or an overtime
+       bill for three months running -> the building it names, if the treasury holds its price (a first-time player reads
+       the paper; the 1.0 bot only looked at the checklist and wanted 1,000 mk to spare) */
+    if (s_level != DIFF_EASY) {
+        static const u8 sl[SVC_COUNT][2] = { { SL_FIRE, SL_FIRE }, { SL_SCHOOL, SL_SCHOOL2 }, { SL_CLINIC, SL_CLINIC },
+                                             { SL_SAUNA, SL_SAUNA3 }, { SL_POLICE, SL_POLICE }, { SL_LIBRARY, SL_LIBRARY }, { SL_POST, SL_POST } };
+        Advice av[3];
+        int na = advice_collect(av, 3), q, sv = -1;
+        for (q = 0; q < na && sv < 0; q++) {
+            if (av[q].kind == ADV_OVERTIME) sv = (int)av[q].a;
+            else if (av[q].kind == ADV_HEALTH) sv = SVC_HEALTH;
+            else if (av[q].kind == ADV_SCHOOL) sv = SVC_SCHOOL;
+            else if (av[q].kind == ADV_SAUNA) sv = SVC_SAUNA;
+            else if (av[q].kind == ADV_EXPECT_LIBRARY) sv = SVC_LIBRARY;
+            else if (av[q].kind == ADV_EXPECT_CLINIC) sv = SVC_HEALTH;
+            else if (av[q].kind == ADV_EXPECT_HCENTRE) sv = SVC_COUNT;   /* the health centre (below) */
+        }
+        if (sv == SVC_COUNT) {   /* the National Board of Health's line: the town's health centre */
+            s_nv_hc = s_nv_hc + 1;
+            if (s_nv_hc >= 3 && !done) { Money c2 = cash; if (build_hcentre(&c2)) { cash = c2; done++; s_nv_hc = 0; } }
+            sv = -1;
+        } else s_nv_hc = 0;
+        s_nv_ot = sv >= 0 && sv == s_nv_ot_svc ? s_nv_ot + 1 : 1;
+        s_nv_ot_svc = sv;
+        if (sv >= 0 && s_nv_ot >= 3 && !done && cash >= g_bdefs[B_FIRE_STATION + sv].cost && bot_unlocked(B_FIRE_STATION + sv)) {
+            const BuildingDef *bd = &g_bdefs[B_FIRE_STATION + sv];
+            s = next_slot(sl[sv][0], sl[sv][1], -1);
+            if (s < 0 && bd->w == 1) {   /* its own slots are taken: a spare 1x1 slot of the neighbourhood (park, towers, wells) */
+                static const u8 spare[6] = { SL_PARK, SL_TOWER3, SL_TOWER2, SL_WELL7, SL_WELL6, SL_WELL5 };
+                for (m = 0; m < s_mods && s < 0; m++) {
+                    if (zone_kind(m) == ZONE_INDUSTRY) continue;
+                    for (q = 0; q < 6; q++) if (!(s_used[m] & (1u << spare[q]))) { s = m * 32 + spare[q]; break; }
+                }
+                if (s >= 0) {
+                    int x = M->mod[s / 32][0] + s_slot[s % 32].x, y = M->mod[s / 32][1] + s_slot[s % 32].y;
+                    s_used[s / 32] |= 1u << (s % 32);
+                    if (world_lot_at(x, y)) cmd("bulldoze %d %d %d %d", x, y, x, y);
+                    if (cmd("build %s %d %d", bd->key, x, y)) { cash -= bd->cost; done++; s_nv_ot = 0; }
+                    s = -1;
+                }
+            }
+            if (s >= 0 && build_slot(s / 32, s % 32)) { cash -= bd->cost; done++; s_nv_ot = 0; }
+        }
     }
     /* the element factory, a year and a half after the paper first counted blocks waiting for precast elements */
     if (!done && !s_factory && !s_nv_nofactory && s_nv_hole[REQ_ELEMENTS] >= 18 && bot_unlocked(B_ELEMENT_FACTORY) && cash >= 6000) {
@@ -962,7 +1037,7 @@ static const char *req_short(int req)
 {
     static const char *n[REQ_COUNT] = { "road", "power", "water", "tower", "elements", "school", "sauna", "health",
                                         "shop", "phone", "landval", "pollution", "customers", "workers", "mainroad", "heat",
-                                        "wood", "milk", "route", "library" };   /* 1.1 D1: + library */
+                                        "wood", "milk", "route", "library", "hcentre" };   /* 1.1 D1: + library; B1: + health centre */
     return req >= 0 && req < REQ_COUNT ? n[req] : "-";
 }
 
@@ -971,11 +1046,17 @@ static int s_month_no, s_bot_off;
 static int s_agr_desk, s_agr_auto;      /* PL2: clearing agreements signed by the President / by the Ministry (era messages) */
 static int s_prev_pend = -1, s_cards_y, s_campaigns_y;   /* P1: card counter (era tables) */
 static s32 s_opsum, s_prev_pop, s_emig;
+static Advice s_adv_tick;              /* 1.1 B1: the Cabinet's top line at the month tick, before the bot acts (what the
+                                          player reads that month; score 0 = none) */
 
 static void bal_begin(int style, int map, BalRun *out, int record)
 {
     char path[96];
     int steps, k;
+    {
+        const char *j = getenv("LAHIO_B1_JITTER");
+        s_jitter = j && s_level != DIFF_EASY ? atoi(j) : 0;
+    }
     memset(out, 0, sizeof(*out));
     out->style = style; out->map = map;
     for (k = 0; k < TS_COUNT; k++) out->status_month[k] = -1;
@@ -1010,7 +1091,7 @@ static void bal_begin(int style, int map, BalRun *out, int record)
                        s_level == DIFF_HARD ? " -difficulty hard" : s_level == DIFF_NORMAL ? " -difficulty normal" : "",   /* 1.1 D1 */
                        s_style_name[style], M->key, s_rec_tag, s_style_name[style], M->key, s_rec_tag);
     if (style == BS_NAIVE) {            /* PL2: the New Game default */
-        cmd("pol enable"); s_nv_power = s_nv_water = s_nv_rights = s_nv_card = s_nv_com = s_nv_broke = 0;
+        cmd("pol enable"); s_nv_power = s_nv_water = s_nv_rights = s_nv_card = s_nv_com = s_nv_broke = 0; s_nv_ot = 0; s_nv_ot_svc = -1; s_nv_hc = 0;
         memset(s_nv_full, 0, sizeof(s_nv_full)); memset(s_nv_hole, 0, sizeof(s_nv_hole));
     }
     if (style == BS_POLITICS) {         /* M1: politics on from the first month (replays with plain -seed) */
@@ -1107,7 +1188,9 @@ static void bal_months(BalRun *out, int n)
             ctab_row();
             out->nrows = y + 1;
         }
-        if (!s_bot_off) { if (s_style == BS_NAIVE) bot_naive(); else { bot_month(); bot_budget(); } }   /* 1.1 D1: bot_budget */
+        if (advice_collect(&s_adv_tick, 1) <= 0) s_adv_tick.score = 0;   /* 1.1 B1: before the bot answers it */
+        if (!s_bot_off && s_jitter && (months + s_jitter) % 7 == 0) {}   /* B1 tuning (LAHIO_B1_JITTER): skip a decision round */
+        else if (!s_bot_off) { if (s_style == BS_NAIVE) bot_naive(); else { bot_month(); bot_budget(); } }   /* 1.1 D1: bot_budget */
         if ((s_style == BS_RURAL || s_style == BS_MILL) && !s_bot_off) bot_rural();
         if ((s_style == BS_MILL || s_style == BS_METAL) && !s_bot_off) bot_complex();   /* M6 */
         if (months % 12 == 0 && months / 12 <= 20) cpx_row();                          /* M6 */
@@ -1571,6 +1654,10 @@ typedef struct {
     /* 1.1 D1: per-level runs (DESIGN_1_1 2.6) */
     u32 hash;                                                /* sim_hash at the end (Easy = the 1.0 values) */
     int sweden, emig_all, max_drop, below65, quiet, treas_med10, loanmax_run, warn[37];
+    u32 warnk[37];                                           /* 1.1 B1: Cabinet warning kinds (1 << ADV_*) per year */
+    int tax[37], dem_r[37];                                  /* 1.1 B1: residential tax and the R bar each January */
+    int hw[37], nov_peak[37], nov_sup[37], dark[37];         /* 1.1 B1: hard-winter forecast, 1 Nov power peak / supply, winter
+                                                                months with lots in the dark (by winter year) */
 } EraRun;
 
 static int era_buy_landmark(void)
@@ -1594,11 +1681,18 @@ static int era_buy_landmark(void)
    loans taken, house tiers, apartment tiers 1/2/3, commercial and industrial lots, status, cards that went up that
    year (+ election campaign cards), upkeep index, fuel, element output, clearing balance and the January headline.
    The planner's run is recorded as a replayable script (bal_planner_s7_era.txt) for the VM check. */
+static FILE *s_dbg;
 static void era_run_map(int style, int map, EraRun *e, const char *path, int record)
 {
     BalRun r;
     FILE *f = fopen(path, "w");
-    int y, k, lm_run = 0;
+    int y, k, k2, lm_run = 0;
+    const char *dbg = getenv("LAHIO_B1_DEBUG");
+    if (dbg && dbg[0] == '1' && map == 0) {
+        char dp[96];
+        str_printf(dp, sizeof(dp), "out/b1_months_%s_%d.txt", s_style_name[style], s_level);
+        s_dbg = fopen(dp, "w");
+    }
     s32 opsum;
     memset(e, 0, sizeof(*e));
     bal_begin(style, map, &r, record ? 2 : 0);
@@ -1615,6 +1709,7 @@ static void era_run_map(int style, int map, EraRun *e, const char *path, int rec
         const CityStats *st = sim_stats();
         e->pop[y] = st->population; e->money[y] = g_budget.money; e->status[y] = st->town_status;
         e->loan[y] = g_budget.loan; e->cards[y] = s_cards_y;
+        e->tax[y] = g_budget.tax_res; e->dem_r[y] = sim_demand(DEM_R)->value;
         e->a2[y] = st->lots_tier[ZONE_APARTMENTS][2]; e->a3[y] = st->lots_tier[ZONE_APARTMENTS][3];
         for (k = 0; k < BL_COUNT; k++) e->led[y][k] = g_budget.last_year[k] / 12;
         if (y && s_cards_y > e->max_cards) e->max_cards = s_cards_y;
@@ -1637,12 +1732,60 @@ static void era_run_map(int style, int map, EraRun *e, const char *path, int rec
         if (g_budget.money > 40000) era_buy_landmark();
         opsum = 0;
         for (k = 0; k < 12; k++) {
-            Advice av[1];
             bal_months(&r, 1);
+            if (s_dbg) {   /* 1.1 B1 debug (LAHIO_B1_DEBUG=1): monthly rows */
+                const CityStats *cs = sim_stats();
+                fprintf(s_dbg, "%d-%02d pop %5d money %7d loan %5d tax %2d R %+4d emptyH %4d emptyA %4d pw %5d/%5d short %3d water %5d/%5d"
+                        " short %3d net %+5d svc", sim_date()->year, sim_date()->month + 1, cs->population, g_budget.money, g_budget.loan,
+                        g_budget.tax_res, sim_demand(DEM_R)->value, empty_zone_tiles(ZONE_HOUSES), empty_zone_tiles(ZONE_APARTMENTS),
+                        cs->power_demand, cs->power_supply, cs->power_short_lots, cs->water_demand, cs->water_supply, cs->water_short_lots,
+                        budget_net_last());
+                for (k2 = 0; k2 < SVC_COUNT; k2++) fprintf(s_dbg, " %d%%", cs->svc_capacity[k2] ? cs->svc_load[k2] * 100 / cs->svc_capacity[k2] : 0);
+                {
+                    Advice t3[4];
+                    int n3 = advice_collect(t3, 4), q3;
+                    fprintf(s_dbg, " top");
+                    for (q3 = 0; q3 < n3; q3++) fprintf(s_dbg, " %s:%d", advice_kind_name(t3[q3].kind), (int)t3[q3].score);
+                }
+                fprintf(s_dbg, " nvot %d/%d ot", s_nv_ot, s_nv_ot_svc);
+                for (k2 = 0; k2 < SVC_COUNT; k2++) fprintf(s_dbg, " %d", (int)budget_overtime_mk(k2));
+                fprintf(s_dbg, " | %s %d", s_adv_tick.score ? advice_kind_name(s_adv_tick.kind) : "-", s_adv_tick.score);
+                if (hard_sweden()->active) fprintf(s_dbg, " | sweden jobs %d homes %d content %d pull %d (unemp %d/%d homeless %d vacant %d happy %d)",
+                    hard_sweden()->jobs, hard_sweden()->homes, hard_sweden()->content, hard_sweden()->pull, cs->unemployed, cs->workers,
+                    cs->homeless, cs->vacant, cs->avg_happiness);
+                if (sim_date()->month == 0) {   /* January: what holds each zone tier back (problem bits) */
+                    int z2, t2, i2, q2, cnt[REQ_COUNT], nl;
+                    for (z2 = ZONE_HOUSES; z2 <= ZONE_APARTMENTS; z2++)
+                        for (t2 = 1; t2 <= 2; t2++) {
+                            memset(cnt, 0, sizeof(cnt)); nl = 0;
+                            for (i2 = 1; i2 < g_world.lot_hi; i2++) {
+                                const Lot *l2 = &g_world.lots[i2];
+                                const BuildingDef *d2 = def_building(l2->def);
+                                if (l2->def == B_NONE || d2->cat != BCAT_ZONE || d2->zone != z2 || d2->tier != t2) continue;
+                                nl++;
+                                for (q2 = 0; q2 < REQ_COUNT; q2++) if (l2->problems & (1u << q2)) cnt[q2]++;
+                            }
+                            fprintf(s_dbg, "\n   %s T%d %d lots:", z2 == ZONE_HOUSES ? "houses" : "apts", t2, nl);
+                            for (q2 = 0; q2 < REQ_COUNT; q2++) if (cnt[q2]) fprintf(s_dbg, " %s %d", req_short(q2), cnt[q2]);
+                        }
+                }
+                fprintf(s_dbg, "\n");
+            }
             if (g_budget.money < e->min_money) e->min_money = g_budget.money;
             if (g_budget.loan > e->max_loan) e->max_loan = g_budget.loan;
             if (g_budget.loan > 0 || g_budget.money < 0) e->debt_months++;
-            if (advice_collect(av, 1) > 0 && av[0].score >= 500) e->warn[y]++;   /* 1.1 D1: months with a Cabinet warning (a
+            {   /* 1.1 B1: by the calendar year of the tick (the 1 January tick belongs to the new year) */
+                int wy = ICLAMP(sim_date()->year - 1955, 0, 36);
+                if (s_adv_tick.score >= 500) { e->warn[wy]++; e->warnk[wy] |= 1u << s_adv_tick.kind; }
+                if (sim_date()->month == 10) {   /* 1 November: the forecast and the winter peak against supply */
+                    SeasonPeak pk;
+                    season_peak(&pk);
+                    e->hw[wy] = season_forecast() == SFC_HARD; e->nov_peak[wy] = pk.power_peak; e->nov_sup[wy] = pk.power_supply;
+                }
+                if (season_is_winter() && sim_stats()->power_short_lots > 0) e->dark[season_winter_year(sim_date()->year, sim_date()->month) - 1955]++;
+            }   /* 1.1 B1: read at the month
+                                                     tick, before the bot answers (D1 read it after: a bot that reacts to the
+                                                     same numbers in the same month never "saw" a warning) */   /* 1.1 D1: months with a Cabinet warning (a
                                                      shortage, money, a waiting decree, winter, Sweden, an expectation due) */
             lm_run = g_budget.loan >= 40000 ? lm_run + 1 : 0;        /* 1.1 D1: stuck at LOAN_MAX (budget.cpp) */
             if (lm_run > e->loanmax_run) e->loanmax_run = lm_run;
@@ -1650,6 +1793,7 @@ static void era_run_map(int style, int map, EraRun *e, const char *path, int rec
         }
         e->opnet[y + 1] = opsum / 12;
     }
+    if (s_dbg) { fclose(s_dbg); s_dbg = NULL; }
     e->landmarks = era_landmark_count();
     e->loans = g_budget.loans_taken;
     e->agr_desk = s_agr_desk; e->agr_auto = s_agr_auto;
@@ -1696,6 +1840,14 @@ static void era_run_map(int style, int map, EraRun *e, const char *path, int rec
         for (y = 1; y <= 35; y++) {
             fprintf(f, "%d", 1955 + y);
             for (k = 0; k < BL_COUNT; k++) fprintf(f, " %5d", e->led[y][k]);
+            fprintf(f, "\n");
+        }
+        fprintf(f, "1.1 B1: tax %% / R bar each January; Cabinet warnings (score >= 500, months: kinds) per year\n");
+        for (y = 0; y < 35; y++) {
+            int q;
+            fprintf(f, "%d tax %2d R %+4d winter %s peak %5d/%5d dark %d warn %2d:", 1955 + y, e->tax[y], e->dem_r[y],
+                    e->hw[y] ? "HARD" : "ord ", e->nov_peak[y], e->nov_sup[y], e->dark[y], e->warn[y]);
+            for (q = 0; q < ADV_COUNT; q++) if (e->warnk[y] & (1u << q)) fprintf(f, " %s", advice_kind_name(q));
             fprintf(f, "\n");
         }
         {   /* P1: what holds the apartment blocks back (problem bits of the T1/T2 blocks at the end) */
@@ -1822,6 +1974,8 @@ static void lv_run(int map, int level)
     if (map == 0 && level == DIFF_EASY && s_er_done) { memcpy(s_lv[0][0], s_er, sizeof(s_er)); s_lv_ran[0][0] = 1; return; }
     s_level = level;
     for (k = 0; k < BS_COUNT; k++) {
+        const char *only = getenv("LAHIO_B1_ONLY");   /* B1 tuning: one style only (the others stay empty) */
+        if (only && only[0] && strcmp(only, s_style_name[s_lv_styles[k]]) != 0) { memset(&s_lv[map][level][k], 0, sizeof(EraRun)); continue; }
         if (map == 0 && level == DIFF_EASY) str_printf(path, sizeof(path), "out/balance_era_%s_s7.txt", s_style_name[s_lv_styles[k]]);
         else str_printf(path, sizeof(path), "out/balance_era_%s_%s_%s.txt", s_style_name[s_lv_styles[k]], s_maps[map].key,
                         level == DIFF_HARD ? "hard" : level == DIFF_NORMAL ? "normal" : "easy");
@@ -1898,7 +2052,8 @@ TEST(balance_levels_1955_1990)
                       "median treasury 1980-90 in months of gross expenses; quiet = years 1975-89 without a Cabinet warning (advice score\n"
                       ">= 500: shortages, money, a waiting decree, winter, Sweden, an expectation due); misses =\n"
                       "DESIGN_1_1 2.6 targets not met (winter targets wait for W1/B1)\n"
-                      "map style    level    1965   1975   1990 pop%% | money90    min | L (deep, mon) | town |  swe drop <65 | treas quiet | hash     misses\n");
+                      "1.1 B1: hw = hard winters 1955-89, dark = winter months with lots in the dark (power short)\n"
+                      "map style    level    1965   1975   1990 pop%% | money90    min | L (deep, mon) | town |  swe drop <65 | treas quiet | hw dark | hash     misses\n");
     for (mp = 0; mp < nmaps; mp++)
         for (lv = 0; lv < DIFF_COUNT; lv++) {
             lv_run(mp, lv);
@@ -1908,11 +2063,13 @@ TEST(balance_levels_1955_1990)
                 int nm = lv == DIFF_EASY ? 0 : lv_targets(s_lv_styles[k], lv, e, ez, ms, sizeof(ms));
                 if (lv == DIFF_EASY) ms[0] = 0;
                 misses += nm;
-                if (f) fprintf(f, "%-3s %-8s %-6s %6d %6d %6d %4d | %7d %6d | %d (%5d, %3d) | %4d | %2d.%d %4d %3d | %3d.%d %5d | %08x%s\n",
+                int hwn = 0, dkn = 0, yy;
+                for (yy = 0; yy < 35; yy++) { hwn += e->hw[yy]; dkn += e->dark[yy]; }
+                if (f) fprintf(f, "%-3s %-8s %-6s %6d %6d %6d %4d | %7d %6d | %d (%5d, %3d) | %4d | %2d.%d %4d %3d | %3d.%d %5d | %2d %4d | %08x%s\n",
                                s_maps[mp].key, s_style_name[s_lv_styles[k]], lvn[lv], e->pop[10], e->pop[20], e->pop[35],
                                lv_pct(e->pop[35], ez->pop[35]), e->money90, e->min_money, e->loans, e->max_loan, e->debt_months,
                                e->town_year, lv_pct(e->sweden * 10, e->pop[14]) / 10, lv_pct(e->sweden * 10, e->pop[14]) % 10,
-                               e->max_drop, e->below65, e->treas_med10 / 10, IABS(e->treas_med10) % 10, e->quiet, e->hash, ms);
+                               e->max_drop, e->below65, e->treas_med10 / 10, IABS(e->treas_med10) % 10, e->quiet, hwn, dkn, e->hash, ms);
                 if (lv != DIFF_EASY)
                     test_log("%s %-8s %-6s: pop 1990 %5d (%3d%% of Easy) money %7d min %7d loans %d town %d sweden %d drop %d%% treas %d.%d quiet %d%s",
                              s_maps[mp].key, s_style_name[s_lv_styles[k]], lvn[lv], e->pop[35], lv_pct(e->pop[35], ez->pop[35]), e->money90,
@@ -2116,7 +2273,7 @@ TEST(d1_sweden_years)
             int k, y = sim_date()->year;
             bal_months(&r, 1);
             for (k = 0; k < dr->nterms; k++) if (dr->terms[k].id == DT_SWEDEN) term = dr->terms[k].amount;
-            expect = (s32)((s64)st->population * g_diff[lv].sweden_permille * (3 - sw->reasons) / 3000);
+            expect = (s32)((s64)st->population * g_diff[lv].sweden_permille * (3 - sw->reasons) * (3 - sw->reasons) / 9000);   /* B1 */
             if (f) fprintf(f, "%s %d-%02d pop %5d unemp %4d homeless %3d vacant %4d happy %2d | active %d reasons %d (%d%d%d) pull %3d term %4d left %3d total %4d\n",
                            diff_name(lv), y, sim_date()->month ? sim_date()->month : 12, st->population, st->unemployed, st->homeless, st->vacant,
                            st->avg_happiness, sw->active, sw->reasons, sw->jobs, sw->homes, sw->content, sw->pull, term, sw->month, sw->total);
@@ -2191,4 +2348,35 @@ TEST(d1_era_expectations)
     CHECK(item74 > 0 && item75 > 0);
     CHECK_EQ(bit_75, 0);                          /* standing tiers keep it through the grace year */
     CHECK_EQ(bit_76, lack_76);                    /* after it, every uncovered tier-3 home has the library problem */
+}
+
+/* 1.1 B1 (HANDOFF D1 open issue): the lot query's decline countdown uses process_lot's threshold: a lot short only of power
+   and/or water counts down from decline_util_checks (Normal 8 weeks), any other cause from decline_checks (4). The naive
+   player's Normal town 1955-1975 has brownout winters to look at. */
+TEST(b1_decline_countdown_utility)
+{
+    BalRun r;
+    int m, i, util = 0, other = 0, bad = 0;
+    s_level = DIFF_NORMAL;
+    bal_begin(BS_NAIVE, 0, &r, 0);
+    for (m = 0; m < 20 * 12; m++) {
+        bal_months(&r, 1);
+        if (!season_is_winter()) continue;
+        for (i = 1; i < g_world.lot_hi; i++) {
+            const Lot *l = &g_world.lots[i];
+            LotInfo li;
+            if (l->def == B_NONE || l->growth >= 0 || def_building(l->def)->cat != BCAT_ZONE || !sim_query_lot(i, &li)) continue;
+            if (li.growth_threshold == -diff()->decline_util_checks) {
+                util++;
+                if (net_lot_power_state(i) != NLS_SHORT && net_lot_water_state(i) != NLS_SHORT) bad++;   /* must be a utility lot */
+            } else if (li.growth_threshold == -diff()->decline_checks) other++;
+            else bad++;
+        }
+    }
+    bal_end(&r);
+    s_level = DIFF_EASY;
+    test_log("winter lots counting down 1955-1975 (Normal naive): %d on the power/water threshold (%d weeks), %d on the other (%d), %d wrong",
+             util, diff()->decline_util_checks, other, diff()->decline_checks, bad);
+    CHECK(util > 0);
+    CHECK_EQ(bad, 0);
 }

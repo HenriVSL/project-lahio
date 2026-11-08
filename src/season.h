@@ -49,6 +49,8 @@ int  season_hard_rule(int wyear, int *fixed);   /* 1 = a hard winter may be roll
                                                  (stacking rules); *fixed = 1 for the fixed 1986-87 (tests) */
 
 /* ------------------------------------------------------------------ multipliers (sim hooks; all 100 on Easy) */
+int  season_winter_load(void);            /* 1.1 B1: this winter's load % (level base + electric heating; 0 on Easy) */
+int  season_electric_load(void);          /* 1.1 B1: its electric-heating part (0 before ELECTRIC_HEAT_FROM and on Easy) */
 int  season_power_pct(void);              /* power use x % now */
 int  season_heat_pct(void);               /* district heat use x % now */
 int  season_water_pct(void);              /* pumps' and wells' output % now (hard winter) */

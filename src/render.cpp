@@ -908,6 +908,7 @@ static int repair_one(const VRange *v, int flag)
 }
 
 static int s_mmReady;                     /* minimap colours (section "minimap") */
+static int s_mmStep;                      /* 1.1 B1: the next step of the colour build (mm_init_step) */
 
 /* 1.1 W2: the season to show (INI winter_art=0 / missing pages: art_set_season does nothing). Polled every frame;
    the swap re-uploads the art pages into their surfaces, then every cached picture made from the old pixels goes:
@@ -917,12 +918,13 @@ static void season_poll(void)
     int want, ch = season_changed();
     double t0;
     want = g_cfg.force_season >= 0 ? g_cfg.force_season : season_is_winter();
+    if (!g_cfg.winter_art) want = 0;          /* 1.1 B1: Settings "Winter scenery" off: summer art from the next frame */
     if (want == art_season() || !art_winter_available()) { art_set_season(want); return; }   /* (cancels a pending step) */
     t0 = time_ms();
     if (art_set_season(want)) {               /* 0 after step 1 (px swapped, VRAM unchanged): again next frame */
         int i;
         for (i = 0; i < 4; i++) if (s_ghost[i].img.w) { gfx_free_img(&s_ghost[i].img); memset(&s_ghost[i], 0, sizeof(Ghost)); }
-        s_mmReady = 0;
+        s_mmReady = 0; s_mmStep = 0;         /* 1.1 B1: minimap colours rebuilt in steps (render_minimap_prepare) */
         flush_all(0);
         log_printf("render: season %s (hook %d): art swap + cache flush %.1f ms", want ? "winter" : "summer", ch, time_ms() - t0);
     }
@@ -1205,32 +1207,52 @@ static PIX avg_color(int id)
     return gfx_rgb(sr / n, sg / n, sb / n);
 }
 
-static void mm_init(void)
+/* 1.1 B1: the minimap colours (averages of the 32-zoom sprites, ~0.4 ms each on the P2) are built in steps: after a
+   season swap ui.cpp asks render_minimap_prepare() each frame and it spends about 6 ms (the whole set cost 226 ms in
+   one frame on VM B, on top of the 135 ms page upload). Step 0 terrain, 1 roads/zones/lines, 2.. overlays, then the
+   buildings; render_minimap (first build, overlay switch) still does it all at once. */
+static int mm_init_step(double budget_ms)
 {
     int i, k, v;
+    double t0 = time_ms();
     static const char *const fk[FOREST_COUNT] = { "forest_mixed0", "forest_spruce0", "forest_birch0", "forest_pine0" };
-    for (i = 0; i < 3; i++) s_mmTer[TER_GRASS][i] = avg_color(s_idGrass[i]);
-    s_mmTer[TER_GRASS][3] = s_mmTer[TER_GRASS][0];
-    for (i = 0; i < 4; i++) s_mmTer[TER_FOREST][i] = avg_color(art_find(fk[i]));
-    for (i = 0; i < 4; i++) { s_mmTer[TER_ROCK][i] = avg_color(s_idRock[0]); s_mmTer[TER_WATER][i] = s_mmTer[TER_RIVER][i] = avg_color(s_idWater[0]); }
-    s_mmTer[TER_FIELD][0] = s_mmTer[TER_FIELD][2] = avg_color(s_idCrop);
-    s_mmTer[TER_FIELD][1] = s_mmTer[TER_FIELD][3] = avg_color(s_idPlough);
-    for (i = 0; i < 4; i++) s_mmTer[TER_MARSH][i] = avg_color(s_idMarsh);
-    s_mmRoad[0] = 0;
-    for (k = 1; k < ROAD_CLASS_COUNT; k++) s_mmRoad[k] = gfx_scale(avg_color(s_idRoad[k][5]), 230);
-    for (k = 1; k < ZONE_COUNT; k++) s_mmZone[k] = gfx_mix(s_mmTer[TER_GRASS][0], avg_color(s_idZone[k]), 128);
-    s_mmLine = gfx_rgb(90, 86, 80);
-    s_mmBg = gfx_rgb(40, 44, 40);
-    for (k = 0; k < OVR_COUNT; k++) for (v = 0; v < 8; v++) s_mmOvl[k][v] = avg_color(s_idOvl[k][v]);
-    for (i = 0; i < B_COUNT; i++) {
-        const BuildingDef *d = def_building(i);
-        if (!d->variants) { s_mmLot[i][0] = s_mmLot[i][1] = s_mmLot[i][2] = gfx_rgb(150, 140, 130); continue; }
-        s_mmLot[i][0] = avg_color(art_lot_sprite(d->key, 0, 0, ART_LOT_NORMAL, d->w, d->h));
-        s_mmLot[i][1] = gfx_scale(gfx_mix(s_mmLot[i][0], gfx_rgb(128, 128, 128), 160), 200);
-        s_mmLot[i][2] = avg_color(art_lot_sprite(d->key, 0, 0, ART_LOT_BUILDING, d->w, d->h));
-    }
-    s_mmReady = 1;
+    if (s_mmReady) return 1;
+    do {
+        if (s_mmStep == 0) {
+            for (i = 0; i < 3; i++) s_mmTer[TER_GRASS][i] = avg_color(s_idGrass[i]);
+            s_mmTer[TER_GRASS][3] = s_mmTer[TER_GRASS][0];
+            for (i = 0; i < 4; i++) s_mmTer[TER_FOREST][i] = avg_color(art_find(fk[i]));
+            for (i = 0; i < 4; i++) { s_mmTer[TER_ROCK][i] = avg_color(s_idRock[0]); s_mmTer[TER_WATER][i] = s_mmTer[TER_RIVER][i] = avg_color(s_idWater[0]); }
+            s_mmTer[TER_FIELD][0] = s_mmTer[TER_FIELD][2] = avg_color(s_idCrop);
+            s_mmTer[TER_FIELD][1] = s_mmTer[TER_FIELD][3] = avg_color(s_idPlough);
+            for (i = 0; i < 4; i++) s_mmTer[TER_MARSH][i] = avg_color(s_idMarsh);
+        } else if (s_mmStep == 1) {
+            s_mmRoad[0] = 0;
+            for (k = 1; k < ROAD_CLASS_COUNT; k++) s_mmRoad[k] = gfx_scale(avg_color(s_idRoad[k][5]), 230);
+            for (k = 1; k < ZONE_COUNT; k++) s_mmZone[k] = gfx_mix(s_mmTer[TER_GRASS][0], avg_color(s_idZone[k]), 128);
+            s_mmLine = gfx_rgb(90, 86, 80);
+            s_mmBg = gfx_rgb(40, 44, 40);
+        } else if (s_mmStep < 2 + OVR_COUNT) {
+            k = s_mmStep - 2;
+            for (v = 0; v < 8; v++) s_mmOvl[k][v] = avg_color(s_idOvl[k][v]);
+        } else {
+            const BuildingDef *d;
+            i = s_mmStep - 2 - OVR_COUNT;
+            d = def_building(i);
+            if (!d->variants) s_mmLot[i][0] = s_mmLot[i][1] = s_mmLot[i][2] = gfx_rgb(150, 140, 130);
+            else {
+                s_mmLot[i][0] = avg_color(art_lot_sprite(d->key, 0, 0, ART_LOT_NORMAL, d->w, d->h));
+                s_mmLot[i][1] = gfx_scale(gfx_mix(s_mmLot[i][0], gfx_rgb(128, 128, 128), 160), 200);
+                s_mmLot[i][2] = avg_color(art_lot_sprite(d->key, 0, 0, ART_LOT_BUILDING, d->w, d->h));
+            }
+            if (i == B_COUNT - 1) { s_mmReady = 1; s_mmStep = 0; return 1; }
+        }
+        s_mmStep++;
+    } while (time_ms() - t0 < budget_ms);
+    return 0;
 }
+static void mm_init(void) { while (!mm_init_step(1e9)) {} }
+int render_minimap_prepare(void) { return mm_init_step(6.0); }
 
 static PIX mm_tile(int x, int y, int ovl)
 {

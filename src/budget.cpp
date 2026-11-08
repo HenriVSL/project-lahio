@@ -69,6 +69,20 @@ int budget_overtime_pct(int svc)
     return (int)ICLAMP((s64)load * 100 / cap - (diff()->overtime_free - 100), (s64)100, (s64)OVERTIME_MAX_PCT);   /* 1.1 D1:
                                                                    overtime from OVERTIME_FREE_PCT (Easy) / 115 / 105 % */
 }
+Money budget_overtime_mk(int svc)
+{
+    s64 sum = 0;
+    int i, ot = budget_overtime_pct(svc);
+    if (ot <= 100 || svc < 0 || svc >= SVC_COUNT) return 0;
+    for (i = 1; i < g_world.lot_hi; i++) {
+        const Lot *l = &g_world.lots[i];
+        const BuildingDef *d;
+        if (l->def == B_NONE) continue;
+        d = def_building(l->def);
+        if (d->cat == BCAT_SERVICE && d->service == svc) sum += d->upkeep;
+    }
+    return (Money)(sum * upkeep_index() * (ot - 100) / 100 * budget_level_upkeep_pct() / 100 * g_budget.funding[svc] / (100 * 100));
+}
 #define RES_TAX_LV_BASE 30
 #define RES_TAX_DIV     17000
 #define GRANT_BASE      400         /* state grant to a village: GRANT_BASE - pop / GRANT_FADE_DIV */
@@ -211,7 +225,21 @@ void budget_month_end(void)
        plus an instalment of 1/60 of the debt (at least LOAN_INSTALMENT_MIN) whenever the treasury holds more than
        LOAN_INSTALMENT_FLOOR: a town hovering under 15,000 never paid anything back and the interest (8 per mille of
        30-45k) ate its whole surplus for 20 years (the mill bot: 4 loans in the 1960s, still 32k owed in 1990) */
-    if (g_budget.loan > 0 && g_budget.money > LOAN_INSTALMENT_FLOOR && !g_budget.unlimited) {
+    if (diff()->loan_surplus && g_budget.loan > 0 && g_budget.money > LOAN_INSTALMENT_FLOOR && !g_budget.unlimited) {
+        /* 1.1 B1 (Normal): the bank takes its instalment (1/60, as PL2, while the treasury holds 2,000) only out of the month's
+           operating surplus, never out of the till: the PL2 rule took 1/60 even in a losing month, so a struggling town sat
+           at 2,000 mk and the next bad winter pushed it under zero and into the next emergency loan */
+        Money opnet = 0, pay;
+        for (i = 0; i < BL_COUNT; i++) if (i != BL_CONSTRUCTION && i != BL_TIMBER) opnet += g_budget.cur[i];   /* the month's
+                                     operating balance: the books' lines + what politics booked (decrees, the neighbour's
+                                     utility premium), without construction and timber */
+        pay = IMIN(IMAX(LOAN_INSTALMENT_MIN, (g_budget.loan + 59) / 60), IMAX(0, opnet));
+        if (g_budget.money > 15000) pay = IMAX(pay, g_budget.money - 15000);
+        pay = IMIN(IMIN(pay, g_budget.loan), g_budget.money - LOAN_INSTALMENT_FLOOR);
+        g_budget.loan -= pay;
+        g_budget.money -= pay;
+        g_budget.cur[BL_INTEREST] -= pay;
+    } else if (!diff()->loan_surplus && g_budget.loan > 0 && g_budget.money > LOAN_INSTALMENT_FLOOR && !g_budget.unlimited) {
         Money pay = IMAX(LOAN_INSTALMENT_MIN, (g_budget.loan + 59) / 60);
         if (g_budget.money > 15000) pay = IMAX(pay, g_budget.money - 15000);
         pay = IMIN(IMIN(pay, g_budget.loan), g_budget.money - LOAN_INSTALMENT_FLOOR);
@@ -222,8 +250,8 @@ void budget_month_end(void)
     /* negative balance -> emergency loan after LOAN_AFTER_MONTHS */
     if (g_budget.money < 0 && !g_budget.unlimited) {
         g_budget.months_negative++;
-        if (g_budget.months_negative >= LOAN_AFTER_MONTHS && g_budget.loan < LOAN_MAX) {
-            Money amount = -g_budget.money + 10000;
+        if (g_budget.months_negative >= diff()->loan_after && g_budget.loan < LOAN_MAX) {   /* 1.1 B1: by level (Easy 6) */
+            Money amount = -g_budget.money + (Money)diff()->loan_cushion100 * 100;           /* 1.1 B1: Easy 10,000 */
             g_budget.loan += amount;
             g_budget.money += amount;
             g_budget.loans_taken++;

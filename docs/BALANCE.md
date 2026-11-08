@@ -290,3 +290,68 @@ Open for B1: the naive bot (first-time human) does not recover on Normal or Hard
 and skimps services: overtime); industry/metal/greedy/tax13 sit at the loan cap on Hard; quiet years (no Cabinet warning
 >= 500) Normal planner 13 of 15 (target <= 6): the planner-style bots coast on Normal after raising taxes; Sweden loss
 naive Normal 3.1 % (target 4-8: sweden_permille 3?).
+
+## 11. 1.1 B1: balance across levels (2026-11-08)
+
+User feedback on 1.0: "a bit easy", no real threats, late-game coasting. B1's job: make 1975-1990 demand decisions on
+Normal/Hard with the existing levers, and stop the first-time human (naive bot) drowning on Normal. Runs: `make -f
+tests/Makefile.mac T=balance_levels` (s7, ~25 s; `LAHIO_LEVELS_ALL=1` adds c3/r30, ~70 s, kept as
+`tests/out/balance_levels_summary_all.txt`); year tables `tests/out/balance_era_<style>_<map>_<level>.txt` now end
+with a per-year block (tax, R bar, the 1 November winter forecast with peak/supply, months in the dark, Cabinet
+warnings by kind). Tuning aids (test-only environment variables): `LAHIO_B1_ONLY=<style>` (one style),
+`LAHIO_B1_DEBUG=1` (monthly rows `tests/out/b1_months_<style>_<level>.txt`: money, loan, tax, R, empty zones,
+power/water, service loads, overtime bills, the Cabinet's top lines, Sweden reasons, January blockers per tier),
+`LAHIO_B1_JITTER=n` (the bot skips one decision round in seven: a cheap second sample of a chaotic run). Single runs
+swing a lot (one changed lever can move the naive bot from 2 to 5 loans); every value below was checked on s7, c3
+and r30 and with jitter 0-4.
+
+**Measurement fix.** D1 read the Cabinet after the bot had acted on the same month's numbers, so a bot that answers
+a shortage in the month it appears never "saw" a warning; and the 1 January tick was booked to the old year. Quiet
+years now count the Cabinet's top line at the month tick, before the bot answers, by calendar year.
+
+| change (level) | D1 -> B1 | why |
+|---|---|---|
+| Normal upkeep x / index cap (`g_diff`) | 105 % / 145 % (1978) -> **100 % / 135 % (1974)** | the structural +17 % only drowned the naive town (its taxes cannot follow); the planner raised taxes to 12 % and piled money anyway. Hard keeps 105 % / 150 % |
+| Normal power/water-only decline (`decline_util_checks`) | 6 -> **8** weeks (= Easy) | a three-month winter brownout cost two tiers, which a late town never regrows |
+| Normal emergency loan (`loan_after`, `loan_cushion100`, `loan_surplus`, budget.cpp) | 6 months, +10,000, 1/60 whenever the treasury holds 2,000 -> **9 months, +15,000, instalments only out of the month's operating surplus** | the PL2 instalment pushed a struggling town back under zero, so it took a loan every winter. Easy and Hard keep the 1.0 rule. The budget panel says "Emergency loan after 9" |
+| Sweden 1969-70 (`hard.cpp`) | pop x permille x (3 - reasons) / 3; Normal 2, Hard 4 | **x (3 - reasons)^2 / 9; Normal 5, Hard 7**: one missing reason costs 1/9, two 4/9 (careful towns lose ~1 %, neglected 5-8 %) |
+| Electric heating (`winter_grow_max`, season.cpp `season_winter_load`) | winter load fixed | **+1 point per winter from 1975** (Normal 15 -> 30 %, Hard 20 -> 35 % by 1989): the oil crisis put new homes on electric heat, so the winter exam grows through the late game; tooltips and the plant query show the total |
+| Normal hard winters | 20 % | **25 %** (Hard 33 %, fixed 1986-87 unchanged) |
+| 1985 expectation "Health for all" (new `REQ_HEALTH_CENTRE`, `HX_HCENTRE`) | - | tier-3 homes (houses and blocks) of a **Town** expect its health centre (one per 20,000); announced in the January 1984 paper, a year's grace, Cabinet line, checklist "Health centre (the town has 0, needs 1)". Market towns are exempt (they cannot build one). The 1980s clinics ran at 120-130 % in every planner town |
+| Cabinet: overtime (`ADV_OVERTIME`, `budget_overtime_mk`) | overtime only in the Budget panel | the biggest bill (fire, police, library, post) named with its cure, score 450 + mk; the school/clinic/sauna lines append "Overtime: 110 mk a month" and rank higher by the bill |
+| Cabinet: money lines | "Taxes and upkeep are on the budget page." | "A point of tax: ~240 mk a month."; the loan line adds "The bank lends for deficits, not suburbs."; **January-February: "The Treasury closed the books of 1979 with 1,900 mk more spent than earned (upkeep index 135 %, fuel ...)"** (`ADV_MONEY_YEAR`, > 2 % of expenses; the oil years and the index made readable while the treasury still covers them) |
+| Lot query decline countdown (sim.cpp `sim_query_lot`) | always `decline_checks` | power/water-only lots count down from `decline_util_checks` (HANDOFF D1 open issue) |
+
+Bot habits (Normal/Hard only; Easy keeps the 1.0 bots, so the 11 Easy hashes are unchanged): the **planner** builds a
+plant when its summer use reaches 80 % (1.0) or when the October-November winter peak exceeds supply (the Cabinet's
+winter line; D1 kept 80 % of the peak all year, never warned, plants idle), builds the health centre a year ahead,
+lowers taxes from 12 (was 18) months of expenses banked; the **naive** player reads the paper's Cabinet box (three
+lines): a school/clinic/sauna/overtime or expectation line three months running -> the building it names, if the
+treasury holds its price (spare 1x1 slots when its own are taken; was: only the checklist, with 1,000 mk to spare).
+Rejected after trials: the naive raising taxes from the money line (growth fell, 9k towns), the naive not expanding
+while in debt (more loans), cheaper loans on Hard (Hard bots stuck at the cap more often), overtime from 125 % on
+Normal (no effect).
+
+Results 1955-1990 (January 1990; L = emergency loans taken; quiet = years 1975-89 without a Cabinet warning >= 500;
+swe = Sweden loss in % of January 1969; hw = hard winters; dark = winter months with lots in the dark):
+
+| s7 | Easy pop / mk / L | Normal pop / mk / L | quiet | swe | hw / dark | Hard pop / mk / L | quiet | hw / dark |
+|---|---|---|---|---|---|---|---|---|
+| planner | 12,188 / 4,171 / 0 | 12,226 / 57,694 / 0, Town 1965 | **4** (D1 13) | 1.1 | 7 / 5 | 11,816 / 28,981 / 2 (cleared) | 10 | 12 / 17 |
+| politics | 12,228 / 7,100 / 0 | 12,098 / 57,942 / 0 | 11 | 1.1 | 4 / 3 | 11,914 / 28,136 / 0 | 3 | 12 / 11 |
+| dense | 18,974 / 15,353 / 0 | 18,519 / 34,736 / 0 | 0 | 6.2 | 7 / 11 | 15,978 / 17,357 / 2 | 0 | 16 / 45 |
+| mill | 11,991 / 70,507 / 0 | 11,916 / 51,804 / 0 | 10 | 1.2 | 4 / 7 | 12,043 / 29,850 / 3 | 2 | 8 / 42 |
+| metal | 12,230 / -375 / 1 | 12,010 / 52,869 / 0 | 10 | 1.1 | 7 / 7 | 11,818 / -3,386 / 7 | 0 | 6 / 35 |
+| **naive** | 18,120 / 27,095 / 1 | **17,244 / -4,438 / 4** (D1 9,773 / -84,328 / 6) | 0 | **5.2** | 6 / 36 | 7,956 / -274,806 / 5, at the cap | 0 | 10 / 18 |
+
+Normal on the other maps: planner quiet 6 (c3) / 4 (r30), 0 loans, treasury 5.7-7.2 months; naive c3 16,733 / -9,767 /
+3 loans (135 % of Easy), r30 9,972 / -11,043 / 3 (103 %; Easy r30 naive already takes 4); Sweden naive 4.9-7.5 %,
+planners 1.1 %. Jitter samples, naive Normal: 3-4 loans, 1990 money -11k..+3k, pop 89-161 % of Easy. Hard: the decent
+styles finish recoverable on s7/c3 (planner 1-2 loans cleared, politics 0); r30 Hard politics and dense sit at the
+loan cap from the 1970s (planner-class guard is checked on s7 only, as D1).
+
+Targets (DESIGN_1_1 2.6) still missed: naive Normal loans 3-4 (target <= 2; it repays from surplus and ends near
+zero, not drowning) and no visible population crisis (its crisis is money and winter brownouts: 23-43 dark winter
+months); mill/metal/politics quiet 10-11 on s7 (built-out, politics off, rich: the threats they face are winters,
+the expectations and the oil years, which they pre-empt; 4-8 on c3/r30); Hard naive/greedy/tax13 at the loan cap (as
+D1); dense c3 Normal treasury 17 months.

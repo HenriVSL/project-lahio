@@ -116,16 +116,25 @@ int season_hard_rule(int wy, int *fixed)
 }
 
 /* ------------------------------------------------------------------ multipliers */
+/* 1.1 B1: the winter load of the coming/current winter: the level's base + electric heating (+1 point per winter from
+   ELECTRIC_HEAT_FROM up to winter_grow_max; Easy 0), so the winter exam grows through the late game */
+int season_winter_load(void)
+{
+    const DiffParams *d = D();
+    int wy = season_winter_year(cur_year(), cur_month());
+    return d->winter_load_pct + (d->winter_grow_max > 0 ? ICLAMP(wy - ELECTRIC_HEAT_FROM + 1, 0, (int)d->winter_grow_max) : 0);
+}
+int season_electric_load(void) { return season_winter_load() - D()->winter_load_pct; }
 int season_power_pct(void)
 {
     if (!season_is_winter()) return 100;
-    return 100 + D()->winter_load_pct + (season_hard_now() ? D()->hard_load_pct : 0);
+    return 100 + season_winter_load() + (season_hard_now() ? D()->hard_load_pct : 0);
 }
 int season_heat_pct(void) { return season_power_pct(); }     /* the table has one winter load for power and heat */
 int season_water_pct(void) { return season_hard_now() ? ICLAMP(D()->hard_water_pct, 10, 100) : 100; }
 int season_peak_pct(void)
 {
-    int p = 100 + D()->winter_load_pct + (season_forecast() == SFC_HARD && D()->hard_winter_pct > 0 ? D()->hard_load_pct : 0);
+    int p = 100 + season_winter_load() + (season_forecast() == SFC_HARD && D()->hard_winter_pct > 0 ? D()->hard_load_pct : 0);
     return IMAX(p, season_power_pct());
 }
 int season_fire_pct(void) { return season_is_winter() ? D()->fire_winter_pct : 100; }

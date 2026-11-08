@@ -323,7 +323,8 @@ the heat plant, no abandoned art for industry kinds/services/complexes, only exi
   `st.winter`: ploughed roads (asphalt `asph_w`, markings hidden, slush ridge, packed edges, snow banks from the road
   distance, so autotiles still match), gravel = packed snow with ruts, rails dark on a grey bed, fields white with
   furrows and frozen ditches, marsh with sedge tussocks, shores with dry reeds in the ice, car parks ploughed with
-  banks. Rivers/rapids stay open (dark water, shimmer kept); bridge water is ice. Generic fallback `winter_ground()`:
+  banks. Rivers/rapids stay open (dark water, shimmer kept); bridge water is open dark water (1.1 B1, `g_bridge_water`:
+  the current under a bridge keeps a strait or a river open, so one sprite serves both). Generic fallback `winter_ground()`:
   `SNOW_GROUND` / `PACKED_GROUND` / `KEEP_GROUND` tables (unknown summer ground keys are listed by the render).
 - **Flat marks** (procedural): winter copies with darker colours (same pixels drawn): cursors (`CUR_COLS_W`), zone
   tints (`ZONE_TINTS_W`), zone-view dashes (`ZONEV_COLS_W`), overlay dither colours (`_ovr_winter`, NETC_WET darker).
@@ -335,8 +336,9 @@ the heat plant, no abandoned art for industry kinds/services/complexes, only exi
   `cursors_<z>_winter.png` (cursor marks + lot ghosts on snow), the M2 towns, review sheets; `cmp_*.png` summer|winter.
 - **Engine** (src/art.cpp): `art_set_season()` re-uses the same surfaces. Plan A keeps the other season as a per-page
   delta (runs of differing pixels: 3,887 KB instead of 9,609 KB); step 1 swaps the resident pages' px (VM B 37 ms),
-  step 2 on the next frame uploads them (31 pages at z64: 128-141 ms; 8 at z32: 32 ms); the other zoom's pages catch
-  up when they become resident. Plan B (process memory over `ART_HEAP_BUDGET_KB` = 40 MB) reads pages from disk
+  step 2 uploads them (31 pages at z64: 128-141 ms in one frame in W2; 1.1 B1 spreads it over frames of <= 70 ms,
+  `ART_SWAP_FRAME_MS`, the chunk flush after the last page; 8 at z32: 32 ms); the other zoom's pages catch up when they
+  become resident. The minimap colours (226 ms in one frame) are rebuilt ~6 ms a frame (`render_minimap_prepare`). Plan B (process memory over `ART_HEAP_BUDGET_KB` = 40 MB) reads pages from disk
   (~850 ms on VM B); Plan C = INI `winter_art=0` or missing pages. Process memory on VM B: 19.8 MB before the art,
   30.0 MB with it (1.0), 34.0 MB with the winter delta. render.cpp polls `season_is_winter()` (or `-winter` /
   `-summer`, script `artseason 1|0|-1`) each frame and flushes chunks, ghost copies and minimap colours after a swap

@@ -276,6 +276,10 @@ static u32 expect_reqs(int zone, int tier, const Ctx *c, int keep, Checklist *cl
         if (ph == 1 || (ph == 2 && keep)) {
             met = 1;
             it.why = (u8)(ph == 1 ? 3 : 4); it.need = hard_expect_year(k);
+        } else if (k == HX_HCENTRE) {   /* 1.1 B1: town-wide, the town's health centres against its size */
+            s32 have, need;
+            met = hard_hcentre_ok(&have, &need);
+            if (cl) { it.have = have; it.need = need; it.why = 0; }
         } else {
             svc = hard_expect_svc(k);
             src = net_cov_src_map(svc)[c->cell];
@@ -1273,6 +1277,10 @@ int sim_query_lot(int lot, LotInfo *out)
     if (d->cat == BCAT_ZONE) {
         Ctx ctx;
         ctx_make(&ctx, x0, y0, x1, y1);
+        if (l->growth < 0) {   /* 1.1 B1: the countdown uses process_lot's threshold (power/water only: the slower one) */
+            u32 cur = eval_reqs(d->zone, d->tier, lot, &ctx, 1, NULL) | industry_lot_unmet(lot, 0);
+            if (cur && !(cur & ~SIM_UTIL_BITS)) out->growth_threshold = -diff()->decline_util_checks;
+        }
         out->score = score_at(d->zone, &ctx, out->terms, &out->nterms);
         if (d->upgrade_to != B_NONE && def_building(d->upgrade_to)->variants) {
             eval_reqs(d->zone, d->tier + 1, lot, &ctx, 0, &out->next);
@@ -1328,7 +1336,7 @@ static int main_problem(u32 problems)
 {
     static const u8 order[] = { REQ_ROAD, REQ_POWER, REQ_WATER, REQ_WATER_TOWER, REQ_SCHOOL, REQ_SAUNA, REQ_HEALTH,
                                 REQ_SHOP, REQ_PHONE, REQ_LAND_VALUE, REQ_LOW_POLLUTION, REQ_CUSTOMERS, REQ_WORKERS,
-                                REQ_ELEMENTS, REQ_MAIN_ROAD, REQ_HEAT, REQ_LIBRARY };   /* 1.1 D1 */
+                                REQ_ELEMENTS, REQ_MAIN_ROAD, REQ_HEAT, REQ_LIBRARY, REQ_HEALTH_CENTRE };   /* 1.1 D1, B1 */
     int k;
     for (k = 0; k < COUNTOF(order); k++) if (problems & (1u << order[k])) return def_req_growc(order[k]);
     return GROWC_OK;

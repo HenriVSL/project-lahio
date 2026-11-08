@@ -28,6 +28,7 @@ static void pl2_init(void)
     if (!inited) { world_init(); sim_init(); tools_init(); traffic_init(); inited = 1; }
 }
 
+static int s_pl2_level = DIFF_EASY;     /* 1.1 B1: the level of the next pl2_new_city (the level replays) */
 static void pl2_new_city(u32 seed, int preset, int railway, int politics)
 {
     MapGenParams p;
@@ -38,6 +39,7 @@ static void pl2_new_city(u32 seed, int preset, int railway, int politics)
     mapgen_generate(&p);
     sim_default_settings(&s);
     s.seed = seed; s.politics = politics;
+    s.difficulty = s_pl2_level;
     sim_new_city(&s);
     tools_reset();
     tools_script_reset();
@@ -225,5 +227,12 @@ TEST(pl2_era_scripts_replay)
     FILE *log = fopen("out/pl2_replay.txt", "w");
     replay("bal_planner_s7_era.txt", log);
     replay("bal_naive_s7_era.txt", log);
+    s_pl2_level = DIFF_NORMAL;               /* 1.1 B1: the level scripts (VM: -difficulty normal|hard) */
+    replay("bal_planner_s7_era_normal.txt", log);
+    replay("bal_naive_s7_era_normal.txt", log);
+    s_pl2_level = DIFF_HARD;
+    replay("bal_planner_s7_era_hard.txt", log);
+    replay("bal_naive_s7_era_hard.txt", log);
+    s_pl2_level = DIFF_EASY;
     if (log) fclose(log);
 }

@@ -545,3 +545,45 @@ learned while building. Append your own section when you finish a task.
 - s7 1990: planner Normal 12,268 / 67,886 mk 0 loans, Hard 11,790 / 37,387 3 loans cleared; naive Normal −84k 6 loans,
   Hard at loan cap. **Open for B1:** naive doesn't recover on Normal; quiet years 13/15 (target ≤ 6) → coasting persists;
   Sweden loss 3.1% (target 4-8%); lot-query decline countdown ignores the slower utility-only decline.
+
+## B1 balance across levels + 1.1 polish (done) — BALANCE.md section 11, tests/test_b1.cpp, tests/out/balance_levels_summary*.txt
+- Measurement: quiet years now read the Cabinet at the month tick (before the bot answers) by calendar year; year tables
+  end with tax / R / winter forecast + peak / dark months / warning kinds. Tuning aids: `LAHIO_B1_ONLY`, `LAHIO_B1_DEBUG`,
+  `LAHIO_B1_JITTER` (test-only; single runs are chaotic, check s7/c3/r30 + jitter before believing a number).
+- Normal: upkeep x100 % (was 105), index cap 135 % / 1974 (145 / 1978), power/water-only decline 8 weeks (6), emergency
+  loan after 9 months, +15,000, instalments only from the month's surplus (`loan_after`, `loan_cushion100`,
+  `loan_surplus`; Easy/Hard = 1.0 rule), hard winters 25 % (20). All levels with winter: electric heating +1 point per
+  winter from 1975 (`winter_grow_max`, `season_winter_load()`). Sweden squared (one missing reason 1/9, two 4/9), Normal
+  5 / Hard 7 per mille. 1985 expectation: tier-3 homes of a Town need its health centre (`REQ_HEALTH_CENTRE`,
+  `HX_HCENTRE`, `hard_hcentre_ok()`, one per 20,000; market towns exempt), paper 1984/1985, Cabinet line, checklist.
+- Cabinet (advice.cpp, all levels; read-only, Easy hashes unchanged): `ADV_OVERTIME` (biggest fire/police/library/post
+  bill + its cure; school/clinic/sauna lines append the bill), `ADV_MONEY_YEAR` (Jan-Feb: last year's books in the red),
+  money lines say what a point of tax brings; `budget_overtime_mk()`.
+- Lot query decline countdown uses the utility threshold for power/water-only lots (sim.cpp `sim_query_lot`).
+- Winter polish: Settings "Winter scenery" checkbox (INI `winter_art`; off = summer art from the next frame, on again =
+  snow at once if it was loaded at start, else "(next start)"); bridge water open in winter (art_terrain
+  `g_bridge_water`, 5 winter pages regenerated, summer pages and headers byte-identical); snowflake drawn by the date
+  Dec-Mar (darker in a hard winter) + "Winter (hard)" in the date tooltip; Guide page names electric heating and the
+  Normal loan.
+- Season swap: step 2 uploads pages in frames of <= 70 ms (`ART_SWAP_FRAME_MS`, art.cpp; cancel re-uploads pages already
+  sent), chunk flush after the last page; minimap colours rebuilt ~6 ms a frame (`render_minimap_prepare`, render.cpp:
+  the full rebuild was a 226 ms frame right after the 135 ms upload frame; BENCH20K 800 z64 max frame 238 -> 87 ms).
+  VM B benches (PERF.md 8): BENCH20K + PT2_1992 at 800/1024 x z64/z32, 4 swaps each: max frame 75-100 ms, avg 59.2-59.6;
+  `winter_art=0` tested: no swaps, 59.82 fps. Settings checkbox seen in the menu self-test (VM B, 7 shots, 0 failures).
+- Results s7 1990: planner Normal 12,226 / 57,694 mk, 0 loans, quiet 4 (D1 13); naive Normal 17,244 / -4,438, 4 loans
+  (D1 9,773 / -84,328, 6); Sweden naive 5.2 %, planner 1.1 %; Hard planner 2 loans cleared. VM B replays (planner/naive x
+  Normal/Hard, Easy planner) = Mac exactly. VC6 /W3 0 warnings.
+- Open: naive Normal 3-4 loans (target 2; ends near zero, repaying); mill/metal/politics s7 quiet 10-11 (rich, politics
+  off, pre-empt everything; 4-8 on c3/r30); Hard naive/greedy/tax13 and r30 Hard politics/dense at the loan cap.
+
+## B1 balance across levels + 1.1 polish (done) — BALANCE.md §11, PERF.md §8, tests/test_b1.cpp, tests/out/b1/
+- Normal: upkeep ×100%, index cap 135% (1974); utility-only decline 8 weeks; emergency loan after 9 months red, +15,000,
+  instalments from surplus only. Hard keeps 1.0 loan rule, upkeep 105%, cap 150%.
+- Late pressure (Normal/Hard): electric heating +1 pt winter load per winter from 1975; Normal hard winters 25%; 1985
+  expectation: tier-3 homes of a Town need its health centre (announced 1984, grace). Cabinet: biggest overtime bill, "books
+  closed in the red", tax-point value. Sweden pull squared (5‰ Normal, 7‰ Hard). Decline countdown fixed.
+- Winter polish: Settings "Winter scenery" (winter_art), winter_art=0 tested, open water under bridges, snowflake by the date,
+  season swap ≤ 70 ms per frame, minimap rebuild spread (~6 ms/frame).
+- s7 1990: planner Normal 0 loans, quiet years 4 (was 13); naive Normal −4.4k, 4 loans (target ≤ 2, repaying); planner Hard 2
+  loans cleared; mill/metal/politics still 10-11 quiet years on s7. Benches with season swaps: worst 75-100 ms, 59.2-59.6 fps.
+- Cosmetic (orchestrator saw): a stray ":" before the date in the top bar (old, since M1).

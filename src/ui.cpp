@@ -678,6 +678,7 @@ static void mm_update(int force)
     /* T13: world edits rebuild the image a few rows per frame (a full rebuild cost 13-24 ms in one frame);
        the VRAM copy keeps the old picture until the last row is done, then one upload. ui_update runs at
        frame start (before any blit), so the upload doesn't wait behind queued blits (T05). */
+    if (!render_minimap_prepare()) return;   /* 1.1 B1: after a season swap the colours come first, ~6 ms a frame */
     if (s_mm_row < 0) {
         static int mm_season;                /* 1.1 W2: the art season changed: snow colours, a few rows per frame */
         if (g_world.serial == s_mm_serial && mm_season == art_season()) return;
@@ -760,8 +761,19 @@ static void compose_top(void)
     /* date */
     text_fmt_date(date, sizeof(date), year, sim_date()->month);
     w = txtw(date, FONT_BODY_DARK) + 10;
+    if (season_is_winter()) w += 10;          /* 1.1 B1: a snowflake by the date, December-March (drawn, no glyph art) */
     draw3h(&s3_cal, x, 2, w);
     txt(x + 6, 2, date, FONT_BODY_DARK);
+    if (season_is_winter()) {
+        int fx = x + w - 9, fy = 9, q;
+        PIX c = season_hard_now() ? gfx_rgb(40, 70, 150) : gfx_rgb(70, 110, 170);
+        gfx_fill(fx - 3, fy, fx + 4, fy + 1, c);   /* arms: horizontal, vertical (fills are end-exclusive) */
+        gfx_fill(fx, fy - 3, fx + 1, fy + 4, c);
+        for (q = 1; q <= 2; q++) {                 /* the diagonals, a pixel at a time */
+            gfx_fill(fx - q, fy - q, fx - q + 1, fy - q + 1, c); gfx_fill(fx + q, fy + q, fx + q + 1, fy + q + 1, c);
+            gfx_fill(fx - q, fy + q, fx - q + 1, fy + q + 1, c); gfx_fill(fx + q, fy - q, fx + q + 1, fy - q + 1, c);
+        }
+    }
     top_field_rect(0, x, w);
     x += w + 6;
     /* funds */
@@ -1328,6 +1340,7 @@ static int tip_build(int h)
         tip_add(a, FONT_BODY_DARK, NULL, 0);
         hard_note(HN_LEVEL, a, sizeof(a));        /* 1.1 D1: "Difficulty: Normal" (the Guide, F4 Tab, lists the levers) */
         tip_add(a, FONT_BODY_GREY, NULL, 0);
+        if (season_is_winter()) tip_add(season_hard_now() ? "Winter (hard)" : "Winter", FONT_BODY_GREY, NULL, 0);   /* 1.1 B1 */
         {   /* PL1: "Next: Market town at 3,000 (you have 2,750)" + bar */
             int pct = advice_progress(b, sizeof(b), NULL);
             tip_add(b, advice_rights_waiting() ? FONT_BODY_RED : FONT_BODY_GREY, NULL, 0);
@@ -1699,7 +1712,7 @@ static void panel_budget(int x, int y, int w, int h)
             txt_fit(x + 6, yy, b, FONT_BODY_RED, w - 12);
         } else if (g_budget.months_negative > 0) {
             str_printf(b, sizeof(b), "In the red for %d month%s. Emergency loan after %d.", g_budget.months_negative,
-                       g_budget.months_negative == 1 ? "" : "s", LOAN_AFTER_MONTHS);
+                       g_budget.months_negative == 1 ? "" : "s", (int)diff()->loan_after);   /* 1.1 B1: by level */
             txt_fit(x + 6, yy, b, FONT_BODY_RED, w - 12);
         } else txt(x + 6, yy, "No loans. The bank manager is polite.", FONT_BODY_GREY);
         spr(S.seal, x + w - 6 - 17, y + h - 6 - 17);

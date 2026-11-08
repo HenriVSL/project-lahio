@@ -94,6 +94,18 @@ static void short_power_lot(s16 *px, s16 *py)
     }
 }
 
+/* 1.1 B1: " Overtime: 110 mk a month." appended to a service line; returns the monthly overtime bill (budget.h) */
+static s32 ot_note(char *t, int size, int svc)
+{
+    char a[32];
+    Money mk = budget_overtime_mk(svc);
+    int len = (int)strlen(t);
+    if (mk < 20) return 0;
+    fmt_m(a, sizeof(a), mk);
+    str_printf(t + len, size - len, " Overtime: %s a month.", a);
+    return (s32)IMIN(mk, (Money)300);
+}
+
 static int svc_pct(int svc)
 {
     const CityStats *cs = sim_stats();
@@ -118,15 +130,28 @@ const char *advice_kind_name(int kind)
 {
     static const char *const nm[ADV_COUNT] = { "none", "power_short", "water_short", "money_debt", "rights_waiting",
         "money_falling", "power_near", "apt_elements", "apt_tower", "heat", "shops", "school", "health", "sauna", "jobs",
-        "homes", "rights_near", "winter_power", "winter_heat", "sweden", "expect_library", "expect_clinic" };   /* 1.1 D1 */
+        "homes", "rights_near", "winter_power", "winter_heat", "sweden", "expect_library", "expect_clinic",   /* 1.1 D1 */
+        "overtime", "expect_hcentre", "money_year" };   /* 1.1 B1 */
     return (kind >= 0 && kind < ADV_COUNT) ? nm[kind] : "?";
+}
+
+/* 1.1 B1: "A point of tax: ~240 mk a month." (last month's residential + business tax per point; the money
+   lines name the cure the way the overtime lines do), or the 1.0 pointer to the budget page */
+static void tax_point_hint(char *buf, int size)
+{
+    char a[32];
+    Money pt = (g_budget.tax_res > 0 ? g_budget.last[BL_TAX_RES] / g_budget.tax_res : 0) +
+               (g_budget.tax_bus > 0 ? g_budget.last[BL_TAX_BUS] / g_budget.tax_bus : 0);
+    if (pt < 20 || g_budget.tax_res >= 15) { str_copy(buf, "Taxes and upkeep are on the budget page.", size); return; }
+    fmt_m(a, sizeof(a), pt);
+    str_printf(buf, size, "A point of tax: ~%s a month.", a);
 }
 
 static int collect_all(Advice *out, int max)
 {
     const CityStats *cs = sim_stats();
     const NetStats *pw = net_stats(NET_POWER);
-    char t[ADV_TEXT], a1[32], a2[32], a3[48];
+    char t[ADV_TEXT], a1[32], a2[32], a3[48], hint[80];
     int n = 0, pct, lots, ts;
     s16 x, y;
     s32 res;
@@ -173,12 +198,13 @@ static int collect_all(Advice *out, int max)
     if (!g_budget.unlimited) {
         if (g_budget.money < 0 || g_budget.loan > 0) {
             fmt_m(a1, sizeof(a1), g_budget.money < 0 ? -g_budget.money : g_budget.loan);
+            tax_point_hint(hint, sizeof(hint));
             if (g_budget.money < 0)
                 str_printf(t, sizeof(t), "The Treasury reports, with the greatest respect, that the town is %s in the red. The bank "
-                           "manager has started sending Christmas cards. Taxes and upkeep are on the budget page.", a1);
+                           "manager has started sending Christmas cards. %s", a1, hint);
             else
                 str_printf(t, sizeof(t), "The Treasury reports, with the greatest respect, an emergency loan of %s, at a rate nobody "
-                           "will mention. Taxes and upkeep are on the budget page.", a1);
+                           "will mention. The bank lends for deficits, not suburbs. %s", a1, hint);
             n = add(out, n, max, ADV_MONEY_DEBT, AGO_BUDGET, 900, -1, -1, g_budget.money, g_budget.loan, t);
         } else if (net < 0 && (s64)g_budget.money < (s64)(-net) * 12) {
             int months = (int)(g_budget.money / IMAX(1, -net));
@@ -188,6 +214,24 @@ static int collect_all(Advice *out, int max)
                        "coffers are empty by %s %d. Taxes, upkeep or growth: the choice is, of course, the President's.", a1,
                        text_month_name(when % 12), when / 12);
             n = add(out, n, max, ADV_MONEY_FALLING, AGO_BUDGET, 700 + IMAX(0, 12 - months) * 10, -1, -1, net, months, t);
+        }
+    }
+    /* 1.1 B1: January-February, the year's books closed in the red (more than 2 % of the expenses): the upkeep index and the
+       oil bills made readable where a treasury still covers them (money_falling only speaks a year before empty) */
+    if (!g_budget.unlimited && sim_date()->month <= 1 && sim_date()->total_months >= 12) {
+        Money ln = 0, ex = 0;
+        int k;
+        for (k = 0; k < BL_COUNT; k++) {
+            if (k == BL_CONSTRUCTION || k == BL_TIMBER) continue;
+            ln += g_budget.last_year[k];
+            if (g_budget.last_year[k] < 0) ex -= g_budget.last_year[k];
+        }
+        if (ln < 0 && (s64)(-ln) * 50 >= (s64)ex) {
+            fmt_m(a1, sizeof(a1), -ln); fmt_m(a2, sizeof(a2), -g_budget.last_year[BL_FUEL]);
+            str_printf(t, sizeof(t), "The Treasury closed the books of %d with %s more spent than earned (upkeep index %d%%, fuel %s). "
+                       "Taxes, upkeep or growth: the choice is, naturally, the President's.", cur_year() - 1, a1,
+                       budget_upkeep_index(), a2);
+            n = add(out, n, max, ADV_MONEY_YEAR, AGO_BUDGET, 520 + (s32)IMIN((s64)(-ln) * 1000 / IMAX(1, ex), (s64)200), -1, -1, ln, ex, t);
         }
     }
     /* town status */
@@ -262,21 +306,38 @@ static int collect_all(Advice *out, int max)
         fmt_i(a1, sizeof(a1), cs->svc_load[SVC_SCHOOL]); fmt_i(a2, sizeof(a2), cs->svc_capacity[SVC_SCHOOL]);
         str_printf(t, sizeof(t), "The Board of Education counts %s pupils for %s desks. Lessons are held in shifts and, on "
                    "Thursdays, in the corridor.", a1, a2);
-        n = add(out, n, max, ADV_SCHOOL, AGO_SERVICES, 300 + IMIN((pct - 100) * 5, 400), -1, -1, cs->svc_load[SVC_SCHOOL], cs->svc_capacity[SVC_SCHOOL], t);
+        n = add(out, n, max, ADV_SCHOOL, AGO_SERVICES, 300 + IMIN((pct - 100) * 5, 400) + ot_note(t, sizeof(t), SVC_SCHOOL), -1, -1, cs->svc_load[SVC_SCHOOL], cs->svc_capacity[SVC_SCHOOL], t);
     }
     pct = svc_pct(SVC_HEALTH);
     if (pct > 100) {
         fmt_i(a1, sizeof(a1), cs->svc_load[SVC_HEALTH]); fmt_i(a2, sizeof(a2), cs->svc_capacity[SVC_HEALTH]);
         str_printf(t, sizeof(t), "The Medical Board reports %s residents for clinics built for %s. It recommends patience, and "
                    "another clinic.", a1, a2);
-        n = add(out, n, max, ADV_HEALTH, AGO_SERVICES, 280 + IMIN((pct - 100) * 5, 400), -1, -1, cs->svc_load[SVC_HEALTH], cs->svc_capacity[SVC_HEALTH], t);
+        n = add(out, n, max, ADV_HEALTH, AGO_SERVICES, 280 + IMIN((pct - 100) * 5, 400) + ot_note(t, sizeof(t), SVC_HEALTH), -1, -1, cs->svc_load[SVC_HEALTH], cs->svc_capacity[SVC_HEALTH], t);
     }
     pct = svc_pct(SVC_SAUNA);
     if (pct > 100) {
         fmt_i(a1, sizeof(a1), cs->svc_load[SVC_SAUNA]); fmt_i(a2, sizeof(a2), cs->svc_capacity[SVC_SAUNA]);
         str_printf(t, sizeof(t), "The public saunas serve %s bathers with benches for %s. The Sauna Society notes that the queue "
                    "is now longer than the l\xf6yly.", a1, a2);
-        n = add(out, n, max, ADV_SAUNA, AGO_SERVICES, 270 + IMIN((pct - 100) * 5, 400), -1, -1, cs->svc_load[SVC_SAUNA], cs->svc_capacity[SVC_SAUNA], t);
+        n = add(out, n, max, ADV_SAUNA, AGO_SERVICES, 270 + IMIN((pct - 100) * 5, 400) + ot_note(t, sizeof(t), SVC_SAUNA), -1, -1, cs->svc_load[SVC_SAUNA], cs->svc_capacity[SVC_SAUNA], t);
+    }
+    {   /* 1.1 B1: the biggest overtime bill, named with its cure (PL2's overtime was only in the Budget panel: a first-time
+           player never saw why the one police station cost three times its upkeep). Score >= 500 from 50 mk a month.
+           Fire, police, library, post; the school, clinic and sauna lines above carry their bill (score + the bill) */
+        int sv, best = -1;
+        Money mk, best_mk = 0;
+        for (sv = 0; sv < SVC_COUNT; sv++) {   /* schools, clinics and saunas say it in their own lines (ot_note) */
+            if (sv == SVC_SCHOOL || sv == SVC_HEALTH || sv == SVC_SAUNA) continue;
+            if ((mk = budget_overtime_mk(sv)) > best_mk) { best_mk = mk; best = sv; }
+        }
+        if (best >= 0 && best_mk >= 20) {
+            const BuildingDef *bd = &g_bdefs[B_FIRE_STATION + best];
+            fmt_m(a1, sizeof(a1), best_mk); fmt_m(a2, sizeof(a2), bd->cost); lc_name(a3, sizeof(a3), bd->name);
+            str_printf(t, sizeof(t), "The %s staff work overtime at %d%% of capacity: %s a month on top of the upkeep. Another %s "
+                       "(%s), the unions point out, would cost less.", a3, svc_pct(best), a1, a3, a2);
+            n = add(out, n, max, ADV_OVERTIME, AGO_SERVICES, 450 + (s32)IMIN(best_mk, (Money)350), -1, -1, best, best_mk, t);
+        }
     }
     /* work: unemployment sends people to Sweden */
     if (cs->workers > 0 && cs->unemployed * 100 >= cs->workers * 6 && cs->unemployed >= 40) {
@@ -293,10 +354,11 @@ static int collect_all(Advice *out, int max)
         n = add(out, n, max, ADV_JOBS, AGO_PEOPLE, 300 + IMIN((int)(cs->unemployed * 1000 / cs->workers), 400), -1, -1, cs->unemployed, gone, t);
     }
     {   /* 1.1 D1: the Sweden recruiters' missing reason, the era expectations a year ahead and in their grace (hard.h) */
-        static const u8 kd[3] = { ADV_SWEDEN, ADV_EXPECT_LIBRARY, ADV_EXPECT_CLINIC }, go[3] = { AGO_PEOPLE, AGO_SERVICES, AGO_SERVICES };
+        static const u8 kd[4] = { ADV_SWEDEN, ADV_EXPECT_LIBRARY, ADV_EXPECT_CLINIC, ADV_EXPECT_HCENTRE },
+                        go[4] = { AGO_PEOPLE, AGO_SERVICES, AGO_SERVICES, AGO_SERVICES };
         s32 sc, rs;
         int k;
-        for (k = 0; k < 3; k++)
+        for (k = 0; k < 4; k++)
             if (hard_advice(k, t, sizeof(t), &sc, &rs)) n = add(out, n, max, kd[k], go[k], sc, -1, -1, rs, 0, t);
     }
     return n;
