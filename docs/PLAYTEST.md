@@ -99,3 +99,12 @@ All orchestrator recommendations accepted:
     sim history, problem streaks).
 11. **Positive: the humour works** ("I like the humor in the game so far. Good job. Dry finnish humor"). Keep the tone
     (THEME 6.1: affectionate, deadpan, about the system) in all new text: newspaper advice, hindsight, guide, hints.
+
+## Session 3 (user, 2026-11-09, real hardware, 1.1 RC1)
+- "It is okay. The winter is nice. Very late game is easy still but this provides good challenge; 87 and up is quite easy.
+  But that is okay." → 1.1 approved for release.
+- **Power plants**: the user's Koivukoski (1996, Regional centre, 58,193 pop) needed **32 coal plants** (16,000 units at 500
+  each); nuclear is locked behind City (100k) and peat/nuclear have no art. Request: stronger plants. → **1.2 "power"
+  update** (user chose: ship 1.1 now): large coal/oil station (3x3, ~2,000), peat plant (~1,000, domestic fuel), nuclear at
+  Regional centre from 1977 (~4,000-5,000) with the "Eastinghouse" East/West/compromise choice, rebalance so a 60k city needs
+  ~6-10 plants. Save: Shared/release/1.1rc1 save/.

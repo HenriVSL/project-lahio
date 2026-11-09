@@ -777,10 +777,7 @@ def make_frame():
         cv.put(w - 1, 0, KEY)
         cv.put(0, h - 1, KEY)
         cv.put(w - 1, h - 1, KEY)
-        # binder rings at the left
-        for yy in (3, 7):
-            cv.put(2, yy, P['ink'])
-            cv.put(2, yy + 1, P['pencil'])
+        # (1.1: the binder-ring dots read as a stray ':' at 1x; removed)
     make3h(S, 'cal_plate', cal, 4, 2, 16, 12)
 
     # demand gauge well (R C I) 19 x 13 + full-height bar columns 4 x 11 (blit parts)

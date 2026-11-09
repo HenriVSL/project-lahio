@@ -50,7 +50,7 @@ typedef s32 Money;               /* WHOLE markka (mk), +-2.1e9. budget.cpp keeps
 #define GAME_TITLE    "Project L\xE4hi\xF6"   /* Latin-1 a/o umlauts (window caption; the UI fonts have them); working title was KAUPUNKI */
 #define GAME_TITLE_ASCII "Project Lahio"      /* logs, bench reports, text files */
 #define GAME_TAGLINE  "A Finnish town, 1955-1990"
-#define GAME_VERSION  "1.1 RC1"  /* shown as "Version ..." (title, pause menu, top bar); 1.0 released 2026-11-05 */
+#define GAME_VERSION  "1.1"      /* shown as "Version ..." (title, pause menu, top bar); 1.0 released 2026-11-05 */
 #define PATH_LEN      260        /* = MAX_PATH; for portable headers */
 #define NAME_LEN      24         /* president / town / district names incl. NUL */
 
