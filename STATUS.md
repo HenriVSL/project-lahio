@@ -49,7 +49,7 @@ Owner session: 86box-86. Started 2026-11-02.
 - R1 rename (2026-11-03): KAUPUNKI -> **Project Lähiö**; `dev/lahio`, `lahio.exe`, `LAHIO.INI` (migrates `KAUPUNKI.INI` once), new title screen logo. Saves unchanged (`KAUP`, `*.KAU`).
 - **Sound: no further work** (user plays on mute; existing module stays as is; add later only if clearly valuable).
 
-## Version 1.1 "Harder times" (started 2026-11-08) — docs/PLAN_1_1.md, docs/DESIGN_1_1.md, docs/TASKS_1_1.md
+## Version 1.1 "Harder times" (released 2026-11-09, tag v1.1) — docs/PLAN_1_1.md, docs/DESIGN_1_1.md, docs/TASKS_1_1.md
 - Design check done (DESIGN_1_1.md, DESIGN 15). Running: D1 difficulty levels, W1 winter simulation, W2 winter art
   (mockups for the user first). Then balance across levels, perf/real-hardware bench, polish, user play-test, release 1.1.
 - Winter art mockups **approved as is** by the user (2026-11-08).
