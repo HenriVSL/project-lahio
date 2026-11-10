@@ -4,6 +4,7 @@
    month end: fuel on BL_FUEL ("Fuel (oil, coal)"), the bond on BL_INTEREST ("Loans and interest"). */
 #include "common.h"
 #include "trade.h"
+#include "power.h"       /* 1.2 S1: the coal power station, the Eastern reactor's clearing import */
 #include "era.h"
 #include "industry.h"
 #include "politics.h"
@@ -240,6 +241,8 @@ void trade_month(void)
     for (g = 0; g < TG_COUNT; g++) T.delivered[g] = east[g];
     oil_plants = count_def(B_OIL_PLANT);
     coal_plants = count_def(B_COAL_PLANT);
+    coal_plants += POWER_STATION_COAL_X * count_def(B_COAL_STATION);   /* 1.2 S1: a station burns four small plants' coal (2,000 /
+                                                                          500 units); peat plants buy no imported fuel at all */
     /* ---- fuel (mk, BL_FUEL): oil plants at the oil index, coal plants' surcharge from 1974 */
     {
         s64 fuel = (s64)oil_plants * OIL_PLANT_FUEL * T.oil_index / 100;
@@ -253,7 +256,8 @@ void trade_month(void)
         T.exports_east = et;
         T.oil_town = (s32)((s64)pop * oil_rate(sim_date()->year) / 1000 * T.clearing_oil / 100);
         T.oil_plants = oil_plants * OIL_PLANT_UNITS * T.clearing_oil / 100;
-        T.balance += et - T.oil_town - T.oil_plants;
+        T.reactor_import = power_clearing_import();   /* 1.2 S1: an Eastern reactor under construction (0 otherwise) */
+        T.balance += et - T.oil_town - T.oil_plants - T.reactor_import;
         T.tolerance = 3 * et + 200;
         T.lost_month = 0;
         if (T.balance > T.tolerance) {
@@ -273,7 +277,7 @@ void trade_month(void)
         if (T.shortfall_months > 0) T.shortfall_months--;
         if (A.offer && ++A.offer_months >= (pol_on() ? TRADE_OFFER_WAIT_POL : TRADE_OFFER_MONTHS) && !(pol_on() && era_card_pending()))
             sign(TL_STANDARD, 1);
-    } else { T.exports_east = T.oil_town = T.oil_plants = 0; }
+    } else { T.exports_east = T.oil_town = T.oil_plants = 0; T.reactor_import = 0; }
     /* ---- the Western multiplier */
     T.exports_west = wt;
     T.west_index += rng_range(&s_rng, -2, 2) + (west_baseline_at(nm) - T.west_index) / 6;
@@ -360,6 +364,7 @@ int trade_balance_tip(char lines[][80], int max)
     str_printf(lines[n++], 80, "Clearing balance %s (keep within %s either way)", a, b);
     text_fmt_int(a, sizeof(a), T.exports_east); text_fmt_int(b, sizeof(b), T.oil_town + T.oil_plants);
     if (n < max) str_printf(lines[n++], 80, "Exports %s, oil %s a month (clearing oil price %d%%)", a, b, T.clearing_oil);
+    if (n < max && T.reactor_import) { text_fmt_int(a, sizeof(a), T.reactor_import); str_printf(lines[n++], 80, "The reactor: %s a month while it is built", a); }   /* 1.2 S1 */
     if (n < max) {
         if (T.lost_month) { text_fmt_int(a, sizeof(a), T.lost_month); str_printf(lines[n++], 80, "Surplus: %s credit lost this month", a); }
         else if (T.deficit_months >= DEFICIT_AFTER) str_printf(lines[n++], 80, "Deficit: clearing orders " TEXT_MINUS "10%%%s", pol_on() ? ", the East cools" : "");

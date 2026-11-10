@@ -45,6 +45,7 @@ void uinews_to_ticker(void);        /* newspaper off: the main headline goes to 
 void uiguide_open(void);
 int  uiguide_active(void);
 void uiguide_close(void);
+void uiguide_set_page(int p);           /* 1.2: script "guide 1 PAGE" */
 int  uiguide_input(const InputState *in);
 int  uiguide_key(int vk);
 void uiguide_draw(void);

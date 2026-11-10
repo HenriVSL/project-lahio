@@ -39,6 +39,7 @@
 #include "traffic.h"
 #include "politics.h"
 #include <time.h>
+#include "power.h"         /* 1.2 S1 */
 
 struct SaveFile {
     u8  *buf;
@@ -554,6 +555,7 @@ int save_game_to(SaveFile *sf, const SaveMeta *meta)
     era_save(sf);                            /* M7: chunks ERA + TRAD */
     hard_save(sf);                           /* 1.1 D1: chunk HARD (Sweden 1969-70) */
     season_save(sf);                         /* 1.1 W1: chunk SEAS (forecast, hard winter, winter costs) */
+    power_save(sf);                          /* 1.2 S1: chunk POWR (the reactor letter; only once answered) */
     save_end_chunk(sf);                      /* in case a module left one open */
     end_off = sf->size;
     save_begin_chunk(sf, "END ", 1);
@@ -606,6 +608,7 @@ int load_game_from(SaveFile *sf, SaveMeta *meta_out)
     era_load(sf);                            /* M7: chunks ERA + TRAD; missing = fresh for the save's date */
     hard_load(sf);                           /* 1.1 D1: chunk HARD; missing = fresh */
     season_load(sf);                         /* 1.1 W1: chunk SEAS; missing = fresh (no forecast) */
+    power_load(sf);                          /* 1.2 S1: chunk POWR; missing (1.0/1.1 saves) = not decided */
     if (!load_ok(sf)) {                      /* validated file whose optional chunk was malformed */
         set_err("error: an optional chunk (TRAF/NET/SIMX/BUDX) failed to load");
         world_new(MAP_DEF_W, MAP_DEF_H);

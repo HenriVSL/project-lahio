@@ -190,6 +190,7 @@ const char *text_place_reason(int place)
     case REJ_CPX_NO_GIFT:       return "No gift is waiting";
     case REJ_CPX_ROAD:          return "Needs a road within 2 tiles";
     case REJ_NO_RAILWAY:        return "No railway on this map: the station has nothing to stand by";   /* PL2 */
+    case REJ_REACTOR:           return "The reactor question awaits the President's answer (the desk)";   /* 1.2 S1 */
     case REJ_CPX_MAIN_ROAD:     return "No railway here: needs a main road within 2 tiles";             /* PL2 */
     }
     return "?";
@@ -435,7 +436,8 @@ int text_event(char *buf, int size, const SimEvent *e, int *severity)
     case SE_UNLOCK:
         if (e->b == 1) return str_printf(buf, size, "Now available: %s.", (e->a > 0 && e->a < ROAD_CLASS_COUNT) ? g_roads[e->a].name : "a new road");
         if (e->b == 2) return str_printf(buf, size, "Now available: %s zones.", text_zone_name(e->a));
-        if (advice_purpose((int)e->a) && (e->a == B_HEAT_PLANT || e->a == B_ELEMENT_FACTORY || e->a == B_WATER_TOWER || e->a == B_SEWAGE_WORKS))
+        if (advice_purpose((int)e->a) && (e->a == B_HEAT_PLANT || e->a == B_ELEMENT_FACTORY || e->a == B_WATER_TOWER || e->a == B_SEWAGE_WORKS ||
+                                          e->a == B_COAL_STATION || e->a == B_PEAT_PLANT || e->a == B_NUCLEAR_PLANT))   /* 1.2 S1 */
             return str_printf(buf, size, "Now available: %s. %s.", def_building(e->a)->name, advice_purpose((int)e->a));   /* PL1 */
         return str_printf(buf, size, "Now available: %s.", def_building(e->a)->name);
     case SE_EMIGRATION:

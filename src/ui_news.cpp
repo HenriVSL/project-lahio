@@ -7,6 +7,7 @@
 #include "common.h"
 #include "ui_m7.h"
 #include "ui_pol.h"
+#include "power.h"        /* 1.2 S1: the Guide's power page */
 #include "ui.h"
 #include "art.h"
 #include "gfx.h"
@@ -30,7 +31,8 @@ static int s_open, s_kind, s_ids_ok;
 static s16 s_cabr[NEWS_CAB][4];
 static int s_ncabr, s_mx = -1, s_my = -1;
 static int s_guide;                       /* the Guide page is open */
-static int s_guide_page;                  /* 1.1 D1: 0 = the handbook, 1 = the Presidency (difficulty) */
+static int s_guide_page;                  /* 1.1 D1: 0 = the handbook, 1 = the Presidency (difficulty); 1.2 S1: 2 = power */
+#define GUIDE_PAGES 3
 static int s_masthead, s_rule, s_seal, s_decree;
 static NewsIssue s_issue;                 /* a copy: the era may build the next issue while this one is shown */
 static char s_reel[12][96];
@@ -335,6 +337,7 @@ void uinews_draw(void)
 void uiguide_open(void) { s_guide = 1; s_guide_page = 0; }
 int  uiguide_active(void) { return s_guide; }
 void uiguide_close(void) { s_guide = 0; }
+void uiguide_set_page(int p) { if (p >= 0 && p < GUIDE_PAGES) s_guide_page = p; }   /* 1.2: script "guide 1 PAGE" */
 int  uiguide_input(const InputState *in)
 {
     if (!s_guide) return 0;
@@ -345,7 +348,8 @@ int  uiguide_key(int vk)
 {
     if (!s_guide) return 0;
     if (vk == VK_ESCAPE || vk == VK_RETURN || vk == VK_SPACE || vk == VK_F4) s_guide = 0;
-    if (vk == VK_TAB || vk == VK_RIGHT || vk == VK_LEFT || vk == VK_NEXT || vk == VK_PRIOR) s_guide_page ^= 1;   /* 1.1 D1 */
+    if (vk == VK_TAB || vk == VK_RIGHT || vk == VK_NEXT) s_guide_page = (s_guide_page + 1) % GUIDE_PAGES;   /* 1.1 D1; 1.2 S1: 3 pages */
+    if (vk == VK_LEFT || vk == VK_PRIOR) s_guide_page = (s_guide_page + GUIDE_PAGES - 1) % GUIDE_PAGES;
     return 1;
 }
 
@@ -382,6 +386,39 @@ void uiguide_draw(void)
     y += 14;
     uix_text_c(X, W, y, "Issued by the Cabinet. For the President's eyes only; the President, naturally, knows all this already.", FONT_BODY_GREY);
     y += 12; hrule(X + 10, y, W - 20); y += 8;
+    if (s_guide_page == 2) {   /* 1.2 S1 (DESIGN_1_2 4): the power plants, in the Power menu order */
+        PowerGuideRow pr[8];
+        static const int cx[6] = { 0, 160, 200, 256, 330, 420 };   /* name, size, units, price, upkeep, when (note below) */
+        int n = power_guide_rows(pr, 8), i, xx = X + 14, ww = W - 28;
+        uix_text(xx, y, "THE POWER WORKS", FONT_HEAD); y += 15;
+        uix_text_fit(xx, y, "Every plant feeds the buildings its lines and neighbours touch. Units: one tier-2 house uses one.",
+                     FONT_BODY_GREY, ww);
+        y += 16;
+        {   static const char *const hd[6] = { "Plant", "Size", "Units", "Price", "Upkeep/month", "When" };
+            for (i = 0; i < 6; i++) uix_text(xx + cx[i], y, hd[i], FONT_BODY_RED);
+        }
+        y += 12; hrule(xx, y, ww); y += 4;
+        for (i = 0; i < n && y + 24 <= Y + H - 40; i++) {
+            int f = pr[i].unlocked ? FONT_BODY_DARK : FONT_BODY_GREY;
+            uix_text_fit(xx + cx[0], y, pr[i].name, f, cx[1] - cx[0] - 4);
+            uix_text(xx + cx[1], y, pr[i].size, f);
+            uix_text(xx + cx[2], y, pr[i].units, f);
+            uix_text(xx + cx[3], y, pr[i].cost, f);
+            uix_text(xx + cx[4], y, pr[i].upkeep, f);
+            uix_text_fit(xx + cx[5], y, pr[i].unlock, pr[i].unlocked ? FONT_BODY_GREEN : FONT_BODY_GREY, ww - cx[5]);
+            y += 11;
+            uix_text_fit(xx + 10, y, pr[i].note, FONT_BODY_GREY, ww - 10);
+            y += 14;
+        }
+        hrule(xx, y, ww); y += 6;
+        if (power_guide_note(a, sizeof(a))) {
+            char ln[3][160];
+            int nl = wrap_wide(a, FONT_BODY_DARK, ww, ln, 3);
+            for (i = 0; i < nl; i++, y += 11) uix_text(xx, y, ln[i], FONT_BODY_DARK);
+        }
+        uix_text_c(X, W, Y + H - 14, "Tab: back to the handbook  " TEXT_DOT "  Click or Esc to put it down", FONT_BODY_GREY);
+        return;
+    }
     if (s_guide_page) {     /* 1.1 D1: "Presidency: Normal" - the level's table (DESIGN_1_1 2.1), every lever named */
         char ln[20][100];
         int n = hard_level_lines(ln, 20), i;
@@ -395,7 +432,7 @@ void uiguide_draw(void)
             str_printf(b, sizeof(b), "%s %s", GLYPH_BULLET, ln[i]);
             uix_text_fit(X + 14, y, b, FONT_BODY_DARK, W - 28);
         }
-        uix_text_c(X, W, Y + H - 14, "Tab: back to the handbook  " TEXT_DOT "  Click or Esc to put it down", FONT_BODY_GREY);
+        uix_text_c(X, W, Y + H - 14, "Tab: the power works  " TEXT_DOT "  Click or Esc to put it down", FONT_BODY_GREY);   /* 1.2 S1 */
         return;
     }
     ybot = Y + H - 18 - 4 * 11 - 10;

@@ -6,6 +6,7 @@
    the city seed, saved), so the city simulation's own RNG stream is never touched. */
 #include "common.h"
 #include "politics.h"
+#include "power.h"       /* 1.2 S1: peat plants (Rural approval) */
 #include "civic.h"
 #include "industry.h"
 #include "sim.h"
@@ -270,6 +271,7 @@ static void compute_blocs(void)
     if (apt_share > 30) reason(BLOC_RURAL, PR_CONCRETE, -(apt_share - 30) / 5);
     reason(BLOC_RURAL, PR_EAST, (east - 50) / 8);
     reason(BLOC_RURAL, PR_POLLUTION, -IMIN(10, civic_lake_reason() / 6));   /* M5: sewage in the fishing lakes */
+    reason(BLOC_RURAL, PR_POWER, power_peat_rural());   /* 1.2 S1: peat plants buy from the bogs (0 without one) */
 
     /* Industrialists (Patruunat): business tax, power, export orders, roads, labour */
     reason(BLOC_INDUSTRIALISTS, PR_BASE, 50);
@@ -390,6 +392,14 @@ static void apply_list(const PolFx *list)
 {
     int i;
     for (i = 0; i < POL_FX_MAX; i++) if (list[i].kind != FX_NONE) apply_fx(&list[i]);
+}
+
+/* 1.2 S1: effects from outside the decree/letter/card tables (the reactor letter, power.cpp); nothing when politics is off */
+void politics_apply_fx_list(const PolFx *list)
+{
+    if (!P.enabled || !list) return;
+    apply_list(list);
+    recompute_mods();
 }
 
 /* ------------------------------------------------------------------ getters */

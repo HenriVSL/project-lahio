@@ -152,7 +152,11 @@ enum { B_NONE,
        B_HEAT_PLANT, B_SEWAGE_WORKS,
        /* M7 landmarks / money sinks (era.cpp: authority, tourism, sauna diplomacy; ART.md 3.1 keys), all unique */
        B_CONCERT_HALL, B_TV_TOWER, B_SKI_JUMP, B_PRES_SAUNA, B_FRIENDSHIP_STATUE,
+       /* 1.2 S1 "Power" (DESIGN_1_2 2): the large coal power station 3x3 (Town 1962). Appended so saved def ids keep their
+          values; the other power plants sit at B_COAL_PLANT..B_NUCLEAR_PLANT (DEF_IS_PLANT covers both places) */
+       B_COAL_STATION,
        B_COUNT };
+#define DEF_IS_PLANT(id) (((id) >= B_COAL_PLANT && (id) <= B_NUCLEAR_PLANT) || (id) == B_COAL_STATION)
 
 typedef struct {
     const char *key;          /* stable ASCII id + art sprite stem ("house_t2", "coal_plant") */

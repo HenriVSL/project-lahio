@@ -38,6 +38,7 @@ static const ArtSheet art_world_sheets[] = {
     { "art\\world28_64.bmp", ZOOM_64, 1, NULL, 0 },
     { "art\\world29_64.bmp", ZOOM_64, 1, NULL, 0 },
     { "art\\world30_64.bmp", ZOOM_64, 1, NULL, 0 },
+    { "art\\world31_64.bmp", ZOOM_64, 1, NULL, 0 },
     { "art\\world0_32.bmp", ZOOM_32, 1, NULL, 0 },
     { "art\\world1_32.bmp", ZOOM_32, 1, NULL, 0 },
     { "art\\world2_32.bmp", ZOOM_32, 1, NULL, 0 },
@@ -47,7 +48,7 @@ static const ArtSheet art_world_sheets[] = {
     { "art\\world6_32.bmp", ZOOM_32, 1, NULL, 0 },
     { "art\\world7_32.bmp", ZOOM_32, 1, NULL, 0 },
 };
-#define ART_WORLD_SHEET_COUNT 39
+#define ART_WORLD_SHEET_COUNT 40
 
 /* 1.1 W2 winter art: per art_world_sheets index, the winter copy of that page (same size, same alpha, the
    same piece rects) or NULL for a season-invariant page.  art.cpp swaps the pixels at the season change. */
@@ -84,6 +85,7 @@ static const char *const art_world_winter[] = {
     "art\\world28_64w.bmp",
     "art\\world29_64w.bmp",
     "art\\world30_64w.bmp",
+    "art\\world31_64w.bmp",
     "art\\world0_32w.bmp",
     "art\\world1_32w.bmp",
     "art\\world2_32w.bmp",

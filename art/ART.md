@@ -28,6 +28,7 @@ python3 art/gen_art.py --cached --mockups # the same from art/.cache (no renderi
 | `sheet_world_<z>.h` | per zoom: `art_pieces_<z>[]` (ArtPiece: page, x, y, w, h, dx, dy) + `art_sprites_<z>[]` (ArtPSpr: name, w, h, ax, ay, hx, hy, first piece, count) |
 | `art_world.h` | the index: includes the two headers, `art_world_sheets[]` (the pages, `spr` NULL), `ART_WORLD_SHEET_COUNT`, `art_world_sets[]` (one ArtPieceSet per zoom) (src/art.h convention) |
 | `preview/*.png` | review sheets (`tiles_`, `roads_`, `misc_`, `pipes_zonev_`, `b_<key>_`, `build_ground_`) and mockups `town_64.png`, `town_64_houses.png`, `town_64_overlay.png`, `town_32.png`; F2: `town_64_water.png` / `town_32_water.png` (water overlay with wet/short/dry pipes), `yards_64.png` (industrial band with 1x1 yards), `town_64_zones.png` / `town_32_zones.png` (persistent zone view); M4: `m2_<group>_<64|32>.png` (one sheet per Milestone-2 group) and the 1960s-70s transformation mockups `town_m2_64.png` (concrete suburb, health centre, shopping centre, bus at its stop, heat plant), `town_m2_mill_64.png` (paper mill by the rapids, company housing, church, forestry edge), `town_m2_ind_64.png` (industry kinds, station, Valtion Metalli, farms), `town_m2_south_64.png` (old wooden district being replaced, civic services, sewage works, a house fire), `town_m2_farms_64.png`, `town_m2_32.png`, `town_m2_overview_32.png` |
+| `art_power.py`, `power_preview.py` | 1.2 A1 power plants (section 3.2) and their preview/scale-scene tool |
 | `art_m2_res.py`, `art_m2_ind.py`, `art_m2_cplx.py`, `art_m2_misc.py` | M4 Milestone-2 buildings by group (apartments/commercial/civic; industry kinds/utilities; complexes/gifts/landmarks; transport/farms/forestry/fire/bus): `ENTRIES`, `KEY_ALIASES`, `GROUPS`, `extra_jobs()`, `extra_procedural()` (gen_art.py "Milestone-2 modules") |
 | `art_m2_common.py` | shared imports for those modules, `add_colours()` (new palette entries without editing artlib.py) |
 | `art_mockup_m2.py` | the Milestone-2 town mockups (`preview/town_m2_*.png`) |
@@ -110,7 +111,8 @@ exists, so the code never relies on the art.h r0 fallback. `_ab_` = abandoned st
 | park | 3 | - | v0 paths/flowerbed/benches, v1 playground, v2 statue + pond |
 | element_factory | 1 | - | casting hall, gantry crane over casting beds, panel stacks, chimney (hotspot), office (Milestone 2) |
 
-Still not produced: hydro/oil/peat/nuclear plants, sports_field, ice_rink (not in the M4 scope). No per-key
+Still not produced: hydro_plant, sports_field, ice_rink. (1.2 A1 added coal_station, peat_plant, nuclear_plant,
+oil_plant: section 3.2.) No per-key
 `_build_`/`_ground_` sprites: the footprint fallbacks cover every key; M4 used only the existing footprints (1x1, 2x1,
 3x1, 2x2, 3x3), so complexes cut into pieces need no new construction/ground art.
 
@@ -193,6 +195,28 @@ UI icons (gen_ui.py, UI.md): `icon_b_heat_plant`, `icon_b_sewage_works`, `icon_b
 `icon_bus_line` (bus line tool), `icon_b_paper_mill`, `icon_b_valtion_metalli` (complex tools), `icon_b_row_houses`,
 `icon_b_concert_hall`, `icon_b_tv_tower`, `icon_b_ski_jump`, `icon_b_pres_sauna`, `icon_b_friendship_statue`,
 `icon_z_forestry`, `icon_z_farm` (+ `_off`). Police, library, post, health centre, church and station icons existed.
+
+### 3.2 Power plants (1.2 A1, `art_power.py`)
+
+DESIGN_1_2 section 5. Module `art/art_power.py` (loaded like the art_m2_* modules), iterate with
+`python3 art/power_preview.py [--only KEY]` (writes `preview/power_sheet_<64|32>[_winter].png` and the scale scenes
+`preview/power_scene_<64|32>[_winter].png`: the new plants beside the 2x2 coal plant, heat plant, rintamamiestalot and
+lamellitalot, r1 renders in the back row, smoke at every hotspot). Every model is point-symmetric about the lot centre
+(mirrored units / sheds / tanks at opposite corners), so all use **rots 2** (r0 + r1 rendered, r2/r3 aliases): every
+rotation exists, no def needs BDF_NO_ROTATE. At r0 the two units sit at the left and right corners of the diamond.
+
+| Key | WxH | Var | Rots | Hot | What | KB 64 / 32 (pieces) |
+|---|---|---|---|---|---|---|
+| coal_station | 3x3 | 1 | 2 | yes + `_hot2` | two-unit coal power station: red-brick turbine hall along Y, two tall boiler houses in ribbed grey cladding (left/right), two 150 px concrete chimneys, coal yards with dark stockpiles at the back and front corners, enclosed conveyor bridges, office blocks at the hall ends, transformer yards | 90 / 22 |
+| peat_plant | 2x2 | 1 | 2 | yes | low boiler hall in grey-green ribbed cladding, taller boiler house + slender concrete chimney (92 px) at the centre, two open sheds with rust-brown milled peat (`peat`, stays brown in winter), feed hoppers + conveyors, peat tipper lorries, transformer | 41 / 10 |
+| nuclear_plant | 3x3 | 1 | 2 | - | Loviisa-like two-unit plant: pale reactor halls (vertical pilasters) with cylindrical containments and domes at the left/right corners, long pale turbine hall with a window band, slim ventilation stack at the centre, pump houses, transformers + gantries. No cooling towers, no smoke | 77 / 19 |
+| oil_plant | 2x2 | 1 | 2 | yes | pale rendered boiler house with window strips + lower turbine hall along Y, tall slender concrete chimney (108 px), two big steel fuel-oil tanks in concrete bunds (left/right), pipe runs, pump houses, transformers. **Replaces the M7 alias of coal_plant** | 44 / 11 |
+
+**Second hotspot `_hot2`** (new, zero VRAM): `HOT2[key]` in a module = canonical offset of a second chimney top from
+`md.hot`; gen_art writes an extra header row `<sprite>_hot2` for every name of that key (same pieces, box and anchor;
+hx, hy = the second chimney, projected with the rendered sprite's rotation, `gen_art.hot2_point`). Only coal_station
+has one (power_preview.py draws both columns). A full `gen_art.py` run clears `preview/*.png`: re-run
+`power_preview.py` afterwards (VM B shots of the plants in the 1996 Koivukoski save: `tests/out/a1/`). life.cpp can alternate puffs between `hx, hy` and the `_hot2` row (see HANDOFF 1.2 A1).
 
 ## 4. Anchors, hotspots, header format
 
@@ -277,6 +301,7 @@ pieces on 512x256 pages (section 8): same pixels, much less transparent margin i
 |---|---|---|
 | 64-zoom world | 4 sheets, 9,520 KB | 31 pages, 1,467 pieces, **7,691 KB** (-1,829 KB; headroom to 9.6 MB 2,139 KB) |
 | 32-zoom world | 1 sheet 640x1861, 2,326 KB | 8 pages, 1,435 pieces, **1,918 KB** |
+| 1.2 A1 power plants | | 64-zoom 32 pages, 1,500 pieces, **7,947 KB** (+256 KB, headroom 1,883 KB); 32-zoom 8 pages, 1,467 pieces, **1,962 KB** (+44 KB) |
 | UI (ui_frame, ui_icons, ui_pres, font_body, font_head; gen_ui.py) | 655 KB | 655 KB |
 
 M4 (Milestone-2 buildings) added 2,076 KB at 64 zoom (7,415 -> 9,491, before PL4) and 499 KB at 32. `--check` prints

@@ -195,3 +195,26 @@ rebuild followed in one frame (226 ms): BENCH20K 800 z64 max frame 238 ms. Now a
 No frame over 100 ms at a season change (target ~150). The averages sit 0.3-0.6 fps under PL4's 59.8-59.9 because each
 run has four swaps (2-3 long frames each plus the minimap rows); without winter art the run is PL4's. Some runs
 overlapped a Mac test run (the emulator shares the CPU), so the 1 s minimum is pessimistic.
+
+## 9. 1.2 A1: power plant art (2026-11-10)
+
+Four new plants (coal_station 3x3, nuclear_plant 3x3, peat_plant 2x2, oil_plant 2x2; the oil plant replaces its coal-plant
+alias), both zooms, summer + winter, r0 + r1 rendered (r2/r3 aliases), plus 4 zero-cost `coal_station_*_hot2` rows.
+
+| | Before (1.1) | After (1.2 A1) | Delta |
+|---|---|---|---|
+| 64-zoom world VRAM (resident at z64) | 31 pages, 1,467 pieces, 7,691 KB | 32 pages, 1,500 pieces, **7,947 KB** | **+256 KB** (headroom to 9.6 MB: 1,883 KB) |
+| 32-zoom world VRAM (resident at z32) | 8 pages, 1,435 pieces, 1,918 KB | 8 pages, 1,467 pieces, **1,962 KB** | **+44 KB** |
+| UI sheets | 655 KB | 655 KB (icon_b_coal_station added in the existing ui_icons rows) | 0 |
+| Winter swap | same surfaces | same surfaces (winter pages keep the summer layout, alpha checked) | **0 KB VRAM** |
+| Sprite names / pieces (art.cpp limits 2048 / 6144) | 1,631 / 5,106 | 1,649 / 5,256 | +18 / +150 |
+| Process memory before art / with art / with winter delta (VM B log) | 19.8 / 30.06 / 33.97 MB | 19.8 / 30.37 / **34.36 MB** | +0.31 / **+0.39 MB** (winter delta 3,887 -> 3,973 KB; budget 40 MB) |
+| Art load at start (VM B, warm SMB cache) | 2,006 ms (winter 1,112) | 2,096 ms (winter 1,154) | +90 ms |
+| Season swap at z64 800 (log) | px swap 37 ms + upload 128-141 ms | px swap 36.3 ms + upload 134.7 ms in 2 frames | ~0 |
+
+Piece sizes (64 / 32 KB): coal_station 90 / 22, nuclear_plant 77 / 19, oil_plant 44 / 11, peat_plant 41 / 10
+(`python3 art/power_preview.py` prints them). At 800x600 z64 the log shows the chunk pool at 35 x 64 KB with 1,806 KB VRAM
+free after the art. At 1024 z64 (522 KB free before) the +256 KB costs about 4 chunk-pool chunks (pool ~37/48 instead
+of 41/48); not re-benched here (orchestrator: a 1024 z64 bench run if wanted). The first art load after the new BMPs
+were written took 30 s (cold SMB cache, 365 ms per page); a second start was back to 23 ms per page.
+

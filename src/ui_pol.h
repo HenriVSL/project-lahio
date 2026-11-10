@@ -12,7 +12,9 @@
 #include "gfx.h"
 #include "politics.h"
 
-enum { POLA_SIGN, POLA_REPEAL, POLA_LETTER, POLA_CHOOSE, POLA_COUNT };   /* UC_POLITICS a */
+enum { POLA_SIGN, POLA_REPEAL, POLA_LETTER, POLA_CHOOSE,
+       POLA_REACTOR,                          /* 1.2 S1: b = RX_* (power_reactor_choose) */
+       POLA_COUNT };   /* UC_POLITICS a */
 
 /* ---- for ui.cpp / game.cpp */
 void uipol_reset(void);                       /* new city / load (ui_reset) */
@@ -25,6 +27,7 @@ void uipol_message(const PolMsg *m);          /* ticker line (clicking it opens 
 int  uipol_tip(char lines[][64], int max);    /* top bar "Approval" tooltip lines; returns count */
 void uipol_show(int what);                    /* scripts/tests: open the panel at 0 overview, 1 decrees, 2 letters,
                                                  3 the pending card, 4 election night; +10*k selects decree/letter k */
+void uipol_show_reactor(void);                /* 1.2 S1: open the reactor letter (power.h; also with politics off) */
 
 /* ---- ui.cpp internals exported for ui_pol.cpp (draw into the current compose target) */
 int  uix_text(int x, int y, const char *s, int font);

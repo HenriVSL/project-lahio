@@ -118,6 +118,8 @@ static s32 smoke_interval(const Lot *l)
     iv = 380 * 100 / act;                               /* 0.38 s at full activity .. 3.8 s */
     if (d->w * d->h >= 4) iv = iv * 2 / 3;              /* big chimneys smoke more */
     else if (d->w * d->h == 1) iv = iv * 2;             /* a sauna stove: a thin wisp */
+    if (l->def == B_COAL_STATION) iv = iv / 2;          /* 1.2 S1: two chimneys (smoke_emit alternates the hotspots) */
+    else if (l->def == B_PEAT_PLANT) iv = iv * 3 / 2;   /* 1.2 S1: light smoke */
     return iv;
 }
 
@@ -156,6 +158,20 @@ static void smoke_scan(void)
     }
 }
 
+/* 1.2 S1: the second-chimney alias of a sprite id ("<name>_hot2"), looked up once per sprite (silent: art_exists) and
+   cached; 0 = none. Only the coal power station asks (4 rotations). */
+static int s_hot2_flip, s_h2_base[8], s_h2_id[8], s_h2_n;
+static int hot2_of(int base)
+{
+    char nm[96];
+    int k, id = 0;
+    for (k = 0; k < s_h2_n; k++) if (s_h2_base[k] == base) return s_h2_id[k];
+    str_printf(nm, sizeof(nm), "%s_hot2", art_name(base));
+    if (art_exists(nm)) id = art_find(nm);
+    if (s_h2_n < 8) { s_h2_base[s_h2_n] = base; s_h2_id[s_h2_n] = id; s_h2_n++; }
+    return id;
+}
+
 static void smoke_emit(int lot)
 {
     const Lot *l = world_lot(lot);
@@ -165,6 +181,11 @@ static void smoke_emit(int lot)
     if (!l || l->status != LOT_ACTIVE) return;
     sp = art_get(z, render_lot_art(lot));
     if (sp->hx < 0) return;
+    if (l->def == B_COAL_STATION && (s_hot2_flip ^= 1)) {   /* 1.2 S1: every other puff from the second chimney (A1's zero-cost
+                                                               alias <sprite>_hot2: same pieces, hotspot on chimney two) */
+        int h2 = hot2_of(render_lot_art(lot));
+        if (h2 > 0) { const ArtSprite *s2 = art_get(z, h2); if (s2->hx >= 0) sp = s2; }
+    }
     for (i = 0; i < LIFE_MAX_SMOKE && s_puffs[i].used; i++) {}
     if (i == LIFE_MAX_SMOKE) return;                    /* capped */
     p = &s_puffs[i];

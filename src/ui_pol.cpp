@@ -11,6 +11,7 @@
 #include "politics.h"
 #include "util.h"
 #include "hard.h"       /* 1.1 D1: the level's notes (the neighbour's patience, authority, card severity) */
+#include "power.h"      /* 1.2 S1: the reactor letter */
 
 /* colours (art/ui_layout.h values; that header is ui.cpp's) */
 #define C_PAPER_DK  213, 198, 172
@@ -21,10 +22,10 @@
 #define C_RED       156,  56,  41
 #define C_SEL       197, 186, 148
 
-enum { V_TABS, V_EVENT, V_ELECTION };
+enum { V_TABS, V_EVENT, V_ELECTION, V_REACTOR /* 1.2 S1 */ };
 enum { T_OVERVIEW, T_DECREES, T_LETTERS };
 enum { UPA_VIEW, UPA_SEL_DECREE, UPA_SEL_LETTER, UPA_SIGN, UPA_REPEAL, UPA_SEND, UPA_CHOOSE, UPA_LATER,
-       UPA_ELECTION_OK, UPA_TAB };
+       UPA_ELECTION_OK, UPA_TAB, UPA_REACTOR /* 1.2 S1 */, UPA_CLOSE };
 
 static int s_view = V_TABS, s_sel_dec = DEC_HOUSING, s_sel_let = LET_HOUSING, s_seen_election;
 
@@ -59,7 +60,8 @@ void uipol_on_open(void)
 void uipol_title(char *buf, int size)
 {
     int ev = politics_pending_event();
-    if (s_view == V_EVENT && ev >= 0) str_printf(buf, size, "\xa7 %s", ev == EV_CAMPAIGN ? "The President's office" : "A matter for the President");
+    if (s_view == V_REACTOR) str_copy(buf, "\xa7 A letter from the Ministry", size);   /* 1.2 S1 */
+    else if (s_view == V_EVENT && ev >= 0) str_printf(buf, size, "\xa7 %s", ev == EV_CAMPAIGN ? "The President's office" : "A matter for the President");
     else if (s_view == V_ELECTION) str_copy(buf, "Election night", size);
     else str_copy(buf, "The President's desk", size);
 }
@@ -70,7 +72,7 @@ u32 uipol_data_sig(u32 h)
     v[0] = s_view; v[1] = s_sel_dec; v[2] = s_sel_let; v[3] = politics_authority(); v[4] = politics_pending_event();
     v[5] = politics_meter(METER_EAST); v[6] = politics_meter(METER_WEST); v[7] = politics_popularity();
     v[8] = politics_decree_gap() * 64 + politics_letter_gap(); v[9] = politics_elections_held(); v[10] = uix_tab();
-    v[11] = politics_enabled();
+    v[11] = politics_enabled() + 2 * (power_reactor_choice() + 1);   /* 1.2 S1: the reactor letter answered */
     h = hash_bytes(h, v, sizeof(v));
     for (b = 0; b < BLOC_COUNT; b++) { v[b] = politics_approval(b) * 1000 + politics_weight(b); }
     h = hash_bytes(h, v, BLOC_COUNT * (int)sizeof(int));
@@ -95,6 +97,8 @@ void uipol_click(int a, int b)
         s_view = politics_pending_event() >= 0 ? V_EVENT : V_TABS;
         break; }
     case UPA_TAB:         s_view = V_TABS; uix_set_tab(b); break;
+    case UPA_REACTOR:     uix_cmd(UC_POLITICS, POLA_REACTOR, b); break;   /* 1.2 S1: the view shows the answer next */
+    case UPA_CLOSE:       s_view = V_TABS; ui_close_panel(); break;
     }
     uix_dirty();
 }
@@ -385,6 +389,51 @@ static void view_event(int x, int y, int w, int h)
     uix_button(x + w - 96, y + h - 20, 90, 18, "Decide later", UPA_LATER, 0, 1);
 }
 
+/* ------------------------------------------------------------------ 1.2 S1: the reactor letter (power.h)
+   Not an event card: it is the gate of the nuclear plant tool, shown when the tool is first opened, also with politics
+   off (then the blocs are not consulted). Once answered the view shows the answer until the President puts it down. */
+static void view_reactor(int x, int y, int w, int h)
+{
+    const ReactorCard *rc = power_reactor_card();
+    char a[128];
+    int yy = y + 2, k, ch = power_reactor_choice();
+    uix_text_fit(x + 6, yy, rc->title, FONT_HEAD_RED, w - 12);
+    text_fmt_date(a, sizeof(a), sim_date()->year, sim_date()->month);
+    uix_text_r(x + w - 6, yy + 2, a, FONT_BODY_GREY);
+    yy += 16;
+    if (ch != RX_NONE) {
+        yy = para(x + 6, yy, w - 12, rc->ch[ch].label, FONT_BODY_DARK, 2, 11);
+        yy += 4;
+        yy = para(x + 6, yy, w - 12, rc->ch[ch].result, FONT_BODY_DARK, 5, 11);
+        yy += 4;
+        power_reactor_terms(ch, a, sizeof(a));
+        yy = para(x + 6, yy, w - 12, a, FONT_BODY_GREY, 2, 11);
+        if (politics_enabled()) fx_lines(x + 6, yy, w - 12, rc->ch[ch].fx, 2, FONT_BODY_GREY);
+        uix_button(x + w - 96, y + h - 20, 90, 18, "Very good", UPA_CLOSE, 0, 1);
+        return;
+    }
+    yy = para(x + 6, yy, w - 12, rc->text, FONT_BODY_DARK, 5, 11);
+    yy += 4;
+    for (k = 0; k < RX_COUNT; k++) {
+        uix_button(x + 6, yy, w - 12, 18, rc->ch[k].label, UPA_REACTOR, k, 1);
+        yy += 20;
+        power_reactor_terms(k, a, sizeof(a));
+        uix_text_fit(x + 14, yy, a, FONT_BODY_GREY, w - 20); yy += 11;
+        if (politics_enabled()) yy = fx_lines(x + 14, yy, w - 20, rc->ch[k].fx, 2, FONT_BODY_GREY);   /* wrap: the West line is long */
+        yy += 3;
+    }
+    uix_text_fit(x + 6, y + h - 16, politics_enabled() ? "The choice holds for every reactor of the town." :
+                 "Politics is off: the blocs are not consulted.", FONT_BODY_GREY, w - 110);
+    uix_button(x + w - 96, y + h - 20, 90, 18, "Decide later", UPA_CLOSE, 0, 1);
+}
+
+void uipol_show_reactor(void)
+{
+    ui_open_panel(PANEL_POLITICS);
+    s_view = V_REACTOR;
+    uix_dirty();
+}
+
 /* ------------------------------------------------------------------ election night */
 static void view_election(int x, int y, int w, int h)
 {
@@ -436,6 +485,7 @@ void uipol_panel(int x, int y, int w, int h)
 {
     static const char *const tn[3] = { "Overview", "Decrees", "Letters" };
     int t;
+    if (s_view == V_REACTOR) { view_reactor(x, y, w, h); return; }   /* 1.2 S1: also with politics off */
     if (!politics_enabled()) {
         uix_text(x + 6, y + 8, "Politics is off for this town.", FONT_HEAD);
         para(x + 6, y + 28, w - 12, "Turn it on at New Game. The President remains above politics, as the constitution intends.",

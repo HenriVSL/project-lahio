@@ -18,11 +18,16 @@
 #include "util.h"
 #include "season.h"         /* 1.1 W1: winter peaks */
 #include "hard.h"           /* 1.1 D1: Sweden 1969-70, era expectations */
+#include "power.h"          /* 1.2 S1: the bigger plant to suggest */
 
 /* ------------------------------------------------------------------ hindsight state */
-enum { HS_POWER, HS_WATER, HS_ELEMENTS, HS_TOWER, HS_HEAT, HS_DEBT, HS_RIGHTS, HS_SCHOOL, HS_JOBS, HS_COUNT };
-static const u8 s_hs_weight[HS_COUNT] = { 10, 9, 8, 6, 5, 9, 7, 5, 6 };      /* per month of the missed chance */
-static const u8 s_hs_min[HS_COUNT]    = {  4, 4, 6, 6, 8, 4, 6, 8, 6 };      /* months in a year before it counts */
+enum { HS_POWER, HS_WATER, HS_ELEMENTS, HS_TOWER, HS_HEAT, HS_DEBT, HS_RIGHTS, HS_SCHOOL, HS_JOBS,
+       HS_SMALL_PLANTS,          /* 1.2 S1: in the dark with >= 6 small coal plants while the coal power station was on offer */
+       HS_COUNT };
+static const u8 s_hs_weight[HS_COUNT] = { 10, 9, 8, 6, 5, 9, 7, 5, 6, 11 };  /* per month of the missed chance (1.2: the small-plant
+                                                                                lesson outranks the plain blackout one) */
+static const u8 s_hs_min[HS_COUNT]    = {  4, 4, 6, 6, 8, 4, 6, 8, 6, 4 };   /* months in a year before it counts */
+#define HS_SMALL_MIN_PLANTS 6
 static struct {
     s16 yr[HS_COUNT];            /* months this year */
     s32 yr_peak[HS_COUNT];       /* the biggest number behind it this year (residents, lots, mk) */
@@ -52,6 +57,14 @@ static void lc_name(char *dst, int size, const char *name)
     if (dst[1] >= 'A' && dst[1] <= 'Z') return;                       /* "TV tower" */
     for (p = name; *p; p++) if (p[0] == ' ' && p[1] >= 'A' && p[1] <= 'Z') return;   /* "Valtion Metalli works" */
     if (dst[0] >= 'A' && dst[0] <= 'Z') dst[0] = (char)(dst[0] + 32);
+}
+
+/* 1.2 S1: "coal power station" (a plant's name inside a sentence) */
+static const char *lc_plant(int def)
+{
+    static char b[48];
+    lc_name(b, sizeof(b), def_building(def)->name);
+    return b;
 }
 
 int advice_rights_waiting(void)
@@ -157,11 +170,16 @@ static int collect_all(Advice *out, int max)
     s32 res;
     Money net = budget_net_last();
     /* power */
+    int pick = (pw->lots_short > 0 || pw->supply > 0) ? power_advice_pick() : B_NONE;   /* 1.2 S1 */
     pct = pw->supply > 0 ? (int)((s64)pw->demand * 100 / pw->supply) : 0;
     if (pw->lots_short > 0) {
         short_power_lot(&x, &y);
         fmt_i(a1, sizeof(a1), pw->lots_short);
-        if (pw->supply > 0)
+        if (pw->supply > 0 && pick != B_NONE)   /* 1.2 S1: the Government names the bigger plant (power_advice_pick) */
+            str_printf(t, sizeof(t), "Cabinet sources respectfully observe that the power works run at %d%% of capacity and %s "
+                       "building%s sit%s in the dark. The Government advises a %s.", pct, a1,
+                       pw->lots_short == 1 ? "" : "s", pw->lots_short == 1 ? "s" : "", lc_plant(pick));
+        else if (pw->supply > 0)
             str_printf(t, sizeof(t), "Cabinet sources respectfully observe that the power works run at %d%% of capacity and %s "
                        "building%s sit%s in the dark. Naturally the President is already aware.", pct, a1,
                        pw->lots_short == 1 ? "" : "s", pw->lots_short == 1 ? "s" : "");
@@ -170,6 +188,10 @@ static int collect_all(Advice *out, int max)
                        "supplies. Naturally the President is already aware.", a1, pw->lots_short == 1 ? "" : "s", pw->lots_short == 1 ? "s" : "");
         n = add(out, n, max, ADV_POWER_SHORT, AGO_POWER, 1000 + IMIN(pw->lots_short, 400), x, y, pct, pw->lots_short, t);
     } else if (pw->supply > 0 && pct >= 90) {
+        if (pick != B_NONE)                     /* 1.2 S1 (DESIGN_1_2 4) */
+            str_printf(t, sizeof(t), "The Ministry of Trade and Industry notes that the power works run at %d%% of capacity. "
+                       "The Government advises the President to build a %s.", pct, lc_plant(pick));
+        else
         str_printf(t, sizeof(t), "The Ministry of Trade and Industry notes, purely for the record, that the power works run at "
                    "%d%% of capacity. A new plant before the next cold snap would spare everyone an awkward speech.", pct);
         n = add(out, n, max, ADV_POWER_NEAR, AGO_POWER, 600 + pct, -1, -1, pct, pw->supply - pw->demand, t);
@@ -442,6 +464,11 @@ void advice_month(void)
     tally(HS_RIGHTS, A.rights_wait > 0, A.rights_wait);
     tally(HS_SCHOOL, svc_pct(SVC_SCHOOL) >= 110, cs->svc_load[SVC_SCHOOL] - cs->svc_capacity[SVC_SCHOOL]);
     tally(HS_JOBS, cs->workers > 0 && cs->unemployed * 100 >= cs->workers * 8 && cs->emigrated_month > 0, cs->unemployed);
+    if (cs->power_short_lots > 0 && g_bdefs[B_COAL_STATION].variants &&   /* 1.2 S1 (DESIGN_1_2 4) */
+        def_unlocked(B_COAL_STATION, y, held_status(), sim_settings()->all_unlocked)) {
+        int np = power_count(B_COAL_PLANT, 0);
+        tally(HS_SMALL_PLANTS, np >= HS_SMALL_MIN_PLANTS, np);
+    }
 }
 
 void advice_year_end(void)
@@ -517,6 +544,12 @@ static void hind_line(int k, int months, s32 peak, int year, char *head, int hs,
         if (verdict) str_printf(body, bs, "That the schools ran over capacity for %d months; a generation learned in shifts.", months);
         else str_printf(body, bs, "With hindsight, another school would have saved %s pupils a year of lessons in shifts. They "
                         "learned patience instead, which is also on the curriculum.", a1);
+        break;
+    case HS_SMALL_PLANTS:       /* 1.2 S1: peak = small coal plants at the worst */
+        str_copy(head, "IN HINDSIGHT: THE SMALL PLANTS", hs);
+        if (verdict) str_printf(body, bs, "That the town ran %s small coal plants and still sat in the dark; a power station was on offer.", a1);
+        else str_printf(body, bs, "With hindsight, one coal power station would have done the work of four of the town's %s small "
+                        "plants, and kept the lights on through %s of %d. The stokers send their regards.", a1, mw, year);
         break;
     case HS_JOBS:
     default:
@@ -702,8 +735,11 @@ const char *advice_purpose(int def)
     case B_SEWAGE_WORKS:     return "Treats sewage: untreated, it spoils lakes and land value";
     case B_PUMP:             return "Water from a lake or river into the pipes; needs power";
     case B_WELL:             return "Groundwater: a small source that needs no power";
-    case B_COAL_PLANT: case B_HYDRO_PLANT: case B_OIL_PLANT: case B_PEAT_PLANT: case B_NUCLEAR_PLANT:
+    case B_COAL_PLANT: case B_HYDRO_PLANT: case B_OIL_PLANT:
                              return "Feeds every building its lines and neighbours touch";
+    case B_COAL_STATION:     return "2,000 units at once: four small plants' power, cheaper to run";   /* 1.2 S1 */
+    case B_PEAT_PLANT:       return "1,000 units on domestic peat: no oil or coal prices";
+    case B_NUCLEAR_PLANT:    return "5,000 units, no smoke; must stand on a shore (cooling)";
     case B_SCHOOL:           return "Houses need a school for tier 2, apartments too";
     case B_SAUNA:            return "Houses need a public sauna for tier 2";
     case B_CLINIC: case B_HEALTH_CENTRE: return "Houses need health care for tier 3";

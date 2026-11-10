@@ -166,6 +166,8 @@ static void compute_lines(Money *out, int book)
             }
             continue;
         }
+        if (d->cat == BCAT_POWER && l->status == LOT_BUILDING) continue;   /* 1.2 S1: a reactor under construction (power.h) costs
+                                                                         its price only (no plant was ever built in 1.1) */
         if (d->cat == BCAT_SERVICE) svc[d->service] += d->upkeep;
         else if (l->def == B_HEAT_PLANT) util += d->upkeep * civic_fuel_pct() / 100;   /* M5: coal included; M7 fuel price */
         else if (d->cat == BCAT_POWER || d->cat == BCAT_WATER || l->def == B_SEWAGE_WORKS) util += d->upkeep;   /* M5 */

@@ -4,6 +4,7 @@
    date; nothing uses a random number (the filler pick is a hash of the year and the seed). */
 #include "common.h"
 #include "era.h"
+#include "power.h"       /* 1.2 S1: reactor ticker and filler */
 #include "trade.h"
 #include "politics.h"
 #include "industry.h"
@@ -164,6 +165,13 @@ int era_msg_text(char *buf, int size, const EraMsg *m, int *severity)
     case EM_LANDMARK:
         str_printf(buf, size, "%s opens. The town has something to show its visitors.", def_building((int)m->a)->name);
         break;
+    case EM_REACTOR_ONLINE: {   /* 1.2 S1 (power.cpp) */
+        static const char *const tail[3] = { "The engineers from the East toast it in two languages.",
+            "Pittsburgh sends a telegram of congratulations; Moscow sends an observer.",
+            "Both delegations attend the opening and each thanks the other." };
+        text_fmt_int(a, sizeof(a), m->b);
+        str_printf(buf, size, "The nuclear power plant is online: %s units and not a puff of smoke. %s", a, tail[ICLAMP((int)m->a, 0, 2)]);
+        break; }
     case EM_POWER_NEAR:      /* PL1: before a shortage (PLAYTEST 2 item 3) */
         sev = SEV_WARN;
         str_printf(buf, size, "The power works run at %d%% of capacity. The engineer suggests a new plant before the lights do it for him.", (int)m->a);
@@ -412,6 +420,7 @@ void era_month(void)
     const CityStats *st = sim_stats();
     int nm = next_month_index(), d;
     trade_month();
+    power_month();             /* 1.2 S1: the first reactor online (ticker); nothing without one */
     landmarks_month();
     /* decrees in force (newsreel: the decrees that defined the era) */
     for (d = 0; d < DEC_COUNT; d++) {
@@ -753,6 +762,7 @@ static void filler(NewsIssue *n)
     int k = (int)(h % (u32)COUNTOF(fh));
     str_copy(n->filler_head, fh[k], sizeof(n->filler_head));
     str_copy(n->filler, ft[k], sizeof(n->filler));
+    if (n->kind == NEWS_YEAR) power_news_filler(n->year, n->filler_head, sizeof(n->filler_head), n->filler, sizeof(n->filler));   /* 1.2 S1 */
 }
 
 /* PL1: "From the Cabinet": the 1-3 most important problems as the Cabinet's deferential lines (advice.h) */

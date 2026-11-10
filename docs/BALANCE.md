@@ -355,3 +355,65 @@ zero, not drowning) and no visible population crisis (its crisis is money and wi
 months); mill/metal/politics quiet 10-11 on s7 (built-out, politics off, rich: the threats they face are winters,
 the expectations and the oil years, which they pre-empt; 4-8 on c3/r30); Hard naive/greedy/tax13 at the loan cap (as
 D1); dense c3 Normal treasury 17 months.
+
+## 12. 1.2 S1 "Power" (2026-11-10): the new plants (DESIGN_1_2 2)
+
+Play-test 3: the user's Koivukoski (1996, 58,193 residents, Normal) ran on 32 coal plants of 500 units (14,307 / 16,000).
+1.2 adds the coal power station (appended def `coal_station`, B_COAL_STATION) and gives the peat and nuclear plants art,
+numbers and unlocks. The 1.1 rows (coal, hydro, oil) are untouched, and the bots of every 1.1 run build only small coal
+plants, so the 1.1 runs are the regression test: every year table, CSV and world hash of the Easy/Normal/Hard runs is
+identical to 1.1 (checked file by file against a 1.1 build of the same tests, timing columns aside; only newspaper text
+that names the new plants differs, e.g. the Market-town ceremony now lists "Peat power plant (1972)").
+
+| Plant | Size | Unlock | Cost | Upkeep/mo | Units | per 1,000 units: build / run | Fuel |
+|---|---|---|---|---|---|---|---|
+| Coal power plant (1.1) | 2x2 | Village 1955 | 2,500 | 110 | 500 | 5,000 / 220 | coal surcharge 1974-85 (+ smaller after) |
+| Coal power station (new) | 3x3 | Town 1962 | **12,000** (spec ~9,000) | **250** (~230) | 2,000 | 6,000 / 125 | 4 x a small plant's surcharge |
+| Oil power plant (1.1) | 2x2 | 1965 | 5,000 | 100 | 900 | 5,556 / 111 | 50 mk x oil index |
+| Peat power plant | 2x2 | **Market town 1972** (was Village 1970) | **5,000** (was 4,000) | **140** (80; spec ~100) | **1,000** (700) | 5,000 / 140 | none (domestic), Rural +2 a plant (max +4) |
+| Nuclear power plant | 3x3, shore | **Regional centre 1977** (was City) | 30,000 x the letter | **450** (400) | **5,000** (3,000) | 6,000 / 90 | none; East x70 % + clearing, Loviisa x85 % |
+
+Reasons (old -> new):
+- **Station 9,000 -> 12,000 mk, 230 -> 250 upkeep.** At 9,000 the station was cheaper than four small plants to build
+  (10,000) *and* to run: a strict upgrade, not the trade-off of DESIGN_1_2 1. At 12,000 it costs more per unit up front,
+  runs at 57 % of four small plants' upkeep, and its 2,000 units arrive in one lump: a 12k town that needs 500 more units
+  pays 12,000 for capacity it grows into for years (the planner bot below ends with more idle capacity and 1.6 % less
+  money than on small plants).
+- **Peat upkeep ~100 -> 140, pollution 350.** At ~100 peat beat the station on every count (cheaper per unit to build and
+  run, smaller, less smoke per unit, no fuel price). At 140 it runs dearer than the station until coal is surcharged
+  (1974-85: station 125 + 32-37 surcharge per 1,000 units, Easy-Normal, before the upkeep index) and level after 1986 (125 + 14): the domestic-fuel hedge
+  of the oil years, not the default. Rural approval +2 per plant, capped at +4 (small and steady).
+- **Nuclear 400 -> 450 upkeep, 3,000 -> 5,000 units, City -> Regional centre, shore.** Spec values; the letter's price
+  (East 21,000 + 18 months of 1,500 clearing credit; West 30,000 in 12 months; Loviisa 25,500 + 750 a month, 24 months;
+  after 1990 East x90 %, Loviisa x95 %, no clearing) is the variable part. No upkeep while it is built.
+- Station coal surcharge = 4 x a small plant's (`POWER_STATION_COAL_X`, it burns four plants' coal).
+
+**The 60k city** (tests/test_power.cpp `power_user_60k_city_on_new_plants`, tests/out/power_60k.txt): the user's 1996
+save, the replacement plants built next to the network, then the 32 coal plants bulldozed, 24 months played (treasury
+topped up equally in every variant; utilities = months 13-24, incl. the pumps):
+
+| Variant | Plants | Upfront | Utilities + fuel /mo | Saves /mo | Payback | Dark months (max lots) |
+|---|---|---|---|---|---|---|
+| control: 32 coal plants | 32 | 0 | 8,327 + 292 | - | - | 0 |
+| coal power stations | **8** | 96,006 | 5,956 + 292 | 2,371 | 40 months | 1 (6) |
+| 2 Western reactors + 3 stations | **5** | 96,012 | 5,501 + 109 | 3,009 | 31 months | 4 (14) |
+| peat plants | 16 | 80,060 | 6,331 + 0 | 2,288 | 34 months | 1 (8) |
+
+So a 60k town runs on 8 stations (DESIGN_1_2 target 6-10), on 4-5 plants with reactors, and big plants are no free
+lunch: the swap pays back in about three years.
+
+**Power bots** (tests/test_balance.cpp `balance_power_1955_1990`, tests/out/balance_power_summary.txt; s7 Normal
+1955-1990; the bot builds a station from Town once demand is >= 1,500 and it holds 14,000 mk, peat while coal costs
+>= 150 % of 1955, small coal plants otherwise):
+
+| Bot | 1990 pop | money | loans | plants (coal/station/peat) | 1989 utilities + fuel /mo |
+|---|---|---|---|---|---|
+| planner 1.1 | 12,226 | 57,694 | 0 | 12 coal (the row is full) | 2,022 + 109 |
+| planner 1.2 | 12,226 | 56,750 | 0 | 9 / 2 / 0 | 2,251 + 155 |
+| naive 1.1 | 17,244 | -4,438 | 4 | coal only | 1,814 + 72 |
+| naive 1.2 | 14,612 | -154 | 2 | 6 / 0 / 1 | 1,619 + 54 |
+
+The planner's town is identical; the station's idle capacity costs it ~1,000 mk over 28 years. The naive player is
+identical to 1975, builds a peat plant in the 1976 brownouts (it never holds 14,000 mk when the lights go out) and ends
+with 2 loans instead of 4 (the 1.1 naive borrowed its way from 14.8k to 17.2k in 1987-90; single runs are chaotic,
+see section 11). VM replay: scripts/bal_planner_s7_era_normal_power.txt (`-difficulty normal`).

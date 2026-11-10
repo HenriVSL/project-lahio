@@ -48,6 +48,7 @@
 #include "advice.h"       /* PL1: progression, unlock sentences, purposes, the power summary */
 #include "season.h"       /* 1.1 W1: winter peak tooltips */
 #include "hard.h"         /* 1.1 D1: difficulty notes, Sweden 1969-70 */
+#include "power.h"        /* 1.2 S1: plant lines, the reactor price */
 
 /* ================================================================== constants */
 #define WIN_MAX_W   340          /* the panel target; every panel fits (600x420 rule: fits 640x480) */
@@ -128,10 +129,10 @@ static const KeyDef s_keys[NKEYS] = {
         { TOOL_BUILD, B_ELEMENT_FACTORY, 1, "b_element_factory" },
         { TOOL_BUILD, B_PM_HALL, 1, "b_paper_mill" }, { TOOL_BUILD, B_VM_HALL, 0, "b_valtion_metalli" },   /* M6 complexes */
         { TOOL_GIFT, 0, 0, "b_row_houses" } } },
-    { "key_power", "Power", "Power lines and plants (P)", 6, { { TOOL_POWER_LINE, 0, 0, "powerline" },
-        { TOOL_BUILD, B_COAL_PLANT, 1, "b_coal_plant" }, { TOOL_BUILD, B_HYDRO_PLANT, 0, "b_hydro_plant" },
+    { "key_power", "Power", "Power lines and plants (P)", 7, { { TOOL_POWER_LINE, 0, 0, "powerline" },   /* 1.2 S1: menu order */
+        { TOOL_BUILD, B_COAL_PLANT, 1, "b_coal_plant" }, { TOOL_BUILD, B_COAL_STATION, 0, "b_coal_station" },
         { TOOL_BUILD, B_OIL_PLANT, 0, "b_oil_plant" }, { TOOL_BUILD, B_PEAT_PLANT, 0, "b_peat_plant" },
-        { TOOL_BUILD, B_NUCLEAR_PLANT, 0, "b_nuclear_plant" } } },
+        { TOOL_BUILD, B_HYDRO_PLANT, 0, "b_hydro_plant" }, { TOOL_BUILD, B_NUCLEAR_PLANT, 0, "b_nuclear_plant" } } },
     { "key_water", "Water", "Water, heating and sewage (W)", 6, { { TOOL_PIPE, 0, 0, "pipe" }, { TOOL_BUILD, B_PUMP, 1, "b_pump" }, { TOOL_BUILD, B_WELL, 0, "b_well" },
         { TOOL_BUILD, B_WATER_TOWER, 0, "b_water_tower" },
         { TOOL_BUILD, B_HEAT_PLANT, 1, "b_heat_plant" }, { TOOL_BUILD, B_SEWAGE_WORKS, 0, "b_sewage_works" } } },   /* M5 */
@@ -520,7 +521,7 @@ static void ent_cost(const FlyEnt *e, char *buf, int size)
         if (g_misc.zone_tile) { text_fmt_money(m, sizeof(m), g_misc.zone_tile, y); str_printf(buf, size, "%s/tile", m); }
         else str_copy(buf, "free", size);
         break;
-    case TOOL_BUILD:      text_fmt_money(buf, size, complex_tool_cost(e->param), y); break;   /* M6: = def cost except complexes */
+    case TOOL_BUILD:      text_fmt_money(buf, size, DEF_IS_PLANT(e->param) ? power_build_cost(e->param) : complex_tool_cost(e->param), y); break;   /* M6: = def cost except complexes; 1.2 S1: the reactor's price */
     case TOOL_GIFT:       str_copy(buf, "free", size); break;                                /* M6 */
     case TOOL_BULLDOZE:   text_fmt_money(m, sizeof(m), g_misc.bulldoze_tile, y); str_printf(buf, size, "%s/tile", m); break;
     case TOOL_BUS_LINE: { /* M2: "300 mk + 40 mk/stop" */
@@ -2047,6 +2048,12 @@ static void panel_query(int x, int y, int w, int h)
                     str_printf(b, sizeof(b), "Power output: %s units (nothing connected yet)", a);
                     txt_fit(x + 6, yy, b, FONT_BODY_DARK, w - 12); yy += 12;
                 } else { txt(x + 6, yy, "Power: not producing", FONT_BODY_GREY); yy += 12; }
+                for (k = 0; k < 5 && yy < ymax - 34; k++) {   /* 1.2 S1: fuel, the reactor choice, construction (power.cpp) */
+                    static const int pf[4] = { FONT_BODY_DARK, FONT_BODY_GREY, FONT_BODY_RED, FONT_BODY_GREEN };
+                    int f = 1;
+                    if (!power_lot_line(s_q_lot, k, b, sizeof(b), &f)) break;
+                    txt_fit(x + 6, yy, b, pf[ICLAMP(f, 0, 3)], w - 12); yy += 11;
+                }
             } else if (li.power_out) { text_fmt_int(a, sizeof(a), li.power_out); str_printf(b, sizeof(b), "Power output: %s units", a); txt(x + 6, yy, b, FONT_BODY_DARK); yy += 12; }
             yy = query_water(x, yy, w, ymax, s_q_lot, d);      /* F1 (WATER.md 3.6 B/C) */
             if (season_lot_line(s_q_lot, b, sizeof(b))) { txt_fit(x + 6, yy, b, FONT_BODY_GREY, w - 12); yy += 12; }   /* 1.1 W1 */

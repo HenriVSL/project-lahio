@@ -9,7 +9,7 @@ ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 BUILD    := $(ROOT)/tests/build
 CXX      := clang++
 CXXFLAGS := -std=c++98 -Wall -O1 -g -I$(ROOT)/src -I$(ROOT)/tests -DKAUP_TESTS
-PORTABLE := util world defs sim net fields budget traffic mapgen save text tools iso politics lifecar poltab industry transit lifebus civic fire complex trade era advice hard season
+PORTABLE := util world defs sim net fields budget traffic mapgen save text tools iso politics lifecar poltab industry transit lifebus civic fire complex trade era advice hard season power
 SRC_OBJS := $(patsubst %,$(BUILD)/src_%.o,$(PORTABLE))
 TEST_SRC := $(wildcard $(ROOT)/tests/*.cpp)
 TEST_OBJS:= $(patsubst $(ROOT)/tests/%.cpp,$(BUILD)/test_%.o,$(TEST_SRC))

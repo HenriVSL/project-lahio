@@ -34,6 +34,8 @@
 #include "hard.h"          /* 1.1 D1: Sweden 1969-70 (per-level runs) */
 #include "advice.h"        /* 1.1 D1: quiet years (no Cabinet warning) */
 #include "season.h"        /* 1.1 D1: the winter peak (planner habit on Normal/Hard) */
+#include "trade.h"         /* 1.2 S1: coal prices (the power bot's peat rule) */
+#include "power.h"         /* 1.2 S1: the new plants */
 
 /* ------------------------------------------------------------------ maps: neighbourhood modules
    A module is 29 x 22 tiles incl. its border streets (rows 0/7/14/21, columns 0/14/28): every zone tile
@@ -208,9 +210,36 @@ static Money plant_cost(void)
     return c;
 }
 
+/* 1.2 S1: the power-aware bot (s_power_bot = 1, only in the 1.2 runs; the 1.1 runs and their hashes build coal plants only):
+   when it needs a plant it builds the bigger one it can afford: peat in the plant row while coal is dear (1974-85), a coal
+   power station (Town, 1962) on open land next to the estate with a line to the network, else the small coal plant. */
+static int s_power_bot, s_stations;
+static int find_rect(int cx, int cy, int w, int h, int forest, int min, int maxd, int *ox, int *oy);
+static int cpx_nearest(int x, int y, int zf, int free_tile, int *ox, int *oy);
+static int bot_unlocked(int def);
+static int build_big_plant(void)
+{
+    const CityStats *st = sim_stats();
+    Money cash = g_budget.money;
+    int n = s_plants, x = M->ind[0] + 1 + 2 * (n % 6), y = M->ind[1] + 1 + 7 * (n / 6), tx, ty;
+    if (bot_unlocked(B_PEAT_PLANT) && trade_state()->coal_index >= 150 && n < 12 && cash >= g_bdefs[B_PEAT_PLANT].cost + 1000) {
+        s_plants++;
+        return cmd("build peat_plant %d %d", x, y);
+    }
+    if (bot_unlocked(B_COAL_STATION) && st->power_demand >= 1500 && cash >= g_bdefs[B_COAL_STATION].cost + 2000 &&
+        find_rect(M->ind[0] - 3, M->ind[1] + M->ind[3] / 2, 5, 5, 0, 50, 90, &x, &y)) {
+        if (!cmd("build coal_station %d %d 0", x + 1, y + 1)) return 0;
+        s_stations++;
+        if (cpx_nearest(x + 4, y + 2, ZF_POWER_NET, 1, &tx, &ty)) cmd("power %d %d %d %d", x + 4, y + 2, tx, ty);
+        return 1;
+    }
+    return -1;
+}
+
 static int build_plant(void)
 {
     int n = s_plants, x = M->ind[0] + 1 + 2 * (n % 6), y = M->ind[1] + 1 + 7 * (n / 6);
+    if (s_power_bot) { int r = build_big_plant(); if (r >= 0) return r; }   /* 1.2 S1 (-1: the small coal plant after all) */
     if (n >= 12) return 0;
     s_plants++;
     return cmd("build coal_plant %d %d", x, y);
@@ -1061,7 +1090,7 @@ static void bal_begin(int style, int map, BalRun *out, int record)
     out->style = style; out->map = map;
     for (k = 0; k < TS_COUNT; k++) out->status_month[k] = -1;
     M = &s_maps[map];
-    s_style = style; s_mods = 0; s_ind1 = 0; s_plants = 0; s_tower = 0; s_errors = 0; s_cmds = 0; s_rec_wait = 0;
+    s_style = style; s_mods = 0; s_ind1 = 0; s_plants = 0; s_tower = 0; s_errors = 0; s_cmds = 0; s_rec_wait = 0; s_stations = 0;
     s_month_no = 0; s_bot_off = 0; s_agr_desk = s_agr_auto = 0; s_opsum = 0; s_prev_pop = 0; s_emig = 0; s_rural_done = 0; s_factory = 0;
     s_cpx_done = s_cpx_station = s_cpx_gifts = s_cpx_forest2 = 0;                    /* M6 */
     s_ctab2 = NULL;
@@ -1077,7 +1106,7 @@ static void bal_begin(int style, int map, BalRun *out, int record)
     s_rec_tag = record == 2 ? "_era" : "";      /* P1: record 2 = only the script, as bal_<style>_<map>_era.txt */
     if (record == 2 && s_level != DIFF_EASY) {  /* 1.1 D1: bal_<style>_<map>_era_normal.txt (replay with -difficulty normal) */
         static char tag[24];
-        str_printf(tag, sizeof(tag), "_era_%s", s_level == DIFF_HARD ? "hard" : "normal");
+        str_printf(tag, sizeof(tag), "_era_%s%s", s_level == DIFF_HARD ? "hard" : "normal", s_power_bot ? "_power" : "");   /* 1.2 S1 */
         s_rec_tag = tag;
     }
     if (record) {
@@ -2379,4 +2408,73 @@ TEST(b1_decline_countdown_utility)
              util, diff()->decline_util_checks, other, diff()->decline_checks, bad);
     CHECK(util > 0);
     CHECK_EQ(bad, 0);
+}
+
+/* ------------------------------------------------------------------ 1.2 S1: the power bots (DESIGN_1_2 1, BALANCE.md 12)
+   The planner and the naive player on s7 at Normal, 1955-1990, with s_power_bot = 1: they build coal power stations once
+   the town is a Town (1962), peat while coal is dear (1974-85), small coal plants otherwise. Compared with the same bots on
+   1.1's plants (balance_levels_1955_1990's Normal runs, the regression baseline): fewer plants, a little cheaper power,
+   the same town. Table: tests/out/balance_power_summary.txt; year tables balance_era_power_<style>_s7_normal.txt; the
+   planner's script bal_planner_s7_era_normal_power.txt (VM replay with -difficulty normal). */
+static void power_plants_end(int *coal, int *station, int *peat, int *other)
+{
+    int i;
+    *coal = *station = *peat = *other = 0;
+    for (i = 1; i < g_world.lot_hi; i++) {
+        int d = g_world.lots[i].def;
+        if (d == B_NONE || !DEF_IS_PLANT(d)) continue;
+        if (d == B_COAL_PLANT) (*coal)++; else if (d == B_COAL_STATION) (*station)++; else if (d == B_PEAT_PLANT) (*peat)++; else (*other)++;
+    }
+}
+
+TEST(balance_power_1955_1990)
+{
+    static const int st[2] = { BS_PLANNER, BS_NAIVE };
+    static const int lvk[2] = { 0, 5 };                     /* their index in s_lv_styles */
+    EraRun e[2];
+    int k, coal[2], sta[2], peat[2], oth[2], base_plants[2];
+    char path[96];
+    FILE *f;
+    lv_run(0, DIFF_NORMAL);                                 /* the 1.1 baseline (cached when balance_levels ran first) */
+    for (k = 0; k < 2; k++) {
+        const EraRun *b = &s_lv[0][DIFF_NORMAL][lvk[k]];
+        CHECK_EQ(s_lv_styles[lvk[k]], st[k]);
+        s_level = DIFF_NORMAL; s_power_bot = 1;
+        str_printf(path, sizeof(path), "out/balance_era_power_%s_s7_normal.txt", s_style_name[st[k]]);
+        era_run_map(st[k], 0, &e[k], path, st[k] == BS_PLANNER);
+        power_plants_end(&coal[k], &sta[k], &peat[k], &oth[k]);
+        s_power_bot = 0; s_level = DIFF_EASY;
+        base_plants[k] = 0;
+        UNUSED(b);
+    }
+    {   /* the baseline's plants: rerunning is the only way to see its lots; the year table has the fuel and ledger */
+        f = fopen("out/balance_power_summary.txt", "w");
+        if (f) fprintf(f, "1.2 S1 power bots, s7 Normal 1955-1990 (tests/test_balance.cpp balance_power_1955_1990) against the same bots on 1.1's\n"
+                          "plants (1.1 = balance_levels_1955_1990 Normal). util/fuel = the 1989 ledger, mk/month (utilities includes pumps)\n"
+                          "style      run  pop1975  pop1990  money1990    min  loans | plants: coal station peat other | util  fuel | town\n");
+        for (k = 0; k < 2; k++) {
+            const EraRun *b = &s_lv[0][DIFF_NORMAL][lvk[k]];
+            if (f) {
+                fprintf(f, "%-8s   1.1  %7d  %7d  %9d %6d  %5d |      (coal only)            | %5d %5d | %d\n", s_style_name[st[k]], b->pop[20],
+                        b->pop[35], b->money90, b->min_money, b->loans, -b->led[35][BL_UTILITIES], -b->led[35][BL_FUEL], b->town_year);
+                fprintf(f, "%-8s   1.2  %7d  %7d  %9d %6d  %5d |        %3d %7d %4d %5d | %5d %5d | %d\n", s_style_name[st[k]], e[k].pop[20],
+                        e[k].pop[35], e[k].money90, e[k].min_money, e[k].loans, coal[k], sta[k], peat[k], oth[k],
+                        -e[k].led[35][BL_UTILITIES], -e[k].led[35][BL_FUEL], e[k].town_year);
+            }
+            test_log("%-8s 1.1: pop 1990 %d money %d loans %d util %d fuel %d | 1.2: pop %d money %d loans %d util %d fuel %d plants coal %d station %d peat %d",
+                     s_style_name[st[k]], b->pop[35], b->money90, b->loans, -b->led[35][BL_UTILITIES], -b->led[35][BL_FUEL],
+                     e[k].pop[35], e[k].money90, e[k].loans, -e[k].led[35][BL_UTILITIES], -e[k].led[35][BL_FUEL], coal[k], sta[k], peat[k]);
+        }
+        if (f) fclose(f);
+    }
+    for (k = 0; k < 2; k++) {
+        const EraRun *b = &s_lv[0][DIFF_NORMAL][lvk[k]];
+        CHECK(sta[k] + peat[k] > 0);                        /* the new plants are used */
+        CHECK(e[k].pop[35] * 100 >= b->pop[35] * (st[k] == BS_NAIVE ? 80 : 95));   /* the same town, give or take (the 1.1 naive
+                                                               player borrowed its way to 17k in 1987-90: 4 loans; with the 1.2
+                                                               plants it stays at 2 loans and 14.6k) */
+        CHECK(e[k].loans <= b->loans + 1);
+        CHECK(e[k].max_cards <= 1);
+        UNUSED(base_plants);
+    }
 }

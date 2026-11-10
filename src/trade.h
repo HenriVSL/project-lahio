@@ -72,6 +72,8 @@ typedef struct {
     s32 fuel_cost;                 /* last month: BL_FUEL (mk) */
     s32 bond, bond_orig, bond_months;   /* outstanding, amount, months left */
     int closed;                    /* 1 = clearing trade has ended (1990) */
+    s32 reactor_import;            /* 1.2 S1: last month: credit spent on an Eastern reactor under construction (power.h;
+                                      recomputed monthly, not saved or hashed) */
 } TradeState;
 
 /* ------------------------------------------------------------------ lifecycle (era.cpp calls these) */

@@ -58,9 +58,9 @@ const BuildingDef g_bdefs[B_COUNT] = {
     PB("town_hall", "Town hall",              BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_UNIQUE, TS_VILLAGE, 1955,              0,  20,    0, 10, 3, 2,   0, 10, 6, 1),
     PB("coal_plant", "Coal power plant",      BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_VILLAGE, 1955,            2500, 110,  500, 30, 0, 2, 400, -15, 6, 1),
     PB("hydro_plant", "Hydro power plant",    BCAT_POWER,   2, 2, SVC_NONE, BDF_NEEDS_RAPIDS, TS_VILLAGE, 1955,     6000,  40,  600, 10, 0, 0,   0,  0, 0, 0),
-    PB("oil_plant", "Oil power plant",        BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_VILLAGE, 1965,            5000, 100,  900, 30, 0, 2, 300, -15, 6, 1),   /* M7: art = coal plant alias; fuel at the oil price (trade.cpp) */
-    PB("peat_plant", "Peat power plant",      BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_VILLAGE, 1970,            4000,  80,  700, 30, 0, 2, 350, -15, 6, 0),
-    PB("nuclear_plant", "Nuclear power plant",BCAT_POWER,   3, 3, SVC_NONE, 0, TS_CITY, 1977,                      30000, 400, 3000, 80, 0, 8,   0, -10, 6, 0),
+    PB("oil_plant", "Oil power plant",        BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_VILLAGE, 1965,            5000, 100,  900, 30, 0, 2, 300, -15, 6, 1),   /* M7: fuel at the oil price (trade.cpp); 1.2 A1: own art (tank farm) */
+    PB("peat_plant", "Peat power plant",      BCAT_POWER,   2, 2, SVC_NONE, BDF_SMOKE, TS_MARKET_TOWN, 1972,        5000, 140, 1000, 40, 0, 2, 350, -15, 6, 1),   /* 1.2 S1: domestic fuel (no oil index, no coal surcharge: trade.cpp), Rural approval (politics.cpp); was Village 1970, 4,000/80/700 */
+    PB("nuclear_plant", "Nuclear power plant",BCAT_POWER,   3, 3, SVC_NONE, BDF_NEEDS_SHORE, TS_REGIONAL_CENTRE, 1977, 30000, 450, 5000, 150, 0, 8, 0, -10, 6, 1),   /* 1.2 S1: cooling water (shore), Regional centre (was City), 3,000 -> 5,000 units; the reactor letter (power.cpp) sets price and build months */
     PB("pump", "Pumping station",             BCAT_WATER,   1, 1, SVC_NONE, BDF_NEEDS_SHORE, TS_VILLAGE, 1955,       600,  20,  500,  3, 4, 0,   0,  0, 0, 1),
     PB("well", "Groundwater well",            BCAT_WATER,   1, 1, SVC_NONE, BDF_NO_ROTATE, TS_VILLAGE, 1955,         250,   6,  150,  1, 2, 0,   0,  0, 0, 1),
     PB("water_tower", "Water tower",          BCAT_WATER,   1, 1, SVC_NONE, BDF_NO_ROTATE, TS_CHURCH_VILLAGE, 1955, 1200,  10,  200,  1, 1, 0,   0,  5, 4, 2),   /* F1: 200-unit source (was +30%); PL2: Church village (was Market town): apartments T2 need its pressure */
@@ -144,6 +144,10 @@ const BuildingDef g_bdefs[B_COUNT] = {
     PB("ski_jump", "Ski jump",                BCAT_SPECIAL, 3, 1, SVC_NONE, BDF_UNIQUE | BDF_NO_ROTATE, TS_MARKET_TOWN, 1958, 6000, 40, 0, 4, 2, 0, 0, 15, 6, 1),
     PB("pres_sauna", "Presidential sauna",    BCAT_SPECIAL, 2, 2, SVC_NONE, BDF_UNIQUE | BDF_WOODEN, TS_MARKET_TOWN, 1955, 4000, 25, 0, 3, 1, 2, 0, 20, 5, 1),
     PB("friendship_statue", "Friendship statue", BCAT_SPECIAL, 1, 1, SVC_NONE, BDF_UNIQUE, TS_MARKET_TOWN, 1960,   2000,   5,    0,  0, 0, 0,   0,  5, 3, 1),
+    /* 1.2 S1 (DESIGN_1_2 2; BALANCE.md 12): the coal power station: four small plants' units for a little more than two
+       plants' upkeep, but 12,000 mk at once (more per unit than small plants: it pays back in running costs), 3x3, two
+       chimneys and four small plants' coal surcharge from 1974 (trade.cpp) */
+    PB("coal_station", "Coal power station",  BCAT_POWER,   3, 3, SVC_NONE, BDF_SMOKE, TS_TOWN, 1962,              12000, 250, 2000, 80, 0, 6, 1000, -20, 8, 1),
 };
 
 /* key, name, era_year, status_req, flags, capacity, speed, pollution, noise, cost, bridge_cost, upkeep10 */

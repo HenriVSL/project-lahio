@@ -219,6 +219,8 @@ void politics_status_ceremony(int ts);     /* M7 hook: town status granted (now:
 /* M6: called when any event card is answered (also when it expires: choice 0), after its effects applied */
 typedef void (*PolEventHook)(int ev, int choice);
 void politics_set_event_hook(PolEventHook fn);
+/* 1.2 S1: apply an effect list from outside the tables (the reactor letter, power.cpp); no-op when politics is off */
+void politics_apply_fx_list(const PolFx *list);
 
 /* ------------------------------------------------------------------ messages for the ticker
    politics_month and player actions queue these; game.cpp drains them with politics_poll_msg and hands

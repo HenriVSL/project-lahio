@@ -196,10 +196,12 @@ import art_m2_res  # noqa: E402
 import art_m2_ind  # noqa: E402
 import art_m2_cplx  # noqa: E402
 import art_m2_misc  # noqa: E402
-M2_MODULES = [art_m2_res, art_m2_ind, art_m2_cplx, art_m2_misc]
+import art_power  # noqa: E402  (1.2 A1: coal station, peat, nuclear, oil power plants)
+M2_MODULES = [art_m2_res, art_m2_ind, art_m2_cplx, art_m2_misc, art_power]
 M2_KEYS = set()
 KEY_ALIASES = []          # (new key, [(src key, src variant), ...] = new v0, v1, ..., rot offset)
 GROUPS = {}
+HOT2 = {}                 # 1.2 A1: key -> canonical (dX, dY, dZ) of a second chimney top relative to md.hot
 
 
 def _norm_rows(rows):
@@ -224,6 +226,7 @@ for _mod in M2_MODULES:
             BUILDINGS.append(_row)
     KEY_ALIASES += getattr(_mod, 'KEY_ALIASES', [])
     GROUPS.update(getattr(_mod, 'GROUPS', {}))
+    HOT2.update(getattr(_mod, 'HOT2', {}))
 FOOTPRINTS = sorted(set(tuple(b[1]) for b in BUILDINGS))
 BUILD_FP = dict((b[0], tuple(b[1])) for b in BUILDINGS)
 for _ka in KEY_ALIASES:
@@ -237,6 +240,28 @@ def rot_plan(n, m, rots):
     if rots == 2:
         return [0, 1], {2: 0, 3: 1}
     return [0], ({1: 0, 2: 0, 3: 0} if n == m else {})
+
+
+HOT2_NAME = re.compile(r'^(.+?)_v\d+_(?:ab_)?r(\d)$')
+
+
+def hot2_point(name, spr, zoom_px):
+    """1.2 A1: second smoke hotspot (sprite px) of a RENDERED lot sprite `name` = (img, anchor, hot), or None.
+    HOT2[key] = canonical offset of the second chimney top from md.hot; projected with the sprite's own rotation
+    (the same dimetric projection as render_gbuffer).  The header gets an alias row `<name>_hot2` (same pieces,
+    this hotspot) for every lot name whose sprite has one; life.cpp may alternate puffs between the two."""
+    m = HOT2_NAME.match(name)
+    if not m or m.group(1) not in HOT2:
+        return None
+    img, anc, hot = spr
+    if hot[0] < 0:
+        return None
+    dX, dY, dZ = HOT2[m.group(1)]
+    wx, wy = artlib._rot_fwd(int(m.group(2)), dX, dY)
+    z = zoom_px / 64.0
+    hx = int(round(hot[0] + (wx - wy) * z))
+    hy = int(round(hot[1] + ((wx + wy) / 2.0 - dZ) * z))
+    return (min(max(hx, 0), img.width - 1), min(max(hy, 0), img.height - 1))
 
 
 def ab_wanted(ab, v):
@@ -913,6 +938,12 @@ def write_headers(zsets, alias_list):
         idx += [(pg[0], zoom_px, pg[2] is not None) for pg in pages]
         rows = [(n, n) for n in spr]
         rows += [(a, t) for (a, t) in resolve_aliases(alias_list, spr) if t in spr]
+        hot2 = {}                               # 1.2 A1: <name>_hot2 rows (second chimney), hotspot override
+        for (a, t) in list(rows):
+            h2 = hot2_point(t, S[t], zoom_px)
+            if h2 is not None:
+                rows.append((a + '_hot2', t))
+                hot2[a + '_hot2'] = h2
         rows.sort(key=lambda r: r[0])
         plist, first = [], {}
         for n in sorted(spr):
@@ -933,6 +964,7 @@ def write_headers(zsets, alias_list):
         L += ['};', '', 'static const ArtPSpr art_sprites_%d[] = {' % zoom_px]
         for (a, t) in rows:
             img, anc, hot = S[t]
+            hot = hot2.get(a, hot)
             L.append('    { "%s", %d, %d, %d, %d, %d, %d, %d, %d },' % (a, img.width, img.height, anc[0], anc[1], hot[0], hot[1],
                                                                        first[t], len(spr[t])))
         L += ['};', '#define ART_PIECES_%d_COUNT %d' % (zoom_px, len(plist)),

@@ -29,6 +29,7 @@
 #include "civic.h"
 #include "era.h"           /* M7 */
 #include "season.h"        /* 1.1 W1 */
+#include "power.h"         /* 1.2 S1: reactor price, build months, script */
 
 /* ------------------------------------------------------------------ state */
 static ToolPreview s_prev;
@@ -200,9 +201,11 @@ static int op_lot_place(int def, int x, int y, int rot)
 {
     Op *o;
     Lot *l;
-    int id = world_lot_place(def, x, y, rot, variant_for(def, x, y), LOT_ACTIVE);
+    int bm = power_build_months(def);           /* 1.2 S1: a reactor is built over months (0 = ready at once) */
+    int id = world_lot_place(def, x, y, rot, variant_for(def, x, y), bm ? LOT_BUILDING : LOT_ACTIVE);
     if (!id) return 0;
     l = world_lot(id);
+    if (bm) l->build_left = (u8)ICLAMP(bm, 1, 255);
     l->flags |= LF_NEW | LF_PLAYER;
     o = rec_op();
     if (o) {
@@ -583,7 +586,7 @@ static void eval_dezone(int x, int y, TEval *e)
 static Money lot_refund(const Lot *l)
 {
     if ((l->flags & (LF_NEW | LF_PLAYER)) != (LF_NEW | LF_PLAYER)) return 0;
-    return def_building(l->def)->cost * g_misc.refund_pct / 100;
+    return power_build_cost(l->def) * g_misc.refund_pct / 100;   /* 1.2 S1: the price paid (the reactor letter) */
 }
 
 /* bulldoze; count_lot = 1 the first time a lot is met in this plan (its cost counted once) */
@@ -805,7 +808,8 @@ static void plan(int tool, int param, int ax, int ay, int bx, int by, int shift,
         r = world_lot_check(param, x0, y0, rot);
         if (param == B_STATION && r == PLACE_OK && !transit_station_ok(x0, y0, rot))
             r = complex_map_has_rail() ? REJ_NEEDS_RAIL : REJ_NO_RAILWAY;   /* M2; PL2: say when the map has no track at all */
-        p->cost = d->cost;
+        if (r == PLACE_OK && param == B_NUCLEAR_PLANT && power_reactor_choice() == RX_NONE) r = REJ_REACTOR;   /* 1.2 S1 */
+        p->cost = power_build_cost(param);   /* 1.2 S1: = d->cost except the reactor (the letter's price) */
         for (y = y0; y < y0 + h; y++)
             for (x = x0; x < x0 + w; x++) {
                 int st = PT_OK, rs = 0;
@@ -1376,6 +1380,8 @@ int tools_script_line(const char *line, int *wait_months, FILE *out)
     if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "trade/era") : r;
     r = season_script_line(n, t, out);                             /* 1.1 W1: season dump | season force hard|ordinary */
     if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "season") : r;
+    r = power_script_line(n, t, out);                              /* 1.2 S1: reactor east|west|loviisa | reactor dump */
+    if (r >= 0) return r == SCR_ERROR ? out_err(out, line, "reactor") : r;
     return SCR_UNKNOWN;
 }
 

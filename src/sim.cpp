@@ -34,6 +34,7 @@
 #include "trade.h"
 #include "hard.h"          /* 1.1 D1: Sweden 1969-70, era expectations */
 #include "season.h"        /* 1.1 W1: winter */
+#include "power.h"         /* 1.2 S1 */
 
 /* T12 tuning constants (local; the shared ones are in sim.h) */
 #define PHONE_YEAR 1960                 /* M5: houses tier 3 need a telephone (post office) from this year */
@@ -201,6 +202,7 @@ void sim_new_city(const SimSettings *s)
     era_reset();               /* M7: trade agreement, history, newspaper */
     hard_reset();              /* 1.1 D1 */
     season_reset();            /* 1.1 W1 */
+    power_reset();             /* 1.2 S1: the reactor letter unanswered */
 }
 
 const SimSettings *sim_settings(void) { return &s_set; }
@@ -1471,6 +1473,7 @@ u32 sim_hash(void)
     h ^= civic_hash();                             /* M5 */
     h ^= era_hash();                               /* M7: era + trade */
     h ^= season_hash();                            /* 1.1 W1: 0 on Easy */
+    h ^= power_hash();                             /* 1.2 S1: 0 until the reactor letter is answered */
     return h;
 }
 

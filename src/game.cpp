@@ -50,6 +50,7 @@
 #include "mapgen.h"
 #include "season.h"        /* 1.1 W1 */
 #include <math.h>
+#include "power.h"     /* 1.2 S1: the reactor letter */
 
 /* F3: the '+'/'=' and '-' keys of the main row (VK_OEM_PLUS / VK_OEM_MINUS are missing from VC6's headers) */
 #define VK_OEM_PLUS_F3  0xBB
@@ -461,7 +462,8 @@ static int script_game_cmd(const char *line)
     }
     if (str_ieq(cmd, "menu")) { if (s_ready) enter_menu(GS_PAUSEMENU); return 1; }
     /* PL1 (screenshots): guide [1 open | 0 close], panel N (PANEL_*, 0 closes), flyout K (tool key, -1 closes) */
-    if (str_ieq(cmd, "guide")) { if (s_ready) { if (n >= 2 && !a) { uiguide_close(); news_closed(); } else guide_show(); } return 1; }
+    if (str_ieq(cmd, "guide")) { if (s_ready) { if (n >= 2 && !a) { uiguide_close(); news_closed(); } else { guide_show(); if (n >= 3) uiguide_set_page(b); } } return 1; }   /* 1.2: guide 1 PAGE */
+    if (str_ieq(cmd, "reactorletter")) { if (s_ready) uipol_show_reactor(); return 1; }   /* 1.2: screenshot of the reactor letter */
     if (str_ieq(cmd, "panel") && n >= 2) { if (s_ready) { if (a > 0) ui_open_panel(a); else ui_close_panel(); } return 1; }
     if (str_ieq(cmd, "flyout") && n >= 2) { if (s_ready) ui_open_flyout(a); return 1; }
     return 0;
@@ -637,6 +639,7 @@ static void sync_ui_tool(void)
 static void select_tool(int tool, int param)
 {
     tools_select(tool, param);
+    if (tool == TOOL_BUILD && param == B_NUCLEAR_PLANT && power_reactor_needed()) uipol_show_reactor();   /* 1.2 S1: the letter */
     if (tool == TOOL_ROAD) s_road_cls = param;
     sync_ui_tool();
     snd_play(SND_KEY, 70);
@@ -741,6 +744,10 @@ static void exec_cmd(const UiCmd *c)
         else if (c->a == POLA_REPEAL) { if (politics_repeal(c->b)) snd_play(SND_PAPER, 70); else snd_play(SND_DENY, 60); }
         else if (c->a == POLA_LETTER) { if (politics_send_letter(c->b)) snd_play(SND_TYPE, 80); else snd_play(SND_DENY, 60); }
         else if (c->a == POLA_CHOOSE) { if (politics_choose(c->b)) snd_play(SND_STAMP, 70); }
+        else if (c->a == POLA_REACTOR) {   /* 1.2 S1: the reactor letter (power.h) */
+            if (power_reactor_choose(c->b)) { snd_play(SND_STAMP, 80); ui_ticker_push(SEV_POLITICAL, power_reactor_card()->ch[c->b].result, -1, -1); }
+            else snd_play(SND_DENY, 60);
+        }
         break;
     }
 }
@@ -879,6 +886,7 @@ static void tool_results(int res, const InputState *in)
     case TRES_DENIED:
         snd_play(SND_DENY, 70);
         if (tools_last_reason() == REJ_NO_MONEY) ui_ticker_push(SEV_WARN, "Not enough money for that.", -1, -1);
+        if (tools_last_reason() == REJ_REACTOR) uipol_show_reactor();   /* 1.2 S1: the letter still waits */
         break;
     case TRES_QUERY: {
         int lot = render_pick_lot(in->mx, in->my);

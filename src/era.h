@@ -121,6 +121,7 @@ enum { EM_OFFER, EM_SIGNED, EM_AUTO_SIGNED, EM_DEFICIT, EM_SHORTFALL, EM_OIL_SHO
        EM_POWER_NEAR,      /* PL1: a = demand % of supply (>= 90, before a shortage) */
        EM_RIGHTS_NEAR,     /* PL1: a = TS_* within reach, b = population */
        EM_RIGHTS_REMIND,   /* PL1: a = TS_*, b = months the decree has waited */
+       EM_REACTOR_ONLINE,  /* 1.2 S1: the first nuclear plant is finished; a = RX_* (power.h), b = units */
        EM_COUNT };
 typedef struct { u8 type; s32 a, b; } EraMsg;
 void era_push_msg(int type, s32 a, s32 b);

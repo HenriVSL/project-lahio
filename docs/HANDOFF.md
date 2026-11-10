@@ -587,3 +587,63 @@ learned while building. Append your own section when you finish a task.
 - s7 1990: planner Normal 0 loans, quiet years 4 (was 13); naive Normal −4.4k, 4 loans (target ≤ 2, repaying); planner Hard 2
   loans cleared; mill/metal/politics still 10-11 quiet years on s7. Benches with season swaps: worst 75-100 ms, 59.2-59.6 fps.
 - Cosmetic (orchestrator saw): a stray ":" before the date in the top bar (old, since M1).
+
+## 1.2 A1 power plant art (done) — art/art_power.py, art/power_preview.py, ART.md 3.2, PERF.md 9, tests/out/a1/
+- Keys (sprite contract with S1): `coal_station` 3x3, `nuclear_plant` 3x3, `peat_plant` 2x2, `oil_plant` 2x2; 1 variant each,
+  all 4 rotations exist (r0/r1 rendered, r2/r3 aliases: every model is point-symmetric) → no BDF_NO_ROTATE. Hotspots:
+  coal_station, peat_plant, oil_plant (BDF_SMOKE); nuclear none. art.cpp maps lots by key string (`%s_v%d_r%d`), so S1's
+  appended B_COAL_STATION resolves without art.cpp changes (none were needed).
+- **oil_plant has its own art**: the M7 alias (art_m2_misc.py KEY_ALIASES) is removed. defs.cpp oil_plant comment
+  "art = coal plant alias" is stale (S1/orchestrator: update the comment).
+- New zero-VRAM header rows `coal_station_v0_r<R>_hot2`: second chimney (hx, hy) for the two-chimney station. Suggested
+  life.cpp change (orchestrator/S1, not done: life.cpp is not A1's): in `smoke_emit`, look up
+  the `<lot sprite name>_hot2` sprite once per lot (cache it; art_findf logs a missing name once per name, so a silent
+  lookup like art.cpp's static findq exported via art.h is nicer) and use its hx/hy for every other puff, so both
+  chimneys smoke. Works for any key that later gets a HOT2 entry (coal_plant could get one for free too).
+- `icon_b_coal_station` added (gen_ui.py, UI.md); UI sheet size unchanged.
+- VRAM: z64 7,691 → 7,947 KB (+256, 32 pages), z32 1,918 → 1,962 KB (+44), winter +0 KB; heap 33.97 → 34.36 MB (40 MB
+  budget). VC6 build on VM B: full rebuild, 0 warnings; `lahio.exe -test art`: all new lots found, only the old
+  `icon_b_patron_villa` missing (pre-existing, M6 gift def without an icon).
+- In-game check (VM B): `scripts/a1_power.txt` on a copy of the 1.1rc1 Koivukoski save (A1TEST.KAU, see the script
+  header): all four placed and built (nuclear after the Loviisa letter), shots in `tests/out/a1/` (z64/z32, summer/winter).
+- Previews: `art/preview/power_sheet_<64|32>[_winter].png`, `power_scene_<64|32>[_winter].png` (re-run
+  `python3 art/power_preview.py` after any full gen_art run: it clears preview/*.png).
+
+## S1 1.2 "Power" simulation (done) — src/power.*, tests/test_power.cpp, BALANCE.md section 12
+- **Defs:** `coal_station` (B_COAL_STATION) appended before B_COUNT (3x3, Town 1962, 12,000 mk, 250/mo, 2,000 units, 80 jobs,
+  smoke); peat Market town 1972, 5,000/140/1,000; nuclear Regional centre 1977, BDF_NEEDS_SHORE, 30,000/450/5,000, 150 jobs.
+  `DEF_IS_PLANT(id)` covers the contiguous B_COAL_PLANT..B_NUCLEAR_PLANT plus the station (advice/ui case lists updated).
+  Variants 1 on all four (A1 art; oil has its own art now, the alias is gone in art_m2_misc.py). 1.1 rows unchanged.
+- **power.cpp** (portable, new module in both makefiles): the reactor letter (RX_EAST 70 % / 18 months / 1,500 clearing
+  credit a month while built; RX_WEST 100 % / 12 / authority -2, East -6; RX_LOVIISA 85 % / 24 / 750; after 1990 East 90 %,
+  Loviisa 95 %, no import), `power_build_cost/months` (tools.cpp: price, LOT_BUILDING + build_left), query-panel lines,
+  Guide rows, `power_advice_pick` (nuclear, peat while coal index >= 150, station when >= 2 small plants), January filler
+  the year after the first reactor, ticker EM_REACTOR_ONLINE, script `reactor east|west|loviisa|dump`, chunk POWR v1
+  (written only once decided; old saves = not decided), `power_hash()` = 0 until decided.
+- Hooks: trade.cpp station surcharge x4 (`POWER_STATION_COAL_X`), `TradeState.reactor_import` (appended, not saved/hashed)
+  off the clearing balance; politics.cpp Rural PR_POWER +2 per peat plant (max 4) and `politics_apply_fx_list` (no-op when
+  off); budget.cpp: power plants under construction pay no upkeep; tools.cpp REJ_REACTOR until the letter is answered,
+  refund uses the price paid; sim/save/era one-line hooks; advice.cpp HS_SMALL_PLANTS hindsight (brownout, >= 6 small coal
+  plants, station unlocked; weight 11 > blackout 10) and the plant named in the power_short/power_near lines; purposes.
+- **UI (VC6 only):** Power fly-out order coal, station, oil, peat, hydro, nuclear; reactor price in the fly-out; ui_pol
+  V_REACTOR view (`uipol_show_reactor`, also with politics off) opened by select_tool(nuclear) and by a REJ_REACTOR denial;
+  POLA_REACTOR -> game.cpp; query panel plant lines; Guide (F4) page 3 "THE POWER WORKS" (Tab cycles 3 pages); life.cpp:
+  station smoke x2 alternating with the `<sprite>_hot2` chimney (cached silent lookup), peat smoke x2/3.
+- **Regression:** a 1.1 build of the same tests vs this build, every tests/out file compared (timings stripped): all year
+  tables, CSVs and hashes identical at Easy/Normal/Hard; only text naming the new plants differs. Mac 216/216.
+- **New runs:** test_power.cpp (rows, Guide order, fuel, letter East/West/Loviisa/after 1990/script, save mid-construction,
+  the user's 1996 AUTO1.KAU: loads as 1.1, 60k city on 8 stations, Cabinet + hindsight on it; skipped if the file is absent);
+  test_balance `balance_power_1955_1990` (s_power_bot planner/naive, s7 Normal).
+- VM B: VC6 /W3 clean rebuild 0 warnings; `lahio.exe -seed 7 -preset lakeland -difficulty normal -script
+  scripts\bal_planner_s7_era_normal_power.txt -fast` (2 coal stations) = Mac: pop every January identical, Dec 1989
+  12,226 / 56,750 mk.
+- Open: nuclear reactor art has no construction sprite (uses build_3x3); the Guide power page and the reactor letter are
+  not yet seen on screen (orchestrator's visual pass); the reactor letter appears with politics off too (blocs not consulted).
+
+### 1.2 orchestrator (2026-11-10): visual pass + RC1
+- Visual check `scripts/v12_check.txt` / `v12_letter.txt` on a copy of the 1.1rc1 Koivukoski save (new script commands
+  `reactorletter` and `guide 1 PAGE`). Note: a `shot` is captured a few frames after the request; pad with comment lines
+  after each shot before changing the screen.
+- Fixes: Guide power page column overlap ("Upkeep/monthWhen"), peat note "Rural +" -> "the Rural bloc approves",
+  reactor letter effect lines wrap to 2 lines (were cut at the panel edge). GAME_VERSION "1.2 RC1".
+- RC1 package: lahio-1.2-rc1.zip (85 art sheets), unpacked run on VM B exit 0, VRAM 11,453 KB used, 1,806 KB free at 800.

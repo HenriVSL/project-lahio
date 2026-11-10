@@ -8,7 +8,7 @@ OBJS   = obj\main.obj obj\plat.obj obj\gfx.obj obj\snd.obj obj\config.obj obj\ut
          obj\sim.obj obj\net.obj obj\fields.obj obj\budget.obj obj\traffic.obj obj\tools.obj \
          obj\ui.obj obj\text.obj obj\save.obj obj\menu.obj obj\game.obj obj\life.obj obj\politics.obj obj\lifecar.obj \
          obj\poltab.obj obj\ui_pol.obj obj\industry.obj obj\transit.obj obj\lifebus.obj obj\civic.obj obj\fire.obj obj\complex.obj \
-         obj\trade.obj obj\era.obj obj\ui_graph.obj obj\ui_news.obj obj\advice.obj obj\hard.obj obj\season.obj
+         obj\trade.obj obj\era.obj obj\ui_graph.obj obj\ui_news.obj obj\advice.obj obj\hard.obj obj\season.obj obj\power.obj
 HDRS   = src\*.h
 
 lahio.exe: obj $(OBJS)

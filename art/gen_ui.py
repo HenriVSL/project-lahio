@@ -1553,6 +1553,20 @@ icon('b_coal_plant', '''
 .kkkkkkkkkkk.
 .kkkkkkkkkkk.
 ''')
+icon('b_coal_station', '''
+.dd....dd....
+dddd..dddd...
+.dd....dd....
+..k.....k....
+..k.....k....
+..k.....k....
+..k.kk..k....
+.kkkkkkkkkkk.
+.kdkdkkdkdkk.
+.kdkdkkdkdkk.
+.kkkkkkkkkkk.
+.kkkkkkkkkkk.
+''')
 icon('b_hydro_plant', '''
 .............
 .kkkkkkkkkkk.
@@ -3940,7 +3954,7 @@ def check(sheet_rects, fonts):
         stem = n[5:]
         if stem not in md:
             problems.append('icon %s not listed in UI.md' % n)
-    bkeys = ['town_hall', 'coal_plant', 'hydro_plant', 'oil_plant', 'peat_plant', 'nuclear_plant', 'pump', 'well',
+    bkeys = ['town_hall', 'coal_plant', 'coal_station', 'hydro_plant', 'oil_plant', 'peat_plant', 'nuclear_plant', 'pump', 'well',
              'water_tower', 'fire_station', 'school', 'clinic', 'sauna', 'police', 'library', 'post',
              'health_centre', 'park', 'sports_field', 'ice_rink', 'church', 'element_factory', 'station']
     want = (['icon_b_' + k for k in bkeys] + ['icon_r_' + k for k in ('grav', 'road', 'main', 'mway', 'rail')] +
