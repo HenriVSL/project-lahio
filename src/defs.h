@@ -41,6 +41,8 @@ enum { RDF_ZONE_ACCESS = 1,   /* lots/zones can use it as access (not motorway, 
        RDF_CARRIES_WATER = 8  /* F1: no longer carries water (pipes do, WATER.md). Kept for: v1 saves get a
                                  pipe under these classes on load; "lay pipes with new roads" lays them */ };
 #define BRIDGE_MAX_LEN 8
+#define RAIL_XING_COST 10   /* 1.2 X1: a level crossing costs the road + this (barriers, signs); a motorway over
+                               the railway costs the motorway's bridge_cost (an overpass) */
 
 typedef struct {
     const char *key;          /* sprite prefix: "grav", "road", "main", "mway", "rail" */

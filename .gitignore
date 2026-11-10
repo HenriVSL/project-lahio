@@ -28,3 +28,7 @@ tests/out/
 
 # macOS
 .DS_Store
+
+# release staging (dist/package.sh)
+/dist/LAHIO/
+/dist/out/

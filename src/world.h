@@ -59,7 +59,13 @@ enum { TF_PROTECTED  = 0x01,   /* cannot be bulldozed (national road, initial ra
        TF_BURNING    = 0x10,   /* on fire (v1.0) */
        TF_RUBBLE     = 0x20,   /* burnt-out / demolished remains (v1.0) */
        TF_PIPE       = 0x40,   /* F1: water pipe (underground: may share a tile with anything; WATER.md 3.2) */
-       TF_RESERVED7  = 0x80 };
+       TF_RAIL       = 0x80 }; /* 1.2 X1: the railway runs under this car-road tile: a level crossing (gravel road,
+                                  street, main road) or a motorway overpass. Only with a car road class (1..4);
+                                  the tile is rail for rail checks (TILE_HAS_RAIL) and a road for everything else.
+                                  Never set in 1.0/1.1 saves (bit 7 was reserved/zero), so no TILE version bump.
+                                  world_set_road keeps it consistent (world_set_road below) */
+#define TILE_HAS_RAIL(t) (TILE_ROAD(t) == ROAD_RAIL || ((t)->flags & TF_RAIL))   /* rail or a crossing/overpass */
+#define TILE_IS_XING(t)  (((t)->flags & TF_RAIL) && TILE_ROAD(t) && TILE_ROAD(t) != ROAD_RAIL)
 
 /* ------------------------------------------------------------------ Lot (20 bytes, one per building) */
 enum { LOT_BUILDING,           /* construction stage sprite; build_left months remain */
@@ -113,7 +119,11 @@ int   world_lot_at(int x, int y);      /* lot id or 0 */
 
 /* ---- setters (all notify) */
 void  world_set_terrain(int x, int y, int ter, int variant);
-void  world_set_road(int x, int y, int cls);       /* ROAD_NONE removes; updates masks of 5 tiles */
+void  world_set_road(int x, int y, int cls);       /* ROAD_NONE removes; updates masks of 5 tiles.
+                                                      1.2 X1 on a rail tile: a car class makes a crossing/overpass
+                                                      (TF_RAIL, class = cls); ROAD_NONE or ROAD_RAIL on a crossing
+                                                      removes the road and leaves the rail (plain ROAD_RAIL).
+                                                      Callers (tools) validate where crossings may go. */
 void  world_set_power_line(int x, int y, int on);
 void  world_set_zone(int x, int y, int zone);      /* ZONE_NONE dezones; keeps network bits */
 void  world_set_tile_flags(int x, int y, int set, int clear);
@@ -193,5 +203,12 @@ int   world_save(struct SaveFile *sf);
 int   world_load(struct SaveFile *sf);  /* then world_recalc + notify_all inside */
 
 int   world_last_tile_version(void);   /* TILE chunk version of the last world_load (1 = pre-pipes save) */
+
+/* ---- 1.2 X1 railway crossings */
+int   world_rail_mask(int x, int y);   /* rail autotile mask (1 << DIR_*) of a rail or crossing tile: plain rail =
+                                          its road mask; crossing = neighbours that carry rail; 0 = no rail */
+int   world_rail_axis(int x, int y);   /* 5 (rail along Y, NE-SW) or 10 (along X) for a crossing/straight rail,
+                                          0 = not straight */
+int   world_xing_count(void);          /* tiles with TF_RAIL (level crossings + motorway overpasses) */
 
 #endif

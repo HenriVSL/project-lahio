@@ -192,6 +192,10 @@ const char *text_place_reason(int place)
     case REJ_NO_RAILWAY:        return "No railway on this map: the station has nothing to stand by";   /* PL2 */
     case REJ_REACTOR:           return "The reactor question awaits the President's answer (the desk)";   /* 1.2 S1 */
     case REJ_CPX_MAIN_ROAD:     return "No railway here: needs a main road within 2 tiles";             /* PL2 */
+    case REJ_XING_CORNER:       return "Cross the railway on straight track, not at a bend";            /* 1.2 X1 */
+    case REJ_XING_ANGLE:        return "Cross the railway straight, at a right angle";
+    case REJ_XING_NEAR:         return "Too close to another level crossing";
+    case REJ_XING_PLACE:        return "The railway can't be crossed here";
     }
     return "?";
 }

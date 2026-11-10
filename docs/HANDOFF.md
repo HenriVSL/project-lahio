@@ -647,3 +647,77 @@ learned while building. Append your own section when you finish a task.
 - Fixes: Guide power page column overlap ("Upkeep/monthWhen"), peat note "Rural +" -> "the Rural bloc approves",
   reactor letter effect lines wrap to 2 lines (were cut at the panel edge). GAME_VERSION "1.2 RC1".
 - RC1 package: lahio-1.2-rc1.zip (85 art sheets), unpacked run on VM B exit 0, VRAM 11,453 KB used, 1,806 KB free at 800.
+
+## 1.2 X1 crossing the railway (done) — world.*, tools.*, render.cpp, tests/test_xing.cpp, scripts/x1_xing.txt, x1_shots.txt
+- **Storage:** `TF_RAIL` = Tile.flags bit 7 (was TF_RESERVED7, always 0 in 1.0/1.1 saves) on a tile whose road class is a
+  car road (gravel/street/main = level crossing, motorway = overpass). The class byte holds the ROAD; the rail is implied.
+  `TILE_HAS_RAIL(t)` (rail or crossing) / `TILE_IS_XING(t)` in world.h. No TILE chunk bump; world_load clears a stray
+  TF_RAIL on a non-car tile (defensive). Games without crossings: every tests/out file and test log identical to the
+  pre-X1 build (timings stripped); the user's 1.1rc1 AUTO1.KAU loads with 0 crossings, round trip identical.
+- **world_set_road on rail** (world.h): a car class on a ROAD_RAIL tile makes a crossing (TF_RAIL set); ROAD_NONE or
+  ROAD_RAIL on a crossing leaves plain rail. So undo/redo works through TState unchanged (tools.cpp). Rail masks link to
+  any TILE_HAS_RAIL neighbour; the crossing's own mask is the road's. `world_rail_mask/axis(x, y)`, `world_xing_count()`.
+  A crossing counts as a road tile AND a rail tile in world_road_stats (upkeep of both; complex_map_has_rail).
+- **Rules (tools.cpp eval_road/eval_power + validate_rail_paths):** straight track only (rail mask 05/10) else
+  REJ_XING_CORNER; the path must go straight across at a right angle with path tiles on both sides (REJ_XING_ANGLE), a road
+  must reach land on both sides (else REJ_XING_PLACE, also rail bridges and the TF_EDGE_LINK map-edge rail tile); no road
+  crossing right next to another one along the track (REJ_XING_NEAR: keeps two crossings from linking as a road along the
+  rail). Texts in text.cpp. Cost: road cost + RAIL_XING_COST (10, defs.h); motorway overpass = motorway bridge_cost (250);
+  upgrades charge the difference. Bulldoze: the road (and wire/pipe as usual) goes, the rail stays, even on protected track.
+- **Power:** a power line may cross straight track at a right angle (wire over rail, conducts as a line). Power already
+  jumped ONE rail tile like a plain road tile (net.cpp s_cond 2 = any road class incl. rail): unchanged, now tested.
+  Pipes under rail and under crossings already worked (TF_PIPE independent): tested.
+- **Rail checks see crossings:** transit_station_ok, complex rail_near (Valtion Metalli), industry d_rail, sim
+  rect_best_road (rail counts as main-road access) use TILE_HAS_RAIL. Traffic, zone access, cosmetic cars, coverage: the
+  crossing is just a road tile (no code change).
+- **Render (VC6 only):** X2's keys (MM = the road's axis, like <road>_bridge_MM): `<grav|road|main>_xing_MM` (fallback
+  alias `rail_xing_MM`, MM = rail axis), `mway_rail_MM`; drawn in the object pass like a bridge on land (PF_NO_OCCLUDE,
+  ground pass skipped). Without art: road sprite as ground / rail + mway_bridge (temporary fallback). Optional
+  `rail_power_MM` (rail axis) for a wire over plain rail, else the wire-over-road sprite. Road axis comes from
+  world_rail_axis (stable) not the road mask. Test town (-test render): overpass at 110,78, street crossing at 70,78.
+- **Script:** `check road|rail X0 Y0 X1 Y1 yes|no`, `check power X Y yes|no`, `dumptile X Y [FILE]`, stat `xings`.
+  scripts/x1_xing.txt (seed 1 Lakeland, -rail: track along x = 91) runs on the Mac (xing_script_seed1) and on VM B.
+
+## 1.2 RC2 X2 rail crossing art (done) — art/art_xing.py, art/xing_preview.py, ART.md 3.3, PERF.md 10
+- **Names** (orchestrator-approved, relayed to X1): MM = axis of the FIRST key in the name (as `<key>_bridge_MM`; 05 = along
+  Y, 10 = along X). Level crossings **per road class**: `grav_xing_MM`, `road_xing_MM`, `main_xing_MM`, MM = the road's axis
+  (the three classes differ in width/verges, one generic tile cannot join all of them). `rail_xing_MM` (MM = rail axis) =
+  header alias of `road_xing_<other MM>`. `mway_rail_MM`, MM = the motorway's axis. All lot-kind like the bridges: full
+  tile width, anchor = tile south vertex, own ground over the whole diamond → object pass like a bridge on land.
+- **Overpass is a hump**: the motorway deck rises 6 px at 64 (3 at 32) over the track and is at ground level at both tile
+  edges. Cars on an `mway_rail` tile drawn at ground level would sit up to 6 px below the deck: lifecar/render (X1)
+  should lift them by the profile along the motorway axis, t = 0..32 tile units from the -axis edge:
+  `z = 6*t/7.5` (t < 7.5), 6 (7.5..24.5), `6*(32-t)/7.5` (t > 24.5), px at 64 (x0.5 at 32). Not done here (src/ is X1's).
+- **Power over rail**: no new sprite. render.cpp draws `wire_MM` (no pole) on every road-class tile including rail; the
+  wires clear the track (preview scene). If the code ever draws `power_MM` (pole) on a rail tile, the pole stands between
+  the rails: keep wire_ there.
+- art/artlib.py: new optional `Model.stamps` (camera-facing pixel stamps applied after shading, same in both seasons);
+  no existing model uses it. gen_art.py: art_xing in M2_MODULES (extra_jobs), module `NAME_ALIASES` (plain name aliases)
+  and `REQUIRED` (check), edge-match test of every crossing against its four straight neighbours (verified to fail when
+  the crossing ground is broken).
+- src/art.cpp: `art_selftest` needs the 10 new names. VC6 full rebuild 0 warnings; `lahio.exe -test art` on VM B: 1,659 names,
+  missing only the old `icon_b_patron_villa`.
+- Regenerated with `gen_art.py --only grav_xing,road_xing,main_xing,mway_rail --nopreview` (keeps preview/ intact;
+  a full run would wipe preview/, then re-run power_preview.py and xing_preview.py). Existing sprites verified unchanged
+  (all 4,704 sprite x zoom x season re-assembled from old vs new pages: identical).
+- VRAM: z64 7,947 → 7,988 KB (+41), z32 1,962 → 1,964 KB (+2), no new page files, winter +0.
+- Previews: `art/preview/xing_detail_<64|32>[_winter].png` (close-ups), `xing_scene_<64|32>[_winter].png` (rail line crossed
+  by gravel road, street, main road, motorway, power line; rail along X and along Y), `xing_sheet_*`.
+- Not seen in game yet (needs X1's placement code): orchestrator's visual pass on VM B.
+- **Overpass hump (life.cpp):** cars and buses on an mway_rail tile are lifted along the motorway axis (X2's profile:
+  0..6 px over the first 7.5/32 of the tile, 6 px, back down over the last 7.5; z32 half), `overpass_lift`.
+- **Verified:** Mac 226/226 (10 new in test_xing.cpp); every pre-existing tests/out file and test-log line identical to
+  the pre-X1 build apart from timings. VM B: VC6 /W3 full rebuild 0 warnings; `lahio.exe -seed 1 -rail -script
+  scripts\x1_xing.txt -fast`: 14 checks ok, 0 errors (at the end the exe has 8 lots / 22,355 mk vs the Mac's 7 /
+  22,435: new-city setup difference, not investigated; every check gives the same answer). Shots in tests/out/x1/ (x1_z64 = street +
+  gravel crossings and a line over the track, x1_render = motorway overpass in the -test render town).
+- Open: the exe and the Mac seed-1 new city differ by one lot / 80 mk after a few months (see above); not X1's.
+
+### 1.2 orchestrator (2026-11-10): RC2 = railway crossings + installer
+- X1/X2 crossings integrated. Mac 226/226; VC6 clean rebuild 0 warnings; town1 -fast on VM B = Mac (pop 5,188, 419 mk).
+- **Every release ships an installer and a portable zip** (user rule): `dist/package.sh <version> [tag] [setup-version]`
+  stages dist/LAHIO, writes dist/out/lahio-<tag>.zip + lahio-<tag>-setup.exe (Setup98 kit dev/setup98, owner 86box-d1;
+  manifest dist/lahio-setup.ini; don't edit the kit) and copies both to Shared/release. README template: dist/README.TXT.
+  RCs use a numeric setup version just below the release (1.2 RC2 = 1.1.99.2).
+- RC2 setup tested on VM B: /S install rc 0 (107 files, 5 shortcuts), installed game runs (exit 0), uninst /S /PURGE
+  removes the folder and the Start menu group.

@@ -24,17 +24,28 @@ static int s_free_hint = 1;     /* lowest slot that may be free */
 static u32 s_struct_serial = 1;  /* bumped by changes other than lot placement/def/status (net fast paths) */
 static int s_road_n[ROAD_CLASS_COUNT], s_bridge_n[ROAD_CLASS_COUNT], s_line_n;   /* running counts (budget) */
 static int s_pipe_n, s_pipe_wet_n;   /* F1: pipe tiles, of which under water */
+static int s_xing_n;                 /* 1.2 X1: TF_RAIL tiles (crossings/overpasses) */
+
+/* road class counts of one tile (k = +1 / -1). 1.2 X1: a crossing counts as its road AND as a rail tile (upkeep of
+   both; complex_map_has_rail still sees the whole railway) */
+static void count_road_tile(const Tile *t, int k)
+{
+    int c = TILE_ROAD(t);
+    if (c) { s_road_n[c] += k; if (TER_IS_WATER(TER_TYPE(t))) s_bridge_n[c] += k; }
+    if (c && c != ROAD_RAIL && (t->flags & TF_RAIL)) { s_road_n[ROAD_RAIL] += k; s_xing_n += k; }
+}
+
+int world_xing_count(void) { return s_xing_n; }
 
 static void recount_roads(void)
 {
     int x, y;
     memset(s_road_n, 0, sizeof(s_road_n)); memset(s_bridge_n, 0, sizeof(s_bridge_n)); s_line_n = 0;
-    s_pipe_n = 0; s_pipe_wet_n = 0;
+    s_pipe_n = 0; s_pipe_wet_n = 0; s_xing_n = 0;
     for (y = 0; y < g_world.h; y++)
         for (x = 0; x < g_world.w; x++) {
             const Tile *t = WT(x, y);
-            int c = TILE_ROAD(t);
-            if (c) { s_road_n[c]++; if (TER_IS_WATER(TER_TYPE(t))) s_bridge_n[c]++; }
+            count_road_tile(t, 1);
             if (t->road & TR_POWER_LINE) s_line_n++;
             if (t->flags & TF_PIPE) { s_pipe_n++; if (TER_IS_WATER(TER_TYPE(t))) s_pipe_wet_n++; }
         }
@@ -220,6 +231,10 @@ static int road_mask_update(int x, int y)   /* PL3: 1 = the mask changed */
                 continue;
             }
             nc = TILE_ROAD(WT(nx, ny));
+            if (cls == ROAD_RAIL) {                          /* 1.2 X1: rail runs on through crossings/overpasses */
+                if (TILE_HAS_RAIL(WT(nx, ny))) m |= 1 << d;
+                continue;
+            }
             if (!road_links(cls, nc)) continue;
             if ((cls == ROAD_MOTORWAY) != (nc == ROAD_MOTORWAY) &&
                 !(cls == ROAD_MOTORWAY ? mway_side_ok(x, y, d) : mway_side_ok(nx, ny, DIR_OPPOSITE(d)))) continue;
@@ -259,11 +274,17 @@ void world_set_road(int x, int y, int cls)
     if (!world_in(x, y)) return;
     t = WT(x, y);
     cls = ICLAMP(cls, 0, ROAD_CLASS_COUNT - 1);
-    if (TILE_ROAD(t)) { s_road_n[TILE_ROAD(t)]--; if (TER_IS_WATER(TER_TYPE(t))) s_bridge_n[TILE_ROAD(t)]--; }
-    if (cls) { s_road_n[cls]++; if (TER_IS_WATER(TER_TYPE(t))) s_bridge_n[cls]++; }
+    count_road_tile(t, -1);
+    if (TILE_HAS_RAIL(t)) {             /* 1.2 X1: crossings/overpasses (world.h) */
+        if (cls == ROAD_NONE || cls == ROAD_RAIL) {
+            if (t->flags & TF_RAIL) cls = ROAD_RAIL;    /* the road goes, the rail stays */
+            t->flags &= (u8)~TF_RAIL;
+        } else t->flags |= TF_RAIL;                     /* a car road over the rail */
+    }
     if (cls) clear_vegetation(t);
     s_struct_serial++;
     t->road = (u8)((t->road & ~TR_CLASS_MASK) | cls);
+    count_road_tile(t, 1);
     road_mask_update(x, y);
     for (d = 0; d < DIR_COUNT; d++) road_mask_update(x + g_dir_dx[d], y + g_dir_dy[d]);
     {   /* PL3: motorway joins depend on tiles 2 away (the motorway's neighbours / far side) */
@@ -273,6 +294,34 @@ void world_set_road(int x, int y, int cls)
             if (road_mask_update(x + r2[d][0], y + r2[d][1]) && (d < 4)) wide = 1;
         world_notify(x - 1 - wide, y - 1 - wide, x + 1 + wide, y + 1 + wide, WCHG_ROAD | WCHG_FLAGS | (cls ? WCHG_TERRAIN : 0));
     }
+}
+
+/* 1.2 X1 */
+int world_rail_mask(int x, int y)
+{
+    const Tile *t;
+    int d, m = 0;
+    if (!world_in(x, y)) return 0;
+    t = WT(x, y);
+    if (TILE_ROAD(t) == ROAD_RAIL) return TILE_ROAD_MASK(t);
+    if (!TILE_IS_XING(t)) return 0;
+    for (d = 0; d < DIR_COUNT; d++) {
+        int nx = x + g_dir_dx[d], ny = y + g_dir_dy[d];
+        if (world_in(nx, ny) && TILE_HAS_RAIL(WT(nx, ny))) m |= 1 << d;
+    }
+    return m;
+}
+
+int world_rail_axis(int x, int y)
+{
+    int m = world_rail_mask(x, y);
+    if (m == 5 || m == 10) return m;
+    if (TILE_IS_XING(world_tile(x, y))) {           /* a neighbour gone (cannot happen: rail is protected): */
+        if ((m & 5) && !(m & 10)) return 5;         /* the side that still has rail, else across the road */
+        if ((m & 10) && !(m & 5)) return 10;
+        return (TILE_ROAD_MASK(world_tile(x, y)) & 5) ? 10 : 5;
+    }
+    return 0;
 }
 
 void world_set_power_line(int x, int y, int on)
@@ -629,6 +678,7 @@ static char tile_char(int x, int y)
         return c;
     }
     if (r == ROAD_RAIL) return '=';
+    if (r && (t->flags & TF_RAIL)) return r == ROAD_MOTORWAY ? 'v' : 'x';   /* 1.2 X1: crossing / overpass */
     if (r) return (t->road & TR_POWER_LINE) ? '*' : '#';
     if (t->road & TR_POWER_LINE) return '+';
     switch (TILE_ZONE(t)) {
@@ -663,6 +713,7 @@ void world_dump(FILE *f, int x0, int y0, int x1, int y1)
                "        apartments/commercial/industry tier 2 = B D J (tier 3 = Q E L); %% abandoned,\n"
                "        P plant, W water, S service, K park, X special\n"
                "        M3: forestry T mature / t regrowing / g other, G logging camp; farm land f (; field), F farm T1, Y Z T2 T3\n");
+    if (s_xing_n) fprintf(f, "        1.2: x level crossing (road over rail), v motorway over rail\n");   /* only then: old dumps unchanged */
     fprintf(f, "     ");
     for (x = x0; x <= x1; x++) fputc(x % 10 == 0 ? '0' + (x / 10) % 10 : ' ', f);
     fputc('\n', f);
@@ -724,6 +775,14 @@ int world_load(struct SaveFile *sf)
     memset(g_world.lots, 0, sizeof(g_world.lots));
     g_world.w = w; g_world.h = h;
     for (y = 0; y < h; y++) load_rle(sf, WT(0, y), w * (int)sizeof(Tile));
+    {   /* 1.2 X1: TF_RAIL means something only on a car road (bit 7 was always 0 before 1.2; defensive) */
+        int x;
+        for (y = 0; y < h; y++)
+            for (x = 0; x < w; x++) {
+                Tile *t = WT(x, y);
+                if ((t->flags & TF_RAIL) && (!TILE_ROAD(t) || TILE_ROAD(t) == ROAD_RAIL)) t->flags &= (u8)~TF_RAIL;
+            }
+    }
     if (ver < 2) {
         /* F1 migration (WATER.md 5): v1 had water mains inside gravel roads, streets and main roads; lay a
            pipe under each of them so an old city keeps roughly the same water. Bits 6/7 were unused in v1. */

@@ -218,3 +218,20 @@ free after the art. At 1024 z64 (522 KB free before) the +256 KB costs about 4 c
 of 41/48); not re-benched here (orchestrator: a 1024 z64 bench run if wanted). The first art load after the new BMPs
 were written took 30 s (cold SMB cache, 365 ms per page); a second start was back to 23 ms per page.
 
+
+## 10. 1.2 X2: rail crossings (2026-11-10)
+
+Eight new lot-kind sprites per zoom (`grav_/road_/main_xing_05/10`, `mway_rail_05/10`) plus two zero-cost header aliases
+(`rail_xing_05/10`), summer + winter, art/art_xing.py (ART.md 3.3).
+
+| | Before (1.2 A1) | After (1.2 X2) | Delta |
+|---|---|---|---|
+| 64-zoom world VRAM | 32 pages, 1,500 pieces, 7,947 KB | 32 pages, 1,508 pieces, **7,988 KB** | **+41 KB** (pieces 34 KB; headroom to 9.6 MB 1,842 KB) |
+| 32-zoom world VRAM | 8 pages, 1,467 pieces, 1,962 KB | 8 pages, 1,475 pieces, **1,964 KB** | **+2 KB** (pieces 8 KB, fitted in the last page) |
+| Page files | 32 + 8 (summer) + the same winter | unchanged count (no new BMP; the RC package stays at 85 art sheets) | 0 |
+| Winter | same surfaces | same surfaces (alpha checked) | 0 KB VRAM; winter delta at most +42 KB of system memory |
+| Sprite names per zoom / art.cpp selftest names | 1,176 / 1,649 | 1,186 / 1,659 (`-test art`: only the old `icon_b_patron_villa` missing) | +10 |
+
+Every pre-existing sprite (both zooms, both seasons) re-assembled from the new pages equals the old one (box, anchor,
+hotspot, pixels: 4,704 compared). VC6 full rebuild on VM B: 0 warnings. Not benched: one extra 1-piece sprite per
+crossing tile replaces the rail tile's flat blit cost-wise like a bridge (object pass, 1 blit at both zooms).

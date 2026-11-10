@@ -231,8 +231,8 @@ static int rect_best_road(int x0, int y0, int x1, int y1)
         for (i = x0 - ZONE_ROAD_REACH; i <= x1 + ZONE_ROAD_REACH; i++) {
             const Tile *t = world_tile(i, j);
             int c = TILE_ROAD(t);
-            if (c == ROAD_RAIL) best = IMAX(best, ROAD_MAIN);
-            else if (c && (g_roads[c].flags & RDF_ZONE_ACCESS)) best = IMAX(best, c);
+            if (TILE_HAS_RAIL(t)) best = IMAX(best, ROAD_MAIN);              /* 1.2 X1: crossings too */
+            if (c && (g_roads[c].flags & RDF_ZONE_ACCESS)) best = IMAX(best, c);
         }
     return best;
 }

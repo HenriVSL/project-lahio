@@ -131,6 +131,12 @@ static int s_idPipe[16][3];       /* F1: pipe_<MM>_<wet|short|dry> (water overla
 static int s_zoneView;            /* F3: persistent zone view (render_set_zone_view) */
 static int s_idZoneV[16][2];      /* F3: zonev_<Z>_02 / zonev_<Z>_04 (front edges), -1 = no art */
 static s16 s_lotCache[B_COUNT][16][4][4];
+/* 1.2 X1 railway crossings (X2 sprites, 'lot'-kind like the bridges: own ground, drawn in the object pass):
+   [class][road axis 0 = 05 (along Y), 1 = 10 (along X)]: <grav|road|main>_xing_MM (MM = the road's axis; fallback
+   the alias rail_xing_MM, MM = the rail's axis), mway_rail_MM (MM = the motorway's axis). -1 = no art: a level
+   crossing then draws the road sprite as ground, an overpass the rail + the motorway bridge (temporary). */
+static int s_idXing[ROAD_CLASS_COUNT][2];
+static int s_idRailPower[2];      /* rail_power_MM (MM = rail axis) if X2 made it, else -1 (wires as over a road) */
 
 static void flush_all(int hard);
 
@@ -146,6 +152,15 @@ static int shore_of(int x, int y)
 {
     int m = mapgen_shore_mask(x, y);
     return (m > 0 && m < 15) ? m : 0;
+}
+
+/* 1.2 X1: road-axis index of a crossing tile (0 = road along Y = 05, 1 = along X = 10) */
+static int xing_axis(int x, int y) { return world_rail_axis(x, y) == 5 ? 1 : 0; }
+static int xing_sprite(int x, int y, const Tile *t)
+{
+    int cls = TILE_ROAD(t), id = s_idXing[cls][xing_axis(x, y)];
+    if (id < 0 && cls == ROAD_MOTORWAY) id = s_idBridge[ROAD_MOTORWAY][xing_axis(x, y)];   /* fallback overpass */
+    return id;
 }
 
 static int power_mask(int x, int y)
@@ -204,6 +219,10 @@ static int ground_id(int x, int y, const Tile *t, int *water)
     *water = 0;
     if (cls) {
         if (TER_IS_WATER(ter)) return -1;                     /* bridge: object pass */
+        if (t->flags & TF_RAIL) {                             /* 1.2 X1: crossing / overpass (TILE_IS_XING) */
+            if (s_idXing[cls][xing_axis(x, y)] >= 0) return -1;            /* own ground: object pass */
+            if (cls == ROAD_MOTORWAY) return s_idRoad[ROAD_RAIL][world_rail_mask(x, y) & 15];   /* fallback */
+        }
         return s_idRoad[cls][TILE_ROAD_MASK(t)];               /* also on shore tiles (T02) */
     }
     if (ter == TER_RIVER) {                                    /* flow axis from the direction bits */
@@ -276,7 +295,7 @@ static int tile_objects(int z, int x, int y, int flat, Piece *p, int max, int n)
         return n;
     }
     if (ter != TER_FOREST && ter != TER_ROCK && !(t->flags & TF_TREE) && !(t->road & TR_POWER_LINE) &&
-        !(TILE_ROAD(t) && TER_IS_WATER(ter)) && !(ter == TER_FIELD && TILE_ZONE(t) == ZONE_FARM) && !(t->flags & TF_RUBBLE)) return n;
+        !(TILE_ROAD(t) && TER_IS_WATER(ter)) && !TILE_IS_XING(t) && !(ter == TER_FIELD && TILE_ZONE(t) == ZONE_FARM) && !(t->flags & TF_RUBBLE)) return n;
     south_vertex(z, x, y, &svx, &svy);
     h = hash_xy(x, y, 0x5EED);
     if ((ter == TER_FOREST || ter == TER_ROCK) && shore_of(x, y)) {      /* shore tile: ground stays shore */
@@ -293,6 +312,8 @@ static int tile_objects(int z, int x, int y, int flat, Piece *p, int max, int n)
         int cls = TILE_ROAD(t);
         n = add_piece(p, max, n, z, s_idBridge[cls][(TILE_ROAD_MASK(t) & 10) ? 1 : 0], svx, svy, D * 4 + SUB_BASE, 0, x, y, PF_NO_OCCLUDE);
     }
+    else if (TILE_IS_XING(t))                                            /* 1.2 X1: like a bridge on land */
+        n = add_piece(p, max, n, z, xing_sprite(x, y, t), svx, svy, D * 4 + SUB_BASE, 0, x, y, PF_NO_OCCLUDE);
     if ((t->flags & TF_TREE) && !TILE_ROAD(t) && ter != TER_FOREST)
         n = add_piece(p, max, n, z, s_idTree[(h >> 8) % 6], svx, svy, D * 4 + SUB_TREE, 0, x, y, 0);
     if (FARM_HAY(t, h)) n = add_piece(p, max, n, z, s_idHay, svx, svy, D * 4 + SUB_BASE, 0, x, y, 0);   /* M3: hay poles */
@@ -300,6 +321,8 @@ static int tile_objects(int z, int x, int y, int flat, Piece *p, int max, int n)
     if (t->road & TR_POWER_LINE) {
         int m = power_mask(x, y);
         int id = TILE_ROAD(t) ? (m ? s_idWire[m] : -1) : s_idPower[m];
+        if (TILE_ROAD(t) == ROAD_RAIL && s_idRailPower[(TILE_ROAD_MASK(t) & 10) ? 1 : 0] >= 0)   /* 1.2 X1 */
+            id = s_idRailPower[(TILE_ROAD_MASK(t) & 10) ? 1 : 0];
         n = add_piece(p, max, n, z, id, svx, svy, D * 4 + SUB_POWER, 0, x, y, 0);
     }
     return n;
@@ -311,6 +334,7 @@ static int tile_has_objects(const Tile *t)
     if (t->lot) return (t->flags & TF_LOT_FRONT) != 0;
     return ter == TER_FOREST || ter == TER_ROCK || (t->flags & TF_TREE) || (t->road & TR_POWER_LINE) ||
            (TILE_ROAD(t) && TER_IS_WATER(ter)) || (ter == TER_FIELD && TILE_ZONE(t) == ZONE_FARM) ||   /* M3: hay */
+           TILE_IS_XING(t) ||                                                                         /* 1.2 X1 */
            (t->flags & TF_RUBBLE);                                                                    /* M5: ruins */
 }
 
@@ -442,12 +466,13 @@ static void small_up_init(int z)      /* lazily for the current (resident) zoom:
     int i, k;
     {
         int m = TILE_H(z);
-        const int *ids[6];
-        int cnt[6];
+        const int *ids[8];
+        int cnt[8];
         ids[0] = s_idTree; cnt[0] = 6; ids[1] = &s_idForest[0][0]; cnt[1] = FOREST_COUNT * 3;
         ids[2] = s_idRock; cnt[2] = 2; ids[3] = s_idPower; cnt[3] = 16; ids[4] = s_idWire; cnt[4] = 16;
         ids[5] = &s_idBridge[0][0]; cnt[5] = ROAD_CLASS_COUNT * 2;
-        for (k = 0; k < 6; k++)
+        ids[6] = &s_idXing[0][0]; cnt[6] = ROAD_CLASS_COUNT * 2; ids[7] = s_idRailPower; cnt[7] = 2;   /* 1.2 X1 */
+        for (k = 0; k < 8; k++)
             for (i = 0; i < cnt[k]; i++) {
                 const ArtSprite *sp;
                 if (ids[k][i] < 0) continue;
@@ -713,6 +738,17 @@ static void resolve_ids(void)
         s_idBridge[k][0] = art_findf("%s_bridge_05", g_roads[k].key);
         s_idBridge[k][1] = art_findf("%s_bridge_10", g_roads[k].key);
     }
+    for (k = 0; k < ROAD_CLASS_COUNT; k++)          /* 1.2 X1: crossings (silent: X2 art may not exist yet) */
+        for (i = 0; i < 2; i++) {
+            static const char *const mm[2] = { "05", "10" };
+            s_idXing[k][i] = -1;
+            if (k == ROAD_NONE || k == ROAD_RAIL) continue;
+            if (k == ROAD_MOTORWAY) str_printf(buf, sizeof(buf), "mway_rail_%s", mm[i]);
+            else str_printf(buf, sizeof(buf), "%s_xing_%s", g_roads[k].key, mm[i]);
+            if (!art_exists(buf) && k != ROAD_MOTORWAY) str_printf(buf, sizeof(buf), "rail_xing_%s", mm[1 - i]);
+            if (art_exists(buf)) s_idXing[k][i] = art_find(buf);
+        }
+    for (i = 0; i < 2; i++) s_idRailPower[i] = art_exists(i ? "rail_power_10" : "rail_power_05") ? art_find(i ? "rail_power_10" : "rail_power_05") : -1;
     for (m = 0; m < 16; m++) { s_idPower[m] = art_findf("power_%02d", m); s_idWire[m] = m ? art_findf("wire_%02d", m) : -1; }
     for (k = 0; k < OVR_COUNT; k++) for (i = 0; i < 8; i++) s_idOvl[k][i] = art_findf("ovl_%d_%d", k, i);
     for (m = 0; m < 16; m++)
@@ -1472,6 +1508,7 @@ void render_build_test_town(u32 seed)
     road_line(110, 0, 110, H - 1, ROAD_MOTORWAY);
     road_line(62, 78, W - 1, 78, ROAD_RAIL);
     road_line(70, 65, 70, 77, ROAD_STREET); road_line(61, 72, 69, 72, ROAD_GRAVEL);
+    world_set_road(110, 78, ROAD_MOTORWAY); road_line(70, 78, 70, 81, ROAD_STREET);   /* 1.2 X1: overpass, level crossing */
     road_line(30, 50, 51, 50, ROAD_GRAVEL);                               /* lakeside lane to the pump */
     /* ---- house streets (fronts face the lane) */
     for (x = 37; x <= 59; x++) {

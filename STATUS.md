@@ -57,5 +57,7 @@ Owner session: 86box-86. Started 2026-11-02.
 ## Version 1.2 "Power" (RC1 2026-11-10) — docs/DESIGN_1_2.md, docs/TASKS_1_2.md
 - From play-test 3 (32 coal plants at 58k). S1 power sim (coal station 3x3, peat, nuclear at Regional centre, reactor
   letter, advice/hindsight, Guide page 3, bots) and A1 art (station, peat, nuclear, own oil art) done.
+- RC2 (2026-11-10): railway crossings (X1 sim, X2 art: level crossings per road class, motorway overpass, power over
+  rail) after the user found nothing could cross the railway; installer + zip via dist/package.sh.
 - Orchestrator visual check on VM B (Koivukoski save): letter, Guide page, query panels, two-chimney smoke OK after small
   layout fixes. Mac 216/216, VC6 clean rebuild 0 warnings. **lahio-1.2-rc1.zip** in Shared/release for the user's test.

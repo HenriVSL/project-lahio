@@ -361,7 +361,7 @@ static int rail_near(int x0, int y0, int x1, int y1, int d, int cls)
     int x, y;
     for (y = y0 - d; y <= y1 + d; y++)
         for (x = x0 - d; x <= x1 + d; x++)
-            if (world_in(x, y) && (cls == ROAD_RAIL ? TILE_ROAD(WT(x, y)) == ROAD_RAIL
+            if (world_in(x, y) && (cls == ROAD_RAIL ? TILE_HAS_RAIL(WT(x, y))   /* 1.2 X1: crossings too */
                                                     : TILE_ROAD(WT(x, y)) == ROAD_MAIN)) return 1;
     return 0;
 }

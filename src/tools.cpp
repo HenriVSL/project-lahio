@@ -30,6 +30,7 @@
 #include "era.h"           /* M7 */
 #include "season.h"        /* 1.1 W1 */
 #include "power.h"         /* 1.2 S1: reactor price, build months, script */
+#include "traffic.h"       /* 1.2 X1: traffic_link_ok for the script's `check road` */
 
 /* ------------------------------------------------------------------ state */
 static ToolPreview s_prev;
@@ -475,6 +476,31 @@ static int road_gets_pipe(const Tile *t, int cls)
     return s_pipes_roads && (g_roads[cls].flags & RDF_CARRIES_WATER) && !(t->flags & TF_PIPE);
 }
 
+/* 1.2 X1: price of road class cls over the railway (level crossing / motorway overpass) */
+static Money xing_cost(int cls)
+{
+    return cls == ROAD_MOTORWAY ? g_roads[cls].bridge_cost : g_roads[cls].cost + RAIL_XING_COST;
+}
+
+/* 1.2 X1: may a road / power line go over this rail tile? 0 = yes, else the reason. Straight track only (rail mask
+   NE-SW or SE-NW), on land, not the map-edge tile (its TF_EDGE_LINK would link the road to the outside world); a road
+   also not right next to another crossing along the track. The direction across is checked on the path
+   (validate_rail_paths). */
+static int rail_xing_reason(const Tile *t, int x, int y, int road)
+{
+    int m = TILE_ROAD_MASK(t), d;
+    if (TER_IS_WATER(TER_TYPE(t))) return REJ_XING_PLACE;
+    if (m != 5 && m != 10) return REJ_XING_CORNER;
+    if (!road) return 0;
+    if (t->flags & TF_EDGE_LINK) return REJ_XING_PLACE;
+    for (d = 0; d < DIR_COUNT; d++)
+        if ((m >> d) & 1) {
+            const Tile *n = world_tile(x + g_dir_dx[d], y + g_dir_dy[d]);
+            if (n->flags & TF_RAIL) return REJ_XING_NEAR;
+        }
+    return 0;
+}
+
 static void eval_road(int x, int y, int cls, TEval *e)
 {
     const Tile *t;
@@ -484,12 +510,20 @@ static void eval_road(int x, int y, int cls, TEval *e)
     t = WT(x, y);
     rc = TILE_ROAD(t);
     water = TER_IS_WATER(TER_TYPE(t));
-    if (rc == ROAD_RAIL) { e->state = PT_REJECT; e->reason = REJ_PROTECTED_TILE; return; }
+    if (rc == ROAD_RAIL) {             /* 1.2 X1: a level crossing / overpass (the angle: validate_rail_paths) */
+        int r = rail_xing_reason(t, x, y, 1);
+        if (r) { e->state = PT_REJECT; e->reason = r; return; }
+        e->state = PT_OK;
+        e->cost = xing_cost(cls);
+        if (road_gets_pipe(t, cls)) e->cost += g_misc.pipe;
+        return;
+    }
     if (rc) {
         if (rc >= cls) { e->state = PT_NOOP; return; }
-        if (t->flags & TF_PROTECTED) { e->state = PT_NOOP; return; }
+        if ((t->flags & TF_PROTECTED) && !(t->flags & TF_RAIL)) { e->state = PT_NOOP; return; }   /* X1: the rail is */
         e->state = PT_UPGRADE;
-        e->cost = water ? g_roads[cls].bridge_cost - g_roads[rc].bridge_cost : g_roads[cls].cost - g_roads[rc].cost;
+        e->cost = (t->flags & TF_RAIL) ? xing_cost(cls) - xing_cost(rc) :
+                  water ? g_roads[cls].bridge_cost - g_roads[rc].bridge_cost : g_roads[cls].cost - g_roads[rc].cost;
         if (e->cost < 0) e->cost = 0;
         if (road_gets_pipe(t, cls)) e->cost += water ? g_misc.pipe_water : g_misc.pipe;
         return;
@@ -534,7 +568,11 @@ static void eval_power(int x, int y, int corner, TEval *e)
     if (!world_in(x, y)) { e->state = PT_REJECT; e->reason = PLACE_OUT_OF_MAP; return; }
     t = WT(x, y);
     if (t->lot || (t->road & TR_POWER_LINE)) { e->state = PT_NOOP; return; }   /* lots conduct anyway */
-    if (TILE_ROAD(t) == ROAD_RAIL) { e->state = PT_REJECT; e->reason = REJ_PROTECTED_TILE; return; }
+    if (TILE_ROAD(t) == ROAD_RAIL) {   /* 1.2 X1: wires straight across straight track (angle: validate_rail_paths) */
+        int r = rail_xing_reason(t, x, y, 0);
+        if (!r && corner) r = REJ_XING_ANGLE;
+        if (r) { e->state = PT_REJECT; e->reason = r; return; }
+    }
     if (TILE_ROAD(t) && corner) { e->state = PT_REJECT; e->reason = REJ_WRONG_TERRAIN; return; }  /* no art */
     e->state = PT_OK;
     e->cost = g_misc.power_line;
@@ -609,7 +647,7 @@ static void eval_bulldoze(int x, int y, TEval *e, int *lot_out)
         }
         return;
     }
-    if (TILE_ROAD(t) && (t->flags & TF_PROTECTED)) {
+    if (TILE_ROAD(t) && (t->flags & TF_PROTECTED) && !(t->flags & TF_RAIL)) {   /* X1: a crossing's road may go */
         if (t->road & TR_POWER_LINE) { e->state = PT_OK; e->cost = g_misc.bulldoze_tile; return; }
         e->state = PT_REJECT; e->reason = REJ_PROTECTED_TILE; return;
     }
@@ -618,7 +656,8 @@ static void eval_bulldoze(int x, int y, TEval *e, int *lot_out)
         e->cost = g_misc.bulldoze_tile;
         if (NEW_GET(x, y)) {           /* built this month: 25% back */
             int rc = TILE_ROAD(t);
-            Money base = rc ? (TER_IS_WATER(TER_TYPE(t)) ? g_roads[rc].bridge_cost : g_roads[rc].cost) : 0;
+            Money base = rc ? ((t->flags & TF_RAIL) ? xing_cost(rc) :
+                               TER_IS_WATER(TER_TYPE(t)) ? g_roads[rc].bridge_cost : g_roads[rc].cost) : 0;
             if (t->road & TR_POWER_LINE) base += g_misc.power_line;
             if (s_show_pipes && (t->flags & TF_PIPE)) base += TER_IS_WATER(TER_TYPE(t)) ? g_misc.pipe_water : g_misc.pipe;
             e->cost -= base * g_misc.refund_pct / 100;
@@ -696,6 +735,29 @@ static void validate_bridges(void)
     }
 }
 
+/* 1.2 X1: a new crossing (road over a rail tile) or a power line over a rail tile must go straight across the track:
+   the path tiles before and after lie on the line through it at a right angle to the rail; a road must also go on
+   to land on both sides (neither neighbour rejected), like a bridge. Returns 1 if something was rejected. */
+static int validate_rail_paths(int road)
+{
+    int i, changed = 0;
+    for (i = 0; i < s_pn; i++) {
+        const Tile *t = WT(s_px[i], s_py[i]);
+        int axis, bad = 0, across;
+        if (s_pstate[i] != PT_OK || TILE_ROAD(t) != ROAD_RAIL) continue;
+        axis = TILE_ROAD_MASK(t);                       /* 5: rail along Y -> cross along X; 10: the other way */
+        if (i == 0 || i == s_pn - 1) bad = road ? REJ_XING_PLACE : REJ_XING_ANGLE;
+        else {
+            across = axis == 5 ? (s_py[i - 1] == s_py[i] && s_py[i + 1] == s_py[i])
+                               : (s_px[i - 1] == s_px[i] && s_px[i + 1] == s_px[i]);
+            if (!across) bad = REJ_XING_ANGLE;
+            else if (road && (s_pstate[i - 1] == PT_REJECT || s_pstate[i + 1] == PT_REJECT)) bad = REJ_XING_PLACE;
+        }
+        if (bad) { s_pstate[i] = PT_REJECT; s_preason[i] = (u8)bad; changed = 1; }
+    }
+    return changed;
+}
+
 static int locked_now(int tool, int param)
 {
     int y = cur_year(), st = cur_status(), all = all_unlocked();
@@ -750,7 +812,11 @@ static void plan(int tool, int param, int ax, int ay, int bx, int by, int shift,
             else eval_power(s_px[i], s_py[i], corner, &e);
             s_pstate[i] = (u8)e.state; s_preason[i] = (u8)e.reason;
         }
-        if (tool == TOOL_ROAD) validate_bridges();
+        if (tool == TOOL_ROAD) {
+            validate_rail_paths(1);        /* 1.2 X1: crossings and bridges both need their neighbours */
+            validate_bridges();
+            if (validate_rail_paths(1)) validate_bridges();
+        } else if (tool == TOOL_POWER_LINE) validate_rail_paths(0);
         x0 = 255; y0 = 255; x1 = 0; y1 = 0;
         for (i = 0; i < s_pn; i++) {
             x = s_px[i]; y = s_py[i];
@@ -952,7 +1018,8 @@ static int commit(int tool, int param, int ax, int ay, int bx, int by, int shift
                 s_rec_con += e.cost; s_rec_timber += e.timber;
                 if (WT(x, y)->lot) { if (lot) { op_lot_remove(lot); n++; } continue; }
                 tstate_get(x, y, &s);
-                if (!(WT(x, y)->flags & TF_PROTECTED)) s.road &= (u8)~TR_CLASS_MASK;
+                if (WT(x, y)->flags & TF_RAIL) s.road = (u8)((s.road & ~TR_CLASS_MASK) | ROAD_RAIL);   /* X1: rail stays */
+                else if (!(WT(x, y)->flags & TF_PROTECTED)) s.road &= (u8)~TR_CLASS_MASK;
                 s.road &= (u8)~TR_POWER_LINE;
                 if (s_show_pipes) s.pipe = 0;
                 if ((s.ter & 15) == TER_FOREST) s.ter = (u8)(TER_GRASS | (((s.ter >> 4) % 3) << 4));
@@ -1215,6 +1282,7 @@ static s32 stat_value(const char *s, int *ok)
     if (str_ieq(s, "dairies")) return industry_kinds()->lots[IK_FOOD];
     if (str_ieq(s, "wood_pct")) return industry_wood()->pct;
     if (str_ieq(s, "wood_cut")) return industry_wood()->cut_tiles_total;
+    if (str_ieq(s, "xings")) return world_xing_count();                       /* 1.2 X1 */
     return civic_stat_value(s, ok);                                              /* M5: heated, fires, apt3 ... */
 }
 
@@ -1234,6 +1302,46 @@ static int out_err(FILE *out, const char *line, const char *why)
     if (out) fprintf(out, "script: error: %s: %s\n", why, line);
     log_printf("script: error: %s: %s", why, line);
     return SCR_ERROR;
+}
+
+/* 1.2 X1: `check road|rail X0 Y0 X1 Y1 yes|no` (path along car links / along the track) and `check power X Y yes|no`.
+   Text-only connectivity checks for -script runs (debug from text). Returns 1 = connected / powered. */
+static int check_path(int rail, int x0, int y0, int x1, int y1)
+{
+    static u16 q[MAP_MAX_W * MAP_MAX_H];
+    static u8 seen[MAP_MAX_W * MAP_MAX_H];
+    int qh = 0, qt = 0, d;
+    if (!world_in(x0, y0) || !world_in(x1, y1)) return 0;
+    if (rail ? !TILE_HAS_RAIL(WT(x0, y0)) : !TILE_ROAD(WT(x0, y0)) || TILE_ROAD(WT(x0, y0)) == ROAD_RAIL) return 0;
+    memset(seen, 0, sizeof(seen));
+    seen[TILE_IDX(x0, y0)] = 1; q[qt++] = (u16)TILE_IDX(x0, y0);
+    while (qh < qt) {
+        int idx = q[qh++], x = idx & (MAP_STRIDE - 1), y = idx >> MAP_SHIFT, m = rail ? world_rail_mask(x, y) : 0;
+        if (x == x1 && y == y1) return 1;
+        for (d = 0; d < DIR_COUNT; d++) {
+            int nx = x + g_dir_dx[d], ny = y + g_dir_dy[d], ni;
+            if (!world_in(nx, ny)) continue;
+            if (rail ? !((m >> d) & 1) : !traffic_link_ok(x, y, d)) continue;
+            ni = TILE_IDX(nx, ny);
+            if (!seen[ni]) { seen[ni] = 1; q[qt++] = (u16)ni; }
+        }
+    }
+    return 0;
+}
+
+static int script_check(char **t, int n, int ox, int oy, FILE *out, const char *line)
+{
+    int got, want, x, y;
+    if (n >= 7 && (str_ieq(t[1], "road") || str_ieq(t[1], "rail"))) {
+        got = check_path(str_ieq(t[1], "rail"), atoi(t[2]) + ox, atoi(t[3]) + oy, atoi(t[4]) + ox, atoi(t[5]) + oy);
+        want = str_ieq(t[6], "yes");
+    } else if (n >= 5 && str_ieq(t[1], "power")) {
+        x = atoi(t[2]) + ox; y = atoi(t[3]) + oy;
+        got = world_in(x, y) && (WT(x, y)->zone & ZF_POWERED) != 0;
+        want = str_ieq(t[4], "yes");
+    } else return out_err(out, line, "check road|rail X0 Y0 X1 Y1 yes|no / check power X Y yes|no");
+    if (out) fprintf(out, "script: %s -> %s %s\n", line, got ? "yes" : "no", got == want ? "ok" : "FAILED");
+    return got == want ? SCR_OK : out_err(out, line, "check failed");
 }
 
 int tools_script_line(const char *line, int *wait_months, FILE *out)
@@ -1326,6 +1434,12 @@ int tools_script_line(const char *line, int *wait_months, FILE *out)
     if (str_ieq(t[0], "pol")) return politics_script(t, n, out) ? SCR_OK : out_err(out, line, "politics refused");   /* M1 */
     if (str_ieq(t[0], "statlog")) { if (n >= 2) sim_statlog_open(out_path(t[1])); return SCR_OK; }
     if (str_ieq(t[0], "log")) { if (out) fprintf(out, "script: %s\n", line); log_printf("script: %s", line); return SCR_OK; }
+    if (str_ieq(t[0], "check")) return script_check(t, n, s_org_x, s_org_y, out, line);   /* 1.2 X1 */
+    if (str_ieq(t[0], "dumptile") && n >= 3) {                       /* 1.2 X1: dumptile X Y [FILE] */
+        FILE *f = n >= 4 ? fopen(out_path(t[3]), "a") : out;
+        if (f) { world_dump_tile(f, a[0] + s_org_x, a[1] + s_org_y); fflush(f); if (f != out) fclose(f); }
+        return SCR_OK;
+    }
     if (str_ieq(t[0], "dump")) {
         FILE *f = out, *own = NULL;
         if (n >= 3) { own = fopen(out_path(t[2]), "a"); if (own) f = own; }

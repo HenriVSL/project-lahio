@@ -1,0 +1,33 @@
+# x1_xing.txt - 1.2 X1: crossing the railway on the seed 1 Lakeland railway map (track along x = 91, town road at x = 72).
+#   Mac:  tests/test_xing.cpp xing_script_seed1 (same file, same map)
+#   VM B: lahio.exe -seed 1 -rail -log -script scripts\x1_xing.txt -fast   (output: script_out.txt, x1_xing_dump.txt)
+check rail 91 68 91 125 yes
+check road 72 108 100 108 no
+road 72 108 100 108 street
+expect xings == 1
+dumptile 91 108 x1_xing_dump.txt
+check road 72 108 100 108 yes
+check rail 91 68 91 125 yes
+# along the track: rejected (REJ_XING_ANGLE), nothing changes
+road 91 100 91 115 street
+expect xings == 1
+# bulldoze the crossing: the road goes, the rail stays; undo brings the crossing back (same month: undo log)
+bulldoze 91 108 91 108
+check road 72 108 100 108 no
+check rail 91 68 91 125 yes
+expect xings == 0
+undo
+check road 72 108 100 108 yes
+expect xings == 1
+# power: a coal plant west of the track, a line straight across it to houses zoned east of the track
+build coal_plant 80 109
+power 82 110 92 110
+zone 92 109 97 109 houses
+wait 1
+check power 91 110 yes
+check power 95 109 yes
+dumptile 91 110 x1_xing_dump.txt
+wait 3
+check road 72 108 100 108 yes
+dump tools x1_xing_dump.txt
+quit

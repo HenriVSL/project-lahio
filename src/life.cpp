@@ -286,6 +286,23 @@ void life_update(double dt)
     s_ls.update_ms = time_ms() - t0;
 }
 
+/* 1.2 X1: the motorway overpass over the railway (mway_rail_MM, X2) is a hump: 6 px at z64 (3 at z32) along the
+   motorway, ramps over the first and last 7.5 of the tile's 32 units. Position in 1/256 tile (fx, fy): u along the
+   motorway axis, 0..255; ramp = 60 u. */
+static int overpass_lift(int z, s32 fx, s32 fy)
+{
+    int tx = (int)(fx >> 8), ty = (int)(fy >> 8), u, h;
+    const Tile *t;
+    if (!world_in(tx, ty)) return 0;
+    t = WT(tx, ty);
+    if (TILE_ROAD(t) != ROAD_MOTORWAY || !(t->flags & TF_RAIL)) return 0;
+    u = (int)((world_rail_axis(tx, ty) == 5 ? fx : fy) & 255);       /* rail along Y: the motorway runs along X */
+    if (u < 60) h = (u * 6 + 30) / 60;
+    else if (u <= 196) h = 6;
+    else h = ((256 - u) * 6 + 30) / 60;
+    return z == ZOOM_64 ? h : (h + 1) / 2;
+}
+
 /* ------------------------------------------------------------------ draw */
 void life_draw(void)
 {
@@ -305,6 +322,7 @@ void life_draw(void)
             if (wx < cx0 || wx >= cx1 || wy < cy0 || wy >= cy1) continue;
             t = WT(c->x, c->y);
             if (z == ZOOM_64 && TER_IS_WATER(TER_TYPE(t))) wy--;    /* bridge deck is 1 px above the road */
+            wy -= overpass_lift(z, c->fx, c->fy);                     /* 1.2 X1 */
             render_sprite(s_carIds[c->col][c->dir & 3], wx, wy, c->x, c->y, 0);
         }
         {   /* M2: buses (lifebus.cpp) */
@@ -315,6 +333,7 @@ void life_draw(void)
                 iso_pos_to_world(z, b[i].fx, b[i].fy, &wx, &wy);
                 if (wx < cx0 || wx >= cx1 || wy < cy0 || wy >= cy1) continue;
                 if (z == ZOOM_64 && TER_IS_WATER(TER_TYPE(WT(b[i].x, b[i].y)))) wy--;
+                wy -= overpass_lift(z, b[i].fx, b[i].fy);             /* 1.2 X1 */
                 render_sprite(s_busIds[b[i].dir & 3], wx, wy, b[i].x, b[i].y, 0);
             }
         }

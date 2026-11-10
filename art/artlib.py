@@ -1010,6 +1010,21 @@ def shade(gb, st=STYLE_C, mode='normal'):
             if 0 <= ix < W and 0 <= iy < H and (ix, iy) != last:
                 px_[ix, iy] = col
                 last = (ix, iy)
+    # 1.2 X2: pixel stamps (tiny camera-facing signs, e.g. level-crossing crosses): md.stamps = [(P canonical,
+    # {64: rows, 32: rows}, {char: (palette key, light)})]; the pattern is centred on the projected point. Same pixels
+    # in every season (the alpha mask stays identical). Models without stamps are unaffected.
+    for (P, pats, cols) in getattr(md, 'stamps', ()):
+        rows = pats[64 if zoom >= 1 else 32]
+        w = tw(P)
+        cx = gb['ox'] + (w[0] - w[1]) * zoom
+        cy = gb['oy'] + ((w[0] + w[1]) / 2.0 - w[2]) * zoom
+        x0 = int(math.floor(cx)) - len(rows[0]) // 2
+        y0 = int(math.floor(cy)) - len(rows) // 2
+        for j, row in enumerate(rows):
+            for i, ch in enumerate(row):
+                if ch in cols and 0 <= x0 + i < W and 0 <= y0 + j < H:
+                    k, l = cols[ch]
+                    px_[x0 + i, y0 + j] = st.color(k, l, 0.0)
     if ab:
         for y in range(H):
             for x in range(W):

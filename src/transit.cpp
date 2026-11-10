@@ -334,7 +334,7 @@ int transit_station_ok(int x0, int y0, int rot)
         else if (back == DIR_SW) { x = x0 + i; y = y0 + h; }
         else if (back == DIR_SE) { x = x0 + w; y = y0 + i; }
         else { x = x0 - 1; y = y0 + i; }
-        if (!world_in(x, y) || TILE_ROAD(WT(x, y)) != ROAD_RAIL) return 0;
+        if (!world_in(x, y) || !TILE_HAS_RAIL(WT(x, y))) return 0;   /* 1.2 X1: a crossing is track too */
         n++;
     }
     return n > 0;

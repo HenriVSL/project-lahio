@@ -869,6 +869,10 @@ int art_selftest(void)
         need("%s_bridge_05", g_roads[b].key); need("%s_bridge_10", g_roads[b].key);
     }
     for (m = 0; m < 16; m++) { need("power_%02d", m); if (m) need("wire_%02d", m); }
+    for (k = 5; k <= 10; k += 5) {      /* 1.2 X2: rail crossings (MM = axis of the first key, art_xing.py) */
+        need("grav_xing_%02d", k); need("road_xing_%02d", k); need("main_xing_%02d", k);
+        need("rail_xing_%02d", k); need("mway_rail_%02d", k);
+    }
     for (k = 0; k < OVR_COUNT; k++) for (v = 0; v < 8; v++) need("ovl_%d_%d", k, v);
     need("cur_ok"); need("cur_bad"); need("cur_sel"); need("cur_query");
     for (k = 1; k < ZONE_COUNT; k++) need("zone_%d", k);

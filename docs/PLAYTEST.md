@@ -108,3 +108,8 @@ All orchestrator recommendations accepted:
   update** (user chose: ship 1.1 now): large coal/oil station (3x3, ~2,000), peat plant (~1,000, domestic fuel), nuclear at
   Regional centre from 1977 (~4,000-5,000) with the "Eastinghouse" East/West/compromise choice, rebalance so a 60k city needs
   ~6-10 plants. Save: Shared/release/1.1rc1 save/.
+
+## Session 4 (user, 2026-11-10, 1.2 RC1)
+- **Bug: nothing can cross the railway** (roads, power lines refused on rail tiles; the town is cut in two). → 1.2 RC2:
+  level crossings for gravel/street/main roads, motorway overpass over rail, power lines across rail, pipes under rail
+  (tasks X1 sim, X2 art).

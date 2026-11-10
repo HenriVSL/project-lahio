@@ -29,6 +29,7 @@ python3 art/gen_art.py --cached --mockups # the same from art/.cache (no renderi
 | `art_world.h` | the index: includes the two headers, `art_world_sheets[]` (the pages, `spr` NULL), `ART_WORLD_SHEET_COUNT`, `art_world_sets[]` (one ArtPieceSet per zoom) (src/art.h convention) |
 | `preview/*.png` | review sheets (`tiles_`, `roads_`, `misc_`, `pipes_zonev_`, `b_<key>_`, `build_ground_`) and mockups `town_64.png`, `town_64_houses.png`, `town_64_overlay.png`, `town_32.png`; F2: `town_64_water.png` / `town_32_water.png` (water overlay with wet/short/dry pipes), `yards_64.png` (industrial band with 1x1 yards), `town_64_zones.png` / `town_32_zones.png` (persistent zone view); M4: `m2_<group>_<64|32>.png` (one sheet per Milestone-2 group) and the 1960s-70s transformation mockups `town_m2_64.png` (concrete suburb, health centre, shopping centre, bus at its stop, heat plant), `town_m2_mill_64.png` (paper mill by the rapids, company housing, church, forestry edge), `town_m2_ind_64.png` (industry kinds, station, Valtion Metalli, farms), `town_m2_south_64.png` (old wooden district being replaced, civic services, sewage works, a house fire), `town_m2_farms_64.png`, `town_m2_32.png`, `town_m2_overview_32.png` |
 | `art_power.py`, `power_preview.py` | 1.2 A1 power plants (section 3.2) and their preview/scale-scene tool |
+| `art_xing.py`, `xing_preview.py` | 1.2 X2 rail crossings (section 3.3) and their preview tool (`preview/xing_*.png`) |
 | `art_m2_res.py`, `art_m2_ind.py`, `art_m2_cplx.py`, `art_m2_misc.py` | M4 Milestone-2 buildings by group (apartments/commercial/civic; industry kinds/utilities; complexes/gifts/landmarks; transport/farms/forestry/fire/bus): `ENTRIES`, `KEY_ALIASES`, `GROUPS`, `extra_jobs()`, `extra_procedural()` (gen_art.py "Milestone-2 modules") |
 | `art_m2_common.py` | shared imports for those modules, `add_colours()` (new palette entries without editing artlib.py) |
 | `art_mockup_m2.py` | the Milestone-2 town mockups (`preview/town_m2_*.png`) |
@@ -52,6 +53,7 @@ Masks `MM` = two digits 00..15 of neighbour bits NE=1 (-Y), SE=2 (+X), SW=4 (+Y)
 | Single trees | `tree_birch`, `tree_birch_au`, `tree_spruce`, `tree_pine`, `tree_apple`, `tree_rowan` | overlays (no ground), trimmed |
 | Roads | `<key>_<MM>` for `grav road main mway rail` | full 16 masks: isolated, dead ends (turning bulb / buffer stop), straights, curves, T, cross |
 | Bridges | `<key>_bridge_05`, `<key>_bridge_10` | all five keys; includes the water under the deck; taller than a tile (see 6) |
+| Rail crossings | `grav_xing_MM`, `road_xing_MM`, `main_xing_MM`, `rail_xing_MM`, `mway_rail_MM` (MM = 05/10) | 1.2 X2, section 3.3: MM = axis of the **first** key in the name; lot-kind like the bridges |
 | Power | `power_<MM>` (pole + wires), `wire_<MM>` (wires only, MM 01..15) | overlays; `power_00` = pole-on-lot |
 | Lots | `<key>_v<V>_r<R>`, `<key>_v<V>_ab_r<R>` | see 3 (incl. the 1x1 yards `ind_yard_v<V>_r<R>`) |
 | Construction | `build_<W>x<H>_r<R>` for 1x1 2x1 3x1 2x2 3x3 | footprint at rot 0 (fallback names of art.h); all 4 R exist (aliases) |
@@ -218,6 +220,40 @@ hx, hy = the second chimney, projected with the rendered sprite's rotation, `gen
 has one (power_preview.py draws both columns). A full `gen_art.py` run clears `preview/*.png`: re-run
 `power_preview.py` afterwards (VM B shots of the plants in the 1996 Koivukoski save: `tests/out/a1/`). life.cpp can alternate puffs between `hx, hy` and the `_hot2` row (see HANDOFF 1.2 A1).
 
+### 3.3 Rail crossings (1.2 X2, `art_xing.py`)
+
+Nothing could cross the railway before 1.2 RC2. Names (MM = the axis of the **first** key in the name, as for
+`<key>_bridge_MM`: 05 = along Y (NE-SW), 10 = along X (NW-SE)):
+
+| Name | What |
+|---|---|
+| `grav_xing_MM`, `road_xing_MM`, `main_xing_MM` | level crossing of that road class over a straight rail; MM = the **road's** axis (`road_xing_05` = street along Y, track along X). One per class: gravel 6.5, street 7.0 and main road 9.5 units half width with different verges cannot share one tile |
+| `rail_xing_MM` | MM = the **rail's** axis; header alias of `road_xing_<other MM>` (zero VRAM). Prefer the per-class names |
+| `mway_rail_MM` | motorway on a short concrete overpass over the rail; MM = the **motorway's** axis |
+
+- All are **lot-kind** sprites like the bridges: full tile width, trimmed at the top, taller than the tile (signs, railings),
+  anchor = the tile's south vertex, their own ground covers the whole diamond. Draw them in the object pass like a bridge
+  (on land; the ground pass may draw anything under them).
+- **Seams by construction**: the crossing ground is `g_road` of the class and `g_rail` combined by distance, so the road
+  edges are the road autotile's pixels and the rail edges the rail's (`--check` edge match runs every crossing against its
+  four straight neighbours). Level crossing: rails flush across the carriageway with flangeway grooves, timber planks
+  between and beside the rails, an asphalt patch, no centre line on the crossing; winter: dark rails and packed snow on
+  the ploughed carriageway. Signs: Finnish St Andrew's crosses (white with a red border at 64; a red X at 32) on posts
+  at two corners, right-hand side of the road before the track for each direction (camera-facing pixel stamps,
+  `Model.stamps`, artlib `shade()`; 32 zoom also stamps the post).
+- **Overpass**: the carriageway climbs **6 px** (64 zoom; 3 at 32) on two short ramps with concrete retaining walls to a
+  slab over the track (span t = 7.5..24.5 of 32 along the motorway) and is back at ground level at both tile edges, so
+  it joins `mway_MM` pixel-for-pixel; the deck top is shaded as ground (same texture/winter rules, the ramps' light
+  softened); steel railings; the track is seen through the shaded opening under the slab and on both sides of the deck.
+  Lift profile along the motorway axis (tile units 0..32 from the -axis edge): `z = 6 * t / 7.5` for t < 7.5, 6 on the
+  plateau, `6 * (32 - t) / 7.5` for t > 24.5 (px at 64; halve at 32) - for anything drawn on the deck (cars).
+- **Power line over a rail**: render.cpp already draws `wire_MM` (no pole) on every road-class tile, rail included; the
+  wires hang well above the track (`preview/xing_scene_*.png`, power line at the right): no `rail_power` sprite.
+- Previews: `python3 art/xing_preview.py` (renders only art_xing, sheets untouched; `--cached` = from art/.cache) writes
+  `preview/xing_sheet_<z>[_winter].png`, `xing_detail_<z>[_winter].png` (each crossing in a 5x5 patch, 3x / 6x) and
+  `xing_scene_<z>[_winter].png` (railway along X and along Y crossed by a gravel road, a street, a main road, the
+  motorway and a power line).
+
 ## 4. Anchors, hotspots, header format
 
 ```c
@@ -302,6 +338,7 @@ pieces on 512x256 pages (section 8): same pixels, much less transparent margin i
 | 64-zoom world | 4 sheets, 9,520 KB | 31 pages, 1,467 pieces, **7,691 KB** (-1,829 KB; headroom to 9.6 MB 2,139 KB) |
 | 32-zoom world | 1 sheet 640x1861, 2,326 KB | 8 pages, 1,435 pieces, **1,918 KB** |
 | 1.2 A1 power plants | | 64-zoom 32 pages, 1,500 pieces, **7,947 KB** (+256 KB, headroom 1,883 KB); 32-zoom 8 pages, 1,467 pieces, **1,962 KB** (+44 KB) |
+| 1.2 X2 rail crossings | | 64-zoom 32 pages, 1,508 pieces, **7,988 KB** (+41 KB, headroom 1,842 KB); 32-zoom 8 pages, 1,475 pieces, **1,964 KB** (+2 KB) |
 | UI (ui_frame, ui_icons, ui_pres, font_body, font_head; gen_ui.py) | 655 KB | 655 KB |
 
 M4 (Milestone-2 buildings) added 2,076 KB at 64 zoom (7,415 -> 9,491, before PL4) and 499 KB at 32. `--check` prints

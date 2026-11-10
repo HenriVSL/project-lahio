@@ -197,7 +197,8 @@ import art_m2_ind  # noqa: E402
 import art_m2_cplx  # noqa: E402
 import art_m2_misc  # noqa: E402
 import art_power  # noqa: E402  (1.2 A1: coal station, peat, nuclear, oil power plants)
-M2_MODULES = [art_m2_res, art_m2_ind, art_m2_cplx, art_m2_misc, art_power]
+import art_xing  # noqa: E402  (1.2 X2: level crossings, motorway over the rail; NAME_ALIASES, REQUIRED)
+M2_MODULES = [art_m2_res, art_m2_ind, art_m2_cplx, art_m2_misc, art_power, art_xing]
 M2_KEYS = set()
 KEY_ALIASES = []          # (new key, [(src key, src variant), ...] = new v0, v1, ..., rot offset)
 GROUPS = {}
@@ -367,6 +368,8 @@ def aliases():
     for kind in FORESTS:
         A.append(('forest_%s' % kind, 'forest_%s0' % kind))
     A.append(('rock', 'rock0'))
+    for mod in M2_MODULES:              # 1.2 X2: plain name aliases (rail_xing_MM -> road_xing_<other MM>)
+        A += list(getattr(mod, 'NAME_ALIASES', []))
     for (n, m) in FOOTPRINTS:
         for r in (1, 2, 3):
             t = 0 if n == m else r % 2
@@ -1686,6 +1689,8 @@ def required_names(B, roads, art_names):
     req += ['power_%02d' % m for m in range(16)] + ['wire_%02d' % m for m in (5, 10)]
     req += ['car%d_%s' % (c, d) for c in range(9) for (d, r) in DIRS]
     req += ['smoke0']
+    for mod in M2_MODULES:              # 1.2 X2: rail crossings
+        req += list(getattr(mod, 'REQUIRED', []))
     req += [n for n in art_names if n.startswith('tree_')][:1] or ['tree_birch']
     for (k, bridge) in roads:
         req += ['%s_%02d' % (k, m) for m in range(16)]
@@ -1803,6 +1808,21 @@ def seam_test_ground():
                         mism += ka != kb
                     if mism > 3:
                         bad.append('%s_%02d|%s_%02d %s-edge: %d/64' % (key, a, key, b, axis, mism))
+    # 1.2 X2: level crossings against their straight road / rail neighbours on all four edges
+    for (nm, fn, rk, rm, tm) in art_xing.xing_grounds():
+        for (bit, ax, ea, eb) in ((1, 'y', 0.15, 31.85), (2, 'x', 31.85, 0.15), (4, 'y', 31.85, 0.15),
+                                  (8, 'x', 0.15, 31.85)):
+            nb = fns[(rk, rm)] if rm & bit else fns[('rail', tm)]
+            mism = 0
+            for k in range(64):
+                t = (k + 0.5) / 2.0
+                if ax == 'x':
+                    ka, kb = key_at(fn, ea, t), key_at(nb, eb, t)
+                else:
+                    ka, kb = key_at(fn, t, ea), key_at(nb, t, eb)
+                mism += ka != kb
+            if mism > 3:
+                bad.append('%s edge %d: %d/64' % (nm, bit, mism))
     # shores: corner flags must agree on the shared edge
     for a in range(16):
         for b in range(16):

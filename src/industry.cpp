@@ -282,8 +282,8 @@ static void site_scan(int x0, int y0, int x1, int y1, Site *s)
             ter = TER_TYPE(t);
             z = TILE_ZONE(t);
             if (TER_IS_WATER(ter)) { if (d < s->d_water) s->d_water = d; if (ter == TER_RIVER && d < s->d_river) s->d_river = d; }
-            if (TILE_ROAD(t) == ROAD_RAIL) { if (d < s->d_rail) s->d_rail = d; }
-            else if (TILE_ROAD(t) == ROAD_MAIN && d < s->d_main) s->d_main = d;
+            if (TILE_HAS_RAIL(t)) { if (d < s->d_rail) s->d_rail = d; }         /* 1.2 X1: crossings are rail */
+            if (TILE_ROAD(t) == ROAD_MAIN && d < s->d_main) s->d_main = d;
             if (ter == TER_FOREST && d <= 8) s->n_forest++;
             if (t->lot) {
                 const BuildingDef *ld = def_building(g_world.lots[t->lot].def);
