@@ -54,7 +54,7 @@ Owner session: 86box-86. Started 2026-11-02.
   (mockups for the user first). Then balance across levels, perf/real-hardware bench, polish, user play-test, release 1.1.
 - Winter art mockups **approved as is** by the user (2026-11-08).
 
-## Version 1.2 "Power" (RC1 2026-11-10) — docs/DESIGN_1_2.md, docs/TASKS_1_2.md
+## Version 1.2 "Power" (released 2026-11-10, tag v1.2) — docs/DESIGN_1_2.md, docs/TASKS_1_2.md
 - From play-test 3 (32 coal plants at 58k). S1 power sim (coal station 3x3, peat, nuclear at Regional centre, reactor
   letter, advice/hindsight, Guide page 3, bots) and A1 art (station, peat, nuclear, own oil art) done.
 - RC2 (2026-11-10): railway crossings (X1 sim, X2 art: level crossings per road class, motorway overpass, power over

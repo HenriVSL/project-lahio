@@ -11,17 +11,39 @@ Classic grid building (roads, zones, power, water pipes, services, budget) desig
 builders: every number is explained, effects are previewed before you build, undo works within the month, and the
 simulation is aggregate and deterministic, with cosmetic traffic and smoke on top.
 
-Status: **Version 1.1 "Harder times"** (2026-11-09). One presidency from 1955 to 1990 (about 30 minutes at speed 3,
+![A 1990s lähiö in Koivukoski: element-built blocks, rintamamiestalo streets and the shopping centre](docs/screenshots/town.png)
+
+Status: **Version 1.2 "Power"** (2026-11-10). One presidency from 1955 to 1990 (about 30 minutes at speed 3,
 2.5 hours at speed 1), ending with the 1990 newsreel; the sandbox continues afterwards.
 
-- **New in 1.1:** difficulty levels (Easy = 1.0, Normal, Hard); winter from December to March with snow scenery, demand
+- **New in 1.2:** the coal power station (3x3, 2,000 units), the peat power plant (domestic fuel, immune to oil and
+  coal prices), nuclear power at Regional centre with the Ministry's reactor letter (Eastern, Western or the Loviisa
+  compromise), the oil plant's own art, a Guide page for the power works, and railway crossings: level crossings for
+  roads, a motorway bridge, power lines across the track. Saves from 1.1 load unchanged.
+- **In 1.1:** difficulty levels (Easy = 1.0, Normal, Hard); winter from December to March with snow scenery, demand
   peaks, hard winters announced in the November paper and frozen pipes; the Sweden years 1969-70; rising expectations in
   1975, 1980 and 1985, each announced a year ahead. Saves from 1.0 load as Easy.
 - **In 1.0:** politics (decrees, letters, event cards, elections), industry kinds with forestry and farms, the paper
   mill and Valtion Metalli, traffic congestion and buses, water pipes and district heating, element-built apartment
   blocks, clearing trade and the oil shocks, and a newspaper that quietly advises the President.
 
-**Download:** see the GitHub Releases page for `lahio-1.1.zip` (unzip anywhere on a Win98 machine and run `lahio.exe`).
+**Download** from the GitHub Releases page, either one:
+- `lahio-1.2-setup.exe`: installer with Start menu shortcuts and an uninstaller (your saves are kept on upgrade).
+  Silent install: `/S`, own folder: `/D=C:\GAMES\LAHIO`.
+- `lahio-1.2.zip`: portable; unzip anywhere on a Win98 machine and run `LAHIO\lahio.exe`.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Winter in the same suburb](docs/screenshots/winter.png) | ![Maakunnan Sanomat, the January paper, with the Cabinet's advice](docs/screenshots/paper.png) |
+| Winter, December to March | The January paper: the Cabinet humbly advises the President |
+| ![Coal power station, Loviisa-style nuclear plant, peat and oil plants](docs/screenshots/power.png) | ![Level crossings and a motorway bridge over the railway](docs/screenshots/rail.png) |
+| The power works: coal station, reactor, peat and oil | Railway crossings and the motorway bridge |
+| ![The industrial district at the far zoom](docs/screenshots/overview.png) | |
+| The industrial district at the far zoom | |
+
+Screenshots: the play-tester's own town, Koivukoski, 1996 (58,000 residents), at 800x600.
 
 ## System requirements
 

@@ -721,3 +721,10 @@ learned while building. Append your own section when you finish a task.
   RCs use a numeric setup version just below the release (1.2 RC2 = 1.1.99.2).
 - RC2 setup tested on VM B: /S install rc 0 (107 files, 5 shortcuts), installed game runs (exit 0), uninst /S /PURGE
   removes the folder and the Start menu group.
+
+### 1.2 release (2026-11-10)
+- User: "good to go for release". GAME_VERSION "1.2", clean VC6 rebuild 0 warnings, Mac 226/226.
+- README screenshots in docs/screenshots/ (scripts/readme_shots*.txt on a copy of the user's Koivukoski; test_zdump
+  KAUP_DUMPMAP=1 prints a coarse land-use map + rail rows for aiming the camera).
+- dist/package.sh 1.2: lahio-1.2.zip + lahio-1.2-setup.exe. VM B: RC2 setup then 1.2 setup = "upgrade from 1.2 RC2",
+  installed game starts as 1.2 (exit 0), uninst /S /PURGE clean.

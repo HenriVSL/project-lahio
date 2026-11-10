@@ -1,4 +1,4 @@
-PROJECT LAHIO 1.2 RC2 "POWER" - A Finnish town, 1955-1990
+PROJECT LAHIO 1.2 "POWER" - A Finnish town, 1955-1990
 =====================================================================
 
 An isometric sandbox city builder for Windows 98. Build a Finnish town from
