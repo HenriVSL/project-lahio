@@ -6,6 +6,8 @@
 #     RC:       dist/package.sh "1.2 RC2" 1.2-rc2 1.1.99.2
 #   <version> = GAME_VERSION (checked in lahio.exe). Setup98 needs a numeric version (1-4 numbers); an RC uses one just
 #   below its release (1.2 RC2 = 1.1.99.2) so the final 1.2 setup upgrades an RC install in place.
+#   An RC also gets DisplayVersion=<version> (Setup98 1.1: "1.2 RC2" in the wizard and Add/Remove); a release has none,
+#   which clears an installed RC's text on upgrade.
 # Needs a fresh VC6 lahio.exe (vmb/w98 build lahio) and the art sheets. Output:
 #   dist/out/lahio-<tag>.zip          portable: LAHIO\ folder, unzip anywhere, run lahio.exe
 #   dist/out/lahio-<tag>-setup.exe    Setup98 installer (manifest dist/lahio-setup.ini; kit dev/setup98, owner 86box-d1)
@@ -37,7 +39,9 @@ rm -f "$OUT/lahio-$TAG.zip"
 
 # installer: version + output name into a temporary copy of the manifest (same folder: its paths are relative)
 M=dist/.setup-build.ini
-sed -e "s/^Version=.*/Version=$SVER/" -e "s|^OutFile=.*|OutFile=out/lahio-$TAG-setup.exe|" dist/lahio-setup.ini > "$M"
+DV=""; [ "$SVER" != "$VER" ] && DV="DisplayVersion=$VER"
+sed -e "s/^Version=.*/Version=$SVER/" -e "s|^OutFile=.*|OutFile=out/lahio-$TAG-setup.exe|" dist/lahio-setup.ini |
+    awk -v dv="$DV" '{ print } /^Version=/ && dv != "" { print dv }' > "$M"
 "$PACK" -check "$M" > /dev/null
 "$PACK" -q "$M"
 "$PACK" -t "$OUT/lahio-$TAG-setup.exe"
